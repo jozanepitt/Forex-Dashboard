@@ -1,0 +1,3338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forex Signal Dashboard V5 - BTMM</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg-deep:#0a0b0e;--bg-surface:#111318;--bg-card:#161921;--bg-hover:#1c2030;--bg-elevated:#222638;
+--border:#252a3a;--border-light:#2f3550;
+--text-primary:#e8eaf0;--text-secondary:#8b90a5;--text-muted:#5c6078;
+--green:#00e676;--green-dim:#00c853;--green-bg:rgba(0,230,118,.08);--green-border:rgba(0,230,118,.2);
+--red:#ff5252;--red-dim:#ff1744;--red-bg:rgba(255,82,82,.08);--red-border:rgba(255,82,82,.2);
+--yellow:#ffd740;--yellow-bg:rgba(255,215,64,.08);--yellow-border:rgba(255,215,64,.2);
+--blue:#448aff;--blue-bg:rgba(68,138,255,.08);--blue-border:rgba(68,138,255,.2);
+--purple:#b388ff;--purple-bg:rgba(179,136,255,.08);--purple-border:rgba(179,136,255,.2);
+--orange:#ff9100;--orange-bg:rgba(255,145,0,.08);--orange-border:rgba(255,145,0,.2);
+--cyan:#18ffff;--cyan-bg:rgba(24,255,255,.08);--cyan-border:rgba(24,255,255,.2);
+--grey:#9e9e9e;--grey-bg:rgba(158,158,158,.08);--grey-border:rgba(158,158,158,.2);
+--font-mono:'JetBrains Mono',monospace;--font-sans:'Outfit',sans-serif;
+}
+html{font-size:14px}
+body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-sans);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg-surface)}
+::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+
+header{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--green),var(--blue));border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:var(--bg-deep)}
+.logo h1{font-size:1.25rem;font-weight:700;letter-spacing:-.02em}
+.logo h1 span{color:var(--green)}
+.logo .version{font-size:.6rem;background:var(--cyan-bg);color:var(--cyan);padding:2px 6px;border-radius:3px;font-weight:600;margin-left:4px}
+.header-right{display:flex;align-items:center;gap:12px}
+.api-status{display:flex;align-items:center;gap:6px;font-size:.75rem;padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:var(--bg-card)}
+.api-status.connected{border-color:var(--green-border);background:var(--green-bg)}
+.api-status.connected .status-dot{background:var(--green)}
+.api-status.error{border-color:var(--red-border);background:var(--red-bg)}
+.api-status.error .status-dot{background:var(--red)}
+.api-status .status-dot{width:8px;height:8px;border-radius:50%;background:var(--text-muted);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.api-status-text{color:var(--text-secondary)}
+.rate-limit{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);background:var(--bg-card);padding:4px 10px;border-radius:4px;border:1px solid var(--border)}
+.refresh-timer{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted);background:var(--bg-card);padding:4px 10px;border-radius:4px;border:1px solid var(--border)}
+.btn-refresh{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-secondary);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:var(--font-sans);font-size:.8rem;transition:all .2s}
+.btn-refresh:hover{background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-light)}
+.btn-settings{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-secondary);width:32px;height:32px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;transition:all .2s}
+.btn-settings:hover{background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-light)}
+
+.mode-tabs{display:flex;gap:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:3px;margin:16px 24px 0}
+.mode-tab{padding:8px 18px;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);font-family:var(--font-sans);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .2s}
+.mode-tab.active{background:var(--bg-elevated);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.mode-tab:hover:not(.active){color:var(--text-primary)}
+.mode-tab[data-mode="wyckoff"].active{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border)}
+.mode-tab[data-mode="combined"].active{background:var(--cyan-bg);color:var(--cyan);border:1px solid var(--cyan-border)}
+
+.sb-timer-bar{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:12px 24px;display:none}
+.sb-timer-bar.active{display:block}
+.sb-timer-content{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.sb-timer-item{display:flex;align-items:center;gap:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 14px}
+.sb-timer-item.active-window{border-color:var(--green-border);background:var(--green-bg)}
+.sb-timer-label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase}
+.sb-timer-value{font-family:var(--font-mono);font-size:1rem;font-weight:600;color:var(--text-secondary)}
+.sb-timer-item.active-window .sb-timer-value{color:var(--green);animation:pulse 1.5s infinite}
+.sb-next{margin-left:auto;font-size:.8rem;color:var(--text-secondary)}
+.sb-next strong{color:var(--green)}
+
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;padding:16px 24px;background:var(--bg-surface);border-bottom:1px solid var(--border)}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px}
+.stat-label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.stat-value{font-family:var(--font-mono);font-size:1.1rem;font-weight:600}
+.stat-value.green{color:var(--green)}.stat-value.red{color:var(--red)}.stat-value.yellow{color:var(--yellow)}.stat-value.blue{color:var(--blue)}.stat-value.purple{color:var(--purple)}.stat-value.cyan{color:var(--cyan)}
+
+.controls{padding:16px 24px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);background:var(--bg-surface)}
+.filter-group{display:flex;gap:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:3px}
+.filter-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);font-family:var(--font-sans);font-size:.75rem;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap}
+.filter-btn.active{background:var(--bg-elevated);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.filter-btn:hover:not(.active){color:var(--text-primary)}
+.filter-btn[data-filter="strong-buy"].active{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.filter-btn[data-filter="buy"].active{background:var(--green-bg);color:var(--green-dim)}
+.filter-btn[data-filter="neutral"].active{background:var(--yellow-bg);color:var(--yellow)}
+.filter-btn[data-filter="wait"].active{background:var(--grey-bg);color:var(--text-muted);border:1px solid var(--grey-border)}
+.filter-btn[data-filter="sell"].active{background:var(--red-bg);color:var(--red-dim)}
+.filter-btn[data-filter="strong-sell"].active{background:var(--red-bg);color:var(--red)}
+.sort-select{background:var(--bg-card);border:1px solid var(--border);color:var(--text-secondary);padding:7px 12px;border-radius:6px;font-family:var(--font-sans);font-size:.8rem;cursor:pointer}
+.sort-select option{background:var(--bg-card);color:var(--text-primary)}
+.search-input{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-family:var(--font-sans);font-size:.8rem;width:180px}
+.search-input::placeholder{color:var(--text-muted)}
+.search-input:focus{outline:none;border-color:var(--blue)}
+
+.main-content{padding:24px}
+.table-container{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:1100px}
+thead{background:var(--bg-surface)}
+th{padding:12px 16px;text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;transition:color .2s}
+th:hover{color:var(--text-secondary)}
+th.sorted{color:var(--blue)}
+tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+tbody tr:hover{background:var(--bg-hover)}
+tbody tr:last-child{border-bottom:none}
+td{padding:12px 16px;font-size:.85rem;white-space:nowrap}
+td.mono{font-family:var(--font-mono)}
+
+.rank-cell{font-family:var(--font-mono);font-weight:700;color:var(--text-muted);width:40px}
+.rank-cell.top-3{color:var(--green)}
+.rank-cell.bottom-3{color:var(--red)}
+
+.pair-cell{display:flex;align-items:center;gap:10px}
+.pair-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;border:2px solid var(--border)}
+.pair-icon.major{background:linear-gradient(135deg,#1a237e,#283593);border-color:#3949ab}
+.pair-icon.minor{background:linear-gradient(135deg,#1b5e20,#2e7d32);border-color:#43a047}
+.pair-icon.exotic{background:linear-gradient(135deg,#4a148c,#6a1b9a);border-color:#8e24aa}
+.pair-name{font-weight:600;font-size:.9rem}
+.pair-type{font-size:.65rem;color:var(--text-muted);text-transform:uppercase}
+
+.data-source{font-size:.6rem;padding:2px 6px;border-radius:3px;font-weight:600;text-transform:uppercase}
+.data-source.live{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.data-source.simulated{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.sast-clock{font-family:var(--font-mono);font-size:.75rem;color:var(--green);background:var(--green-bg);padding:4px 10px;border-radius:4px;border:1px solid var(--green-border);white-space:nowrap}
+.sast-clock .sast-label{font-size:.6rem;color:var(--green-dim);margin-right:4px;text-transform:uppercase;letter-spacing:.04em}
+.ema-warn{font-size:.65rem;background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border);padding:2px 6px;border-radius:3px;margin-left:4px}
+.sim-banner{background:var(--yellow-bg);border-bottom:1px solid var(--yellow-border);padding:6px 24px;font-size:.72rem;color:var(--yellow);display:flex;align-items:center;gap:8px}
+.sim-banner strong{font-weight:700}
+
+.price-cell{font-family:var(--font-mono);font-weight:500}
+.change-cell{font-family:var(--font-mono);font-weight:500}
+.change-cell.positive{color:var(--green)}
+.change-cell.negative{color:var(--red)}
+
+.signal-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:4px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.signal-badge.strong-buy{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.signal-badge.buy{background:rgba(0,200,83,.06);color:var(--green-dim);border:1px solid rgba(0,200,83,.15)}
+.signal-badge.neutral{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.signal-badge.sell{background:rgba(255,23,68,.06);color:var(--red-dim);border:1px solid rgba(255,23,68,.15)}
+.signal-badge.strong-sell{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.signal-badge.wait{background:var(--grey-bg);color:var(--text-muted);border:1px solid var(--grey-border)}
+
+.grade-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:4px;font-size:.7rem;font-weight:800;margin-left:6px}
+.grade-badge.grade-a{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.grade-badge.grade-b{background:rgba(0,200,83,.06);color:var(--green-dim);border:1px solid rgba(0,200,83,.15)}
+.grade-badge.grade-c{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.grade-badge.grade-d{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+
+.score-bar{width:100px;height:6px;background:var(--bg-deep);border-radius:3px;overflow:hidden;position:relative}
+.score-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.score-value{font-family:var(--font-mono);font-size:.8rem;font-weight:600;min-width:40px;display:inline-block}
+
+.indicators-cell{display:flex;gap:4px}
+.indicator-dot{width:8px;height:8px;border-radius:50%;transition:all .3s}
+.indicator-dot.bullish{background:var(--green);box-shadow:0 0 6px rgba(0,230,118,.4)}
+.indicator-dot.bearish{background:var(--red);box-shadow:0 0 6px rgba(255,82,82,.4)}
+.indicator-dot.neutral{background:var(--yellow);box-shadow:0 0 6px rgba(255,215,64,.4)}
+
+.confidence{font-family:var(--font-mono);font-size:.75rem;font-weight:500}
+.confidence.high{color:var(--green)}
+.confidence.medium{color:var(--yellow)}
+.confidence.low{color:var(--text-muted)}
+
+.tdi-badge{display:inline-flex;align-items:center;justify-content:center;padding:2px 6px;border-radius:3px;font-size:.6rem;font-weight:700;white-space:nowrap}
+.tdi-badge.ob{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.tdi-badge.os{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.tdi-badge.normal{background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border)}
+
+.dist800{font-family:var(--font-mono);font-size:.75rem;font-weight:500}
+.dist800.stretched{color:var(--orange)}
+.dist800.normal{color:var(--text-muted)}
+
+.wyckoff-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:3px;font-size:.65rem;font-weight:600}
+.wyckoff-badge.spring{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.wyckoff-badge.upthrust{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.wyckoff-badge.range{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.wyckoff-badge.none{background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border)}
+.lrsi-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:3px;font-size:.65rem;font-weight:600}
+.lrsi-badge.overbought{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.lrsi-badge.oversold{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.lrsi-badge.bullish{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border)}
+.lrsi-badge.bearish{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+
+.amd-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:3px;font-size:.65rem;font-weight:700}
+.amd-badge.accumulation{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.amd-badge.manipulation{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.amd-badge.distribution{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+
+.liquidity-cell{font-family:var(--font-mono);font-size:.75rem}
+.liquidity-cell.resistance{color:var(--red)}
+.liquidity-cell.support{color:var(--green)}
+
+.session-badge{padding:3px 8px;border-radius:3px;font-size:.65rem;font-weight:600;text-transform:uppercase}
+.session-badge.london{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+.session-badge.overlap{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border)}
+.session-badge.ny{background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-border)}
+.session-badge.inactive{background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border)}
+
+.risk-calc{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.risk-calc h3{font-size:.9rem;font-weight:600;margin-bottom:12px;color:var(--cyan)}
+.risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.risk-input{display:flex;flex-direction:column;gap:4px}
+.risk-input label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase}
+.risk-input input,.risk-input select{background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:8px 10px;border-radius:6px;font-family:var(--font-mono);font-size:.85rem}
+.risk-input input:focus,.risk-input select:focus{outline:none;border-color:var(--cyan)}
+.risk-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.risk-result{text-align:center}
+.risk-result-label{font-size:.65rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px}
+.risk-result-value{font-family:var(--font-mono);font-size:1.1rem;font-weight:700}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.active{display:flex}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;width:90%;max-width:900px;max-height:90vh;overflow-y:auto;position:relative}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg-card);z-index:10}
+.modal-header h2{font-size:1.2rem;font-weight:700}
+.modal-close{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-secondary);width:32px;height:32px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;transition:all .2s}
+.modal-close:hover{background:var(--bg-hover);color:var(--text-primary)}
+.modal-body{padding:24px}
+.chart-container{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;position:relative}
+.chart-container canvas{width:100%;height:350px}
+.chart-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.chart-pair{font-size:1.1rem;font-weight:700}
+.chart-price{font-family:var(--font-mono);font-size:1.4rem;font-weight:700}
+.chart-change{font-family:var(--font-mono);font-size:.85rem}
+.chart-timeframe{display:flex;gap:4px;margin-bottom:12px}
+.tf-btn{padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-family:var(--font-mono);font-size:.7rem;cursor:pointer}
+.tf-btn.active{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-border)}
+
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px}
+.detail-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.detail-card h4{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)}
+.detail-row:last-child{border-bottom:none}
+.detail-label{font-size:.8rem;color:var(--text-secondary)}
+.detail-value{font-family:var(--font-mono);font-size:.8rem;font-weight:500}
+
+.signal-breakdown{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.signal-breakdown h3{font-size:.9rem;font-weight:600;margin-bottom:12px}
+.signal-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.signal-item:last-child{border-bottom:none}
+.signal-item-left{display:flex;align-items:center;gap:10px}
+.signal-item-name{font-size:.85rem;font-weight:500}
+.signal-item-value{font-family:var(--font-mono);font-size:.8rem;color:var(--text-secondary)}
+
+.strategy-info{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:16px}
+.strategy-info h3{font-size:.9rem;font-weight:600;margin-bottom:8px;color:var(--blue)}
+.strategy-info p{font-size:.8rem;color:var(--text-secondary);line-height:1.6}
+
+.legend{display:flex;gap:16px;padding:12px 16px;background:var(--bg-surface);border-top:1px solid var(--border);flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.7rem;color:var(--text-secondary)}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+
+.settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.settings-overlay.active{display:flex}
+.settings-modal{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;width:90%;max-width:500px;padding:24px}
+.settings-modal h3{font-size:1.1rem;font-weight:700;margin-bottom:16px}
+.settings-group{margin-bottom:16px}
+.settings-group label{display:block;font-size:.75rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
+.settings-group input,.settings-group select{width:100%;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:10px 12px;border-radius:6px;font-family:var(--font-mono);font-size:.85rem}
+.settings-group input:focus,.settings-group select:focus{outline:none;border-color:var(--cyan)}
+.settings-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.settings-btn{padding:8px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-family:var(--font-sans);font-size:.8rem;cursor:pointer;transition:all .2s}
+.settings-btn:hover{background:var(--bg-hover)}
+.settings-btn.primary{background:var(--cyan-bg);color:var(--cyan);border-color:var(--cyan-border)}
+.settings-btn.primary:hover{background:var(--cyan);color:var(--bg-deep)}
+
+.loading-overlay{position:fixed;inset:0;background:rgba(10,11,14,.9);z-index:400;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+.loading-overlay.active{display:flex}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:.9rem;color:var(--text-secondary)}
+
+.last-updated{font-size:.7rem;color:var(--text-muted);text-align:center;padding:8px;background:var(--bg-surface);border-top:1px solid var(--border)}
+
+@media(max-width:768px){
+  header{flex-direction:column;gap:12px;align-items:flex-start}
+  .controls{flex-direction:column;align-items:stretch}
+  .search-input{width:100%}
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+  td,th{padding:8px 10px;font-size:.75rem}
+  .modal{width:95%;margin:10px}
+  .mode-tabs{margin:12px 16px 0}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">FX</div>
+    <h1>Forex <span>Signal</span> Dashboard <span class="version">V5 - BTMM</span></h1>
+  </div>
+  <div class="header-right">
+    <div class="api-status" id="apiStatus">
+      <div class="status-dot"></div>
+      <span class="api-status-text" id="apiStatusText">Connecting...</span>
+    </div>
+    <div class="rate-limit" id="rateLimit">API: --/--</div>
+    <div class="refresh-timer" id="refreshTimer">Next refresh: 30m</div>
+    <div class="sast-clock"><span class="sast-label">SAST</span><span id="sastClock">--:--:--</span></div>
+    <button class="btn-refresh" id="btnRefresh">↻ Refresh</button>
+    <button class="btn-settings" id="btnSettings" title="Settings">⚙</button>
+  </div>
+</header>
+<div class="sim-banner" id="simBanner" style="display:none">⚠ <strong>SIMULATED DATA:</strong> Pairs without live API data use generated price data. Scores are indicative only — not real market signals. Twelve Data API provides live data for all 28 pairs.</div>
+
+<div class="mode-tabs">
+  <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
+  <button class="mode-tab" data-mode="wyckoff">🌊 Wyckoff Structure</button>
+  <button class="mode-tab" data-mode="combined">⚡ Combined View</button>
+</div>
+
+<div class="sb-timer-bar active" id="sbTimerBar">
+  <div class="sb-timer-content">
+    <div style="font-size:.7rem;color:var(--green);text-transform:uppercase;font-weight:700;letter-spacing:.06em;align-self:center">⏱ BTMM Kill Zones</div>
+    <div class="sb-timer-item" id="sbLondon">
+      <div>
+        <div class="sb-timer-label" id="sbLondonLabel">London Open</div>
+        <div class="sb-timer-value" id="sbLondonTimer">--:--:--</div>
+      </div>
+    </div>
+    <div class="sb-timer-item" id="sbOverlap">
+      <div>
+        <div class="sb-timer-label" id="sbOverlapLabel">London/NY Overlap</div>
+        <div class="sb-timer-value" id="sbOverlapTimer">--:--:--</div>
+      </div>
+    </div>
+    <div class="sb-timer-item" id="sbNy">
+      <div>
+        <div class="sb-timer-label" id="sbNyLabel">NY Session</div>
+        <div class="sb-timer-value" id="sbNyTimer">--:--:--</div>
+      </div>
+    </div>
+    <div class="sb-next" id="sbNext">Next Kill Zone: <strong>--:-- NY</strong></div>
+  </div>
+</div>
+
+<div class="stats-bar" id="statsBar"></div>
+
+<div class="controls">
+  <div class="filter-group" id="filterGroup">
+    <button class="filter-btn active" data-filter="all">All Signals</button>
+    <button class="filter-btn" data-filter="strong-buy">Strong Buy</button>
+    <button class="filter-btn" data-filter="buy">Buy</button>
+    <button class="filter-btn" data-filter="neutral">Neutral</button>
+    <button class="filter-btn" data-filter="sell">Sell</button>
+    <button class="filter-btn" data-filter="strong-sell">Strong Sell</button>
+    <button class="filter-btn" data-filter="wait">⏸ Wait</button>
+  </div>
+  <div class="filter-group">
+    <button class="filter-btn active" data-type="all">All Types</button>
+    <button class="filter-btn" data-type="major">Majors</button>
+    <button class="filter-btn" data-type="minor">Minors</button>
+    <button class="filter-btn" data-type="exotic">Exotics</button>
+  </div>
+  <select class="sort-select" id="sortSelect">
+    <option value="score-desc">Score: Best → Worst</option>
+    <option value="score-asc">Score: Worst → Best</option>
+    <option value="change-desc">Change: Highest → Lowest</option>
+    <option value="change-asc">Change: Lowest → Highest</option>
+    <option value="name">Pair: A → Z</option>
+  </select>
+  <input type="text" class="search-input" id="searchInput" placeholder="Search pairs...">
+</div>
+
+<div class="main-content">
+  <div class="risk-calc" id="riskCalc">
+    <h3>💰 Risk Calculator</h3>
+    <div class="risk-grid">
+      <div class="risk-input">
+        <label>Account Balance ($)</label>
+        <input type="number" id="riskBalance" value="10000" min="100" step="100">
+      </div>
+      <div class="risk-input">
+        <label>Risk Per Trade (%)</label>
+        <input type="number" id="riskPercent" value="1" min="0.1" max="5" step="0.1">
+      </div>
+      <div class="risk-input">
+        <label>Stop Loss (pips)</label>
+        <input type="number" id="riskSL" value="15" min="1" step="1">
+      </div>
+      <div class="risk-input">
+        <label>Risk:Reward</label>
+        <select id="riskRR">
+          <option value="1.5">1:1.5</option>
+          <option value="2" selected>1:2</option>
+          <option value="3">1:3</option>
+        </select>
+      </div>
+      <div class="risk-input">
+        <label>Pair (Pip Value/Lot)</label>
+        <select id="riskPair"></select>
+      </div>
+    </div>
+    <div class="risk-results" id="riskResults">
+      <div class="risk-result">
+        <div class="risk-result-label">Risk Amount</div>
+        <div class="risk-result-value" style="color:var(--red)" id="riskAmount">$100</div>
+      </div>
+      <div class="risk-result">
+        <div class="risk-result-label">Lot Size</div>
+        <div class="risk-result-value" style="color:var(--cyan)" id="riskLotSize">0.67</div>
+      </div>
+      <div class="risk-result">
+        <div class="risk-result-label">Take Profit (pips)</div>
+        <div class="risk-result-value" style="color:var(--green)" id="riskTP">30</div>
+      </div>
+      <div class="risk-result">
+        <div class="risk-result-label">Potential Profit</div>
+        <div class="risk-result-value" style="color:var(--green)" id="riskProfit">$200</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Bullish</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Bearish</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div>Neutral</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>800 EMA</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--grey)"></div>200 EMA</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div>50 EMA</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>13 EMA</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div>5 EMA</div>
+      <span style="margin-left:auto;font-size:.65rem;color:var(--text-muted)">Click any row for detailed chart & analysis</span>
+    </div>
+    <div class="last-updated" id="lastUpdated">Last updated: --</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">EUR/USD</h2>
+      <button class="modal-close" id="modalClose">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-modal">
+    <h3>⚙ Dashboard Settings</h3>
+    <div class="settings-group">
+      <label>API Keys Status</label>
+      <div id="apiKeysList" style="font-size:.75rem"></div>
+      <button class="settings-btn" id="testApiKeys" style="margin-top:8px;padding:6px 12px">Test API Keys</button>
+    </div>
+    <div class="settings-group">
+      <label>Refresh Interval (minutes)</label>
+      <select id="settingsRefresh">
+        <option value="15">15 minutes</option>
+        <option value="30" selected>30 minutes</option>
+        <option value="60">60 minutes</option>
+      </select>
+    </div>
+    <div class="settings-group">
+      <label>Historical Depth (candles)</label>
+      <select id="settingsDepth">
+        <option value="288">288 candles (3 days M15)</option>
+        <option value="500">500 candles (5 days M15)</option>
+        <option value="800">800 candles (8 days M15)</option>
+        <option value="1200" selected>1200 candles (12 days M15)</option>
+        <option value="1500">1500 candles (16 days M15)</option>
+      </select>
+    </div>
+    <div class="settings-actions">
+      <button class="settings-btn" id="settingsCancel">Cancel</button>
+      <button class="settings-btn primary" id="settingsSave">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Fetching real market data...</div>
+</div>
+
+<script>
+const FOREX_PAIRS = [
+  { symbol:'EUR/USD', base:1.0850, type:'major', pip:0.0001, decimals:5, pipValue:10 },
+  { symbol:'GBP/USD', base:1.2650, type:'major', pip:0.0001, decimals:5, pipValue:10 },
+  { symbol:'USD/JPY', base:154.50, type:'major', pip:0.01, decimals:3, pipValue:6.5 },
+  { symbol:'USD/CHF', base:0.8820, type:'major', pip:0.0001, decimals:5, pipValue:11.3 },
+  { symbol:'AUD/USD', base:0.6520, type:'major', pip:0.0001, decimals:5, pipValue:10 },
+  { symbol:'USD/CAD', base:1.3650, type:'major', pip:0.0001, decimals:5, pipValue:7.3 },
+  { symbol:'NZD/USD', base:0.5980, type:'major', pip:0.0001, decimals:5, pipValue:10 },
+  { symbol:'EUR/GBP', base:0.8580, type:'minor', pip:0.0001, decimals:5, pipValue:12.6 },
+  { symbol:'EUR/JPY', base:167.60, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
+  { symbol:'EUR/CHF', base:0.9570, type:'minor', pip:0.0001, decimals:5, pipValue:11.4 },
+  { symbol:'EUR/AUD', base:1.6640, type:'minor', pip:0.0001, decimals:5, pipValue:6.0 },
+  { symbol:'GBP/JPY', base:195.40, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
+  { symbol:'GBP/CHF', base:1.1160, type:'minor', pip:0.0001, decimals:5, pipValue:10.2 },
+  { symbol:'AUD/JPY', base:100.70, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
+  { symbol:'CAD/JPY', base:113.20, type:'minor', pip:0.01, decimals:3, pipValue:6.5 }
+];
+
+const PRIORITY_PAIRS = [
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+  'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD'
+];
+
+// API keys live in the local fetcher service (service/.env), not in the browser.
+// This array is an in-memory mirror of /status, populated on load + each refresh.
+let API_KEYS = [
+  { name: 'key1',       used: 0, limit: 800, active: false, exhausted: false },
+  { name: 'JZPITT01',   used: 0, limit: 800, active: false, exhausted: false },
+  { name: 'jozanepitt', used: 0, limit: 800, active: false, exhausted: false },
+  { name: 'JZPITT02',   used: 0, limit: 800, active: false, exhausted: false }
+];
+
+const API_CONFIG = {
+  baseUrl: localStorage.getItem('fx_service_url') || 'http://127.0.0.1:3002',
+  endpoint: '/candles',
+  interval: '15min',
+  outputSize: parseInt(localStorage.getItem('twelvedata_depth') || '800'),
+  refreshInterval: parseInt(localStorage.getItem('twelvedata_refresh') || '30') * 60 * 1000,
+};
+
+async function syncServiceStatus() {
+  try {
+    const resp = await fetch(`${API_CONFIG.baseUrl}/status`, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (Array.isArray(data.keys)) {
+      API_KEYS = data.keys.map(k => ({
+        name: k.name,
+        used: k.used || 0,
+        limit: k.limit || 800,
+        active: !k.exhausted,
+        exhausted: !!k.exhausted,
+        lastError: k.lastError || null
+      }));
+    }
+    return data;
+  } catch (err) {
+    API_KEYS.forEach(k => { k.active = false; });
+    return null;
+  }
+}
+
+const STRATEGY = {
+  name: 'BTMM (Beat The Market Maker) Strategy',
+  description: 'Based on Steve Mauro\'s BTMM methodology. Uses EMA stack (5/13/50/200/800), TDI, ADR, AMD phases, and Kill Zone timing to identify high-probability setups aligned with market maker activity.',
+  indicators: [
+    { name: 'EMA Stack (5/13/50/200/800)', weight: 40, desc: '800 EMA = trend bias. 5/13 cross = entry signal. 50 EMA = retest zone.' },
+    { name: 'TDI (Traders Dynamic Index)', weight: 25, desc: 'Fast RSI line vs slow signal line with volatility bands.' },
+    { name: 'ADR (Average Daily Range)', weight: 15, desc: '14-period ADR with 3x extension tracking.' },
+    { name: 'AMD Phase', weight: 10, desc: 'Accumulation, Manipulation, Distribution detection.' },
+    { name: 'Kill Zone', weight: 10, desc: 'London Open, London/NY Overlap, NY Session timing.' }
+  ]
+};
+
+const BTMM_KILL_ZONES = [
+  // BTMM Official Kill Zones — times in GMT (UTC), displayed as SAST (UTC+2, fixed, no DST)
+  // London Kill Zone:  09:15–11:15 GMT = 11:15–13:15 SAST
+  // LDN/NY Overlap:    12:00–13:00 GMT = 14:00–15:00 SAST
+  // NY Kill Zone:      14:15–15:15 GMT = 16:15–17:15 SAST
+  { name: 'London Kill Zone', startGMT: 9.25,  endGMT: 11.25, weight: 1.0,  session: 'london',  sastStart: '11:15', sastEnd: '13:15' },
+  { name: 'LDN/NY Overlap',   startGMT: 12.0,  endGMT: 13.0,  weight: 0.9,  session: 'overlap', sastStart: '14:00', sastEnd: '15:00' },
+  { name: 'NY Kill Zone',     startGMT: 14.25, endGMT: 15.25, weight: 0.85, session: 'ny',      sastStart: '16:15', sastEnd: '17:15' }
+];
+
+let pairData = {};
+let currentMode = 'indicator';
+let currentFilter = 'all';
+let currentTypeFilter = 'all';
+let currentSort = 'score-desc';
+let searchTerm = '';
+let refreshCountdown = API_CONFIG.refreshInterval / 1000;
+let refreshInterval;
+let sbTimerInterval;
+let apiConnected = false;
+let staleSymbols = new Set();   // pairs served from cache because upstream couldn't refresh
+let apiCallsUsed = 0;
+let lastFetchTime = null;
+
+function seededRandom(seed) {
+  let s = seed;
+  return function() {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function generateCandles(base, count, volatility, seed) {
+  const rng = seededRandom(seed);
+  const candles = [];
+  let price = base * (0.97 + rng() * 0.06);
+  const trend = (rng() - 0.5) * 0.002;
+  for (let i = 0; i < count; i++) {
+    const noise = (rng() - 0.5) * volatility * 2;
+    const trendComponent = trend * i;
+    const open = price;
+    const change = noise + trendComponent * 0.1;
+    const close = open + change;
+    const high = Math.max(open, close) + rng() * volatility;
+    const low = Math.min(open, close) - rng() * volatility;
+    const volume = Math.floor(1000 + rng() * 9000);
+    candles.push({ open, high, low, close, volume });
+    price = close;
+  }
+  return candles;
+}
+
+function generateIntradayCandles(base, count, volatility, seed) {
+  const rng = seededRandom(seed * 7 + 42);
+  const candles = [];
+  let price = base * (0.98 + rng() * 0.04);
+  const trend = (rng() - 0.5) * 0.001;
+  for (let i = 0; i < count; i++) {
+    const isSession = (i % 96 >= 32 && i % 96 <= 48) || (i % 96 >= 64 && i % 96 <= 80);
+    const sessionVol = isSession ? 1.5 : 0.7;
+    const noise = (rng() - 0.5) * volatility * 2 * sessionVol;
+    const trendComponent = trend * i;
+    const open = price;
+    const change = noise + trendComponent * 0.05;
+    const close = open + change;
+    const high = Math.max(open, close) + rng() * volatility * sessionVol;
+    const low = Math.min(open, close) - rng() * volatility * sessionVol;
+    const volume = Math.floor(500 + rng() * 5000 * sessionVol);
+    candles.push({ open, high, low, close, volume });
+    price = close;
+  }
+  return candles;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BTMM PATTERN DETECTION FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Asian Range Detection - BTMM Session Analysis
+function detectAsianRange(candles, pair) {
+  if (!candles || candles.length < 4) return null;
+
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+
+  // Asian session = 00:00–07:00 GMT (accumulation before London open)
+  // Twelve Data datetimes are in UTC, so we compare directly.
+  let asiaCandles = [];
+  if (candles[0] && candles[0].datetime) {
+    const now = new Date();
+    const todayUTC = now.toISOString().slice(0, 10);
+    const yesterday = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+
+    const isAsiaHour = dt => {
+      const hour = parseInt(dt.slice(11, 13), 10);
+      return hour >= 0 && hour < 7;
+    };
+
+    const todayAsia = candles.filter(c => c.datetime && c.datetime.slice(0, 10) === todayUTC && isAsiaHour(c.datetime));
+    const yesterdayAsia = candles.filter(c => c.datetime && c.datetime.slice(0, 10) === yesterday && isAsiaHour(c.datetime));
+
+    // Prefer today's Asian candles; fall back to yesterday's if < 4 candles
+    asiaCandles = todayAsia.length >= 4 ? todayAsia : yesterdayAsia;
+  } else {
+    // Simulated data: approximate 7 hours of 15-min candles
+    asiaCandles = candles.slice(-28);
+  }
+
+  if (asiaCandles.length < 4) return null;
+
+  const high = Math.max(...asiaCandles.map(c => c.high));
+  const low = Math.min(...asiaCandles.map(c => c.low));
+  const range = high - low;
+
+  return {
+    high,
+    low,
+    range,
+    pips: Math.round(range / pip),
+    valid: range < 50 * pip,   // valid if Asian range < 50 pips (tight = good setup)
+    top: high,
+    bottom: low
+  };
+}
+
+// Stop Hunt Detection - BTMM 3-Push Pattern
+function detectStopHunt(candles, asianRange) {
+  if (!candles || !asianRange || candles.length < 50) return null;
+  
+  const recentCandles = candles.slice(-50);
+  const currentPrice = candles[candles.length - 1].close;
+  
+  const pushes = [];
+  let inPush = false;
+  let pushStart = 0;
+  
+  for (let i = recentCandles.length - 1; i >= 0; i--) {
+    const c = recentCandles[i];
+    // Use wicks (high/low) — stop hunts pierce the range via wick, close rarely confirms
+    const aboveAsia = c.high > asianRange.high + (asianRange.range * 0.5);
+    const belowAsia = c.low  < asianRange.low  - (asianRange.range * 0.5);
+    
+    if ((aboveAsia || belowAsia) && !inPush) {
+      inPush = true;
+      pushStart = i;
+    } else if (inPush && !aboveAsia && !belowAsia) {
+      pushes.push({
+        start: pushStart,
+        end: i + 1,
+        direction: recentCandles[pushStart].close > asianRange.high ? 'up' : 'down',
+        extent: Math.abs(recentCandles[pushStart].close - asianRange.top)
+      });
+      inPush = false;
+    }
+  }
+  
+  if (pushes.length >= 2) {
+    const lastPush = pushes[pushes.length - 1];
+    const direction = lastPush.direction;
+    
+    return {
+      active: true,
+      direction,
+      hod: direction === 'up' ? Math.max(...recentCandles.map(c => c.high)) : null,
+      lod: direction === 'down' ? Math.min(...recentCandles.map(c => c.low)) : null,
+      pushes: pushes.length,
+      zone: direction === 'up' ? 'above_asian' : 'below_asian'
+    };
+  }
+  
+  return { active: false };
+}
+
+// M/W Pattern Detection - BTMM Entry Setup
+function detectMWPattern(candles, lookback = 50) {
+  if (!candles || candles.length < lookback) return null;
+
+  const recent = candles.slice(-lookback);
+  const highs = recent.map(c => c.high);
+  const lows = recent.map(c => c.low);
+
+  // Use ±3 candle window to find significant swing highs/lows (not trivial 1-bar noise)
+  const win = 3;
+  const findSwingHighs = arr => {
+    const peaks = [];
+    for (let i = win; i < arr.length - win; i++) {
+      const slice = arr.slice(i - win, i + win + 1);
+      if (arr[i] === Math.max(...slice)) peaks.push({ idx: i, val: arr[i] });
+    }
+    return peaks;
+  };
+  const findSwingLows = arr => {
+    const troughs = [];
+    for (let i = win; i < arr.length - win; i++) {
+      const slice = arr.slice(i - win, i + win + 1);
+      if (arr[i] === Math.min(...slice)) troughs.push({ idx: i, val: arr[i] });
+    }
+    return troughs;
+  };
+
+  const swingHighs = findSwingHighs(highs);
+  const swingLows  = findSwingLows(lows);
+
+  // M pattern: two swing highs where p2 ≤ p1 with a meaningful valley between them
+  if (swingHighs.length >= 2) {
+    const p1 = swingHighs[swingHighs.length - 2];
+    const p2 = swingHighs[swingHighs.length - 1];
+    if (p2.val <= p1.val) {
+      const valleyLows = swingLows.filter(t => t.idx > p1.idx && t.idx < p2.idx);
+      if (valleyLows.length > 0) {
+        const valley = Math.min(...valleyLows.map(t => t.val));
+        const dropPct = (p1.val - valley) / p1.val;
+        if (dropPct > 0.0005) {
+          return { type: 'M', formed: true, leg1: p1, leg2: p2, direction: 'bearish', confidence: Math.min(100, dropPct * 20000) };
+        }
+      }
+    }
+  }
+
+  // W pattern: two swing lows where p2 ≥ p1 with a meaningful peak between them
+  if (swingLows.length >= 2) {
+    const p1 = swingLows[swingLows.length - 2];
+    const p2 = swingLows[swingLows.length - 1];
+    if (p2.val >= p1.val) {
+      const peakHighs = swingHighs.filter(t => t.idx > p1.idx && t.idx < p2.idx);
+      if (peakHighs.length > 0) {
+        const peak = Math.max(...peakHighs.map(t => t.val));
+        const risePct = (peak - p1.val) / p1.val;
+        if (risePct > 0.0005) {
+          return { type: 'W', formed: true, leg1: p1, leg2: p2, direction: 'bullish', confidence: Math.min(100, risePct * 20000) };
+        }
+      }
+    }
+  }
+
+  return { formed: false };
+}
+
+// Level Counting - BTMM 3-Level Cycle Detection
+function detectLevelCount(candles, ema50, ema200) {
+  if (!candles || candles.length < 50 || !ema50 || !ema200) return { level: 'unknown' };
+  
+  const recent = candles.slice(-50);
+  const closes = recent.map(c => c.close);
+  const e50 = ema50.slice(-50);
+  const e200 = ema200.slice(-50);
+  
+  let score = 0;
+  for (let i = 0; i < closes.length; i++) {
+    if (e50[i] > e200[i]) score++;
+    else score--;
+  }
+  
+  const trendRatio = score / closes.length;
+  
+  if (trendRatio > 0.6) return { level: 'I', trend: 'bullish', consolidation: false };
+  if (trendRatio > 0.2) return { level: 'II', trend: 'transition', consolidation: false };
+  if (trendRatio < -0.6) return { level: 'III', trend: 'bearish', consolidation: true };
+  if (trendRatio < -0.2) return { level: 'II', trend: 'transition', consolidation: false };
+  
+  return { level: 'III', trend: 'choppy', consolidation: true };
+}
+
+// Shark Fin Detection - BTMM TDI Entry Signal
+function detectSharkFin(closes, tdi) {
+  if (!closes || closes.length < 50 || !tdi || !tdi.fastArr || tdi.fastArr.length < 20) {
+    return { active: false };
+  }
+
+  const rsi    = tdi.fastArr;
+  const signal = tdi.slowArr;
+  // tdi.upper / tdi.lower are scalars (single BB value) — compare directly, not as arrays
+  const upper  = tdi.upper;
+  const lower  = tdi.lower;
+
+  if (!rsi || rsi.length < 20 || !signal || signal.length < 20 || typeof upper !== 'number' || typeof lower !== 'number') {
+    return { active: false };
+  }
+
+  const last = rsi.length - 1;
+
+  // Shark Fin Short: RSI spiked above upper band, then crossed back below signal line
+  let wasAbove = false;
+  let crossDown = false;
+  for (let i = Math.max(0, last - 10); i < last; i++) {
+    if (rsi[i] > upper) wasAbove = true;
+    if (wasAbove && rsi[i] < signal[i] && rsi[i+1] >= signal[i+1]) crossDown = true;
+  }
+
+  // Shark Fin Long: RSI spiked below lower band, then crossed back above signal line
+  let wasBelow = false;
+  let crossUp = false;
+  for (let i = Math.max(0, last - 10); i < last; i++) {
+    if (rsi[i] < lower) wasBelow = true;
+    if (wasBelow && rsi[i] > signal[i] && rsi[i+1] <= signal[i+1]) crossUp = true;
+  }
+
+  if (crossDown) {
+    return {
+      active: true,
+      type: 'Shark Fin Short',
+      direction: 'bearish',
+      entry: 'RSI crosses below signal after breaking above bands',
+      confidence: 80
+    };
+  }
+
+  if (crossUp) {
+    return {
+      active: true,
+      type: 'Shark Fin Long',
+      direction: 'bullish',
+      entry: 'RSI crosses above signal after breaking below bands',
+      confidence: 80
+    };
+  }
+
+  return { active: false };
+}
+
+// 200 EMA Bounce Detection - BTMM High-Probability Setup
+function detectEMA200Bounce(candles, ema200, ema50, pair) {
+  if (!candles || candles.length < 50 || !ema200 || ema200.length < 10 || !ema50 || ema50.length < 10) {
+    return { active: false };
+  }
+
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+  const currentPrice = candles[candles.length - 1].close;
+  const e200 = ema200[ema200.length - 1];
+  const e50 = ema50[ema50.length - 1];
+  const e200Prev = ema200[Math.max(0, ema200.length - 5)];
+  const e50Prev = ema50[Math.max(0, ema50.length - 5)];
+
+  // Distance to 200 EMA in pips (pip-normalised — handles JPY and standard pairs)
+  const distPips = Math.abs(currentPrice - e200) / pip;
+
+  // Check if price is near EMA 200 (within 25 pips)
+  const nearEMA200 = distPips < 25;
+
+  // Check for bounce: price approaching 200 EMA and reversing
+  const priceAbove200 = currentPrice > e200;
+  const approaching = priceAbove200 
+    ? (currentPrice - e200) < (candles[candles.length - 10].close - e200) // Was further above
+    : (e200 - currentPrice) < (e200 - candles[candles.length - 10].close); // Was further below
+
+  // Check for M/W pattern near EMA 200
+  const recent = candles.slice(-20);
+  const highs = recent.map(c => c.high);
+  const lows = recent.map(c => c.low);
+
+  // Find local peaks
+  const findPeaks = (arr) => {
+    const peaks = [];
+    for (let i = 1; i < arr.length - 1; i++) {
+      if (arr[i] > arr[i-1] && arr[i] > arr[i+1]) peaks.push({ idx: i, val: arr[i] });
+    }
+    return peaks;
+  };
+
+  const highPeaks = findPeaks(highs);
+  const lowPeaks = findPeaks(lows);
+
+  // M pattern near 200 EMA
+  if (highPeaks.length >= 2) {
+    const p1 = highPeaks[highPeaks.length - 2];
+    const p2 = highPeaks[highPeaks.length - 1];
+    if (p2.val < p1.val * 1.001) { // Double top
+      if (nearEMA200) {
+        return {
+          active: true,
+          type: 'M on EMA 200',
+          direction: 'bearish',
+          setup: 'Double top forming ON EMA 200 - high probability reversal',
+          confidence: 90,
+          distToEMA200: distPips
+        };
+      }
+    }
+  }
+
+  // W pattern near 200 EMA
+  if (lowPeaks.length >= 2) {
+    const p1 = lowPeaks[lowPeaks.length - 2];
+    const p2 = lowPeaks[lowPeaks.length - 1];
+    if (p2.val > p1.val * 0.999) { // Double bottom
+      if (nearEMA200) {
+        return {
+          active: true,
+          type: 'W on EMA 200',
+          direction: 'bullish',
+          setup: 'Double bottom forming ON EMA 200 - high probability reversal',
+          confidence: 90,
+          distToEMA200: distPips
+        };
+      }
+    }
+  }
+
+  // Simple bounce: price touching 200 EMA and reversing
+  if (nearEMA200 && approaching) {
+    return {
+      active: true,
+      type: priceAbove200 ? 'Approaching EMA 200' : 'Testing EMA 200',
+      direction: priceAbove200 ? 'bearish' : 'bullish',
+      setup: priceAbove200 ? 'Price testing EMA 200 from above - look for shorts' : 'Price bouncing from EMA 200 - look for longs',
+      confidence: 70,
+      distToEMA200: distPips
+    };
+  }
+
+  return { active: false };
+}
+
+// Multi-Timeframe Analysis - Derived from 15min candles (no extra API calls)
+
+// Derive H1 candles from 15min data (every 4th candle = 1 hour)
+function deriveH1(candles) {
+  if (!candles || candles.length < 4) return [];
+  const h1 = [];
+  for (let i = 0; i < candles.length; i += 4) {
+    const chunk = candles.slice(i, i + 4);
+    if (chunk.length > 0) {
+      h1.push({
+        open: chunk[0].open,
+        high: Math.max(...chunk.map(c => c.high)),
+        low: Math.min(...chunk.map(c => c.low)),
+        close: chunk[chunk.length - 1].close,
+        volume: chunk.reduce((s, c) => s + (c.volume || 0), 0),
+        datetime: chunk[0].datetime
+      });
+    }
+  }
+  return h1;
+}
+
+// Derive H4 candles from 15min data (every 16th candle = 4 hours)
+function deriveH4(candles) {
+  if (!candles || candles.length < 16) return [];
+  const h4 = [];
+  for (let i = 0; i < candles.length; i += 16) {
+    const chunk = candles.slice(i, i + 16);
+    if (chunk.length > 0) {
+      h4.push({
+        open: chunk[0].open,
+        high: Math.max(...chunk.map(c => c.high)),
+        low: Math.min(...chunk.map(c => c.low)),
+        close: chunk[chunk.length - 1].close,
+        volume: chunk.reduce((s, c) => s + (c.volume || 0), 0),
+        datetime: chunk[0].datetime
+      });
+    }
+  }
+  return h4;
+}
+
+// Weekly Cycle Detection - Count M/W formations over the week (using H1 derived)
+function detectWeeklyCycle(candles) {
+  const h1 = deriveH1(candles);
+  if (!h1 || h1.length < 20) return { active: false };
+
+  const highs = h1.map(c => c.high);
+  const lows = h1.map(c => c.low);
+
+  const findPeaks = (arr) => {
+    const peaks = [];
+    for (let i = 1; i < arr.length - 1; i++) {
+      if (arr[i] > arr[i-1] && arr[i] > arr[i+1]) peaks.push(i);
+    }
+    return peaks;
+  };
+
+  const highPeaks = findPeaks(highs);
+  const lowPeaks = findPeaks(lows);
+
+  let pattern = 'neutral';
+  if (highPeaks.length >= 2) {
+    const recent = highPeaks.slice(-2);
+    if (highs[recent[1]] < highs[recent[0]]) pattern = 'M-Pattern (Down)';
+    else if (highs[recent[1]] > highs[recent[0]]) pattern = 'W-Pattern (Up)';
+  }
+
+  return {
+    active: pattern !== 'neutral',
+    pattern,
+    direction: pattern.includes('Down') ? 'bearish' : pattern.includes('Up') ? 'bullish' : 'neutral',
+    description: pattern === 'neutral' ? 'No clear weekly pattern' : `Weekly ${pattern}`
+  };
+}
+
+// 3-Day Cycle Detection - Use H4 derived candles to identify Level I/II/III
+function detect3DayCycle(candles) {
+  const h4 = deriveH4(candles);
+  if (!h4 || h4.length < 10) return { active: false, level: 'unknown' };
+
+  const closes = h4.map(c => c.close);
+  const ema50 = calcEMA(closes, 50);
+  const ema200 = calcEMA(closes, 200);
+
+  if (!ema50 || !ema200 || ema50.length < 10) return { active: false, level: 'unknown' };
+
+  let score = 0;
+  const startIdx = Math.max(0, ema50.length - 10);
+  for (let i = startIdx; i < ema50.length; i++) {
+    if (ema50[i] > ema200[i]) score++;
+    else score--;
+  }
+
+  const trendRatio = score / 10;
+
+  if (trendRatio > 0.5) return { active: true, level: 'I', description: 'Level I - Strong trend' };
+  if (trendRatio > 0.1) return { active: true, level: 'II', description: 'Level II - Transition' };
+  if (trendRatio < -0.5) return { active: true, level: 'III', description: 'Level III - Reversal imminent' };
+  if (trendRatio < -0.1) return { active: true, level: 'II', description: 'Level II - Transition' };
+
+  return { active: true, level: 'III', description: 'Level III - Reversal imminent' };
+}
+
+// Straightaway Trade Detection - Price breaks previous day range without stop hunt
+function detectStraightaway(candles) {
+  if (!candles || candles.length < 50) return { active: false };
+
+  // Get yesterday's range
+  const allCandles = candles.slice().reverse();
+  let yesterdayHigh = -Infinity, yesterdayLow = Infinity;
+  let foundYesterday = false;
+
+  let yesterdayDate = null;
+  for (let i = 0; i < allCandles.length - 1; i++) {
+    const c = allCandles[i];
+    const nextC = allCandles[i + 1];
+    if (c.datetime && nextC && nextC.datetime) {
+      const d1 = c.datetime.split(' ')[0];
+      const d2 = nextC.datetime.split(' ')[0];
+      if (d1 !== d2 && !foundYesterday) {
+        yesterdayDate = d2;
+        foundYesterday = true;
+      }
+      // Collect all of yesterday's candles for the true daily high/low
+      if (foundYesterday && c.datetime.split(' ')[0] === yesterdayDate) {
+        yesterdayHigh = Math.max(yesterdayHigh, c.high);
+        yesterdayLow  = Math.min(yesterdayLow,  c.low);
+      }
+      if (foundYesterday && c.datetime.split(' ')[0] !== yesterdayDate && i > 0) break;
+    }
+  }
+
+  if (!foundYesterday) return { active: false };
+
+  const currentPrice = candles[candles.length - 1].close;
+  const aboveYesterday = currentPrice > yesterdayHigh;
+  const belowYesterday = currentPrice < yesterdayLow;
+
+  if (aboveYesterday || belowYesterday) {
+    const recent = candles.slice(-10);
+    const touches = recent.filter(c => 
+      aboveYesterday ? c.close > yesterdayHigh : c.close < yesterdayLow
+    ).length;
+
+    if (touches <= 2) {
+      return {
+        active: true,
+        direction: aboveYesterday ? 'bullish' : 'bearish',
+        type: 'Straightaway',
+        setup: aboveYesterday ? 'Break above yesterday high' : 'Break below yesterday low',
+        confidence: 75
+      };
+    }
+  }
+
+  return { active: false };
+}
+
+// NYC Reversal Detection - First 3 hours of NY session at Level III
+function detectNYCReversal(candles, btmmLevelCount) {
+  if (!candles || candles.length < 10) return { active: false };
+
+  // NY first 3 hours = 13:30–16:30 GMT (08:30–11:30 ET winter)
+  const gmtHour = getCurrentGMTHour();
+  const first3Hours = gmtHour >= 13.5 && gmtHour < 16.5;
+
+  if (!first3Hours) return { active: false };
+
+  if (btmmLevelCount && btmmLevelCount.level === 'III') {
+    return { active: true, type: 'NYC Reversal', direction: 'reversal', confidence: 85 };
+  }
+
+  if (btmmLevelCount && btmmLevelCount.level === 'II') {
+    return { active: true, type: 'NYC Reversal (Developing)', direction: 'potential', confidence: 60 };
+  }
+
+  return { active: false };
+}
+
+// TDI Divergence Detection - BTMM key confirmation signal
+function detectTDIDivergence(candles, tdi) {
+  if (!candles || candles.length < 30 || !tdi || !tdi.fastArr || !Array.isArray(tdi.fastArr) || tdi.fastArr.length < 20) {
+    return { active: false, type: 'none' };
+  }
+
+  const closes = candles.map(c => c.close);
+  const rsi = tdi.fastArr;
+
+  // Look at last 20 candles for divergence
+  const priceSlice = closes.slice(-20);
+  const rsiSlice = rsi.slice(-20);
+
+  // Find recent high and low in price
+  const priceHighIdx = priceSlice.indexOf(Math.max(...priceSlice));
+  const priceLowIdx = priceSlice.indexOf(Math.min(...priceSlice));
+
+  // Find corresponding RSI values
+  const rsiAtPriceHigh = rsiSlice[priceHighIdx];
+  const rsiAtPriceLow = rsiSlice[priceLowIdx];
+
+  // Bearish Divergence: Price makes HIGHER high, but RSI makes LOWER high
+  if (priceHighIdx > 5) {
+    const recentPriceHighs = [];
+    for (let i = 5; i < priceSlice.length - 1; i++) {
+      if (priceSlice[i] > priceSlice[i-1] && priceSlice[i] > priceSlice[i+1]) {
+        recentPriceHighs.push({ idx: i, price: priceSlice[i], rsi: rsiSlice[i] });
+      }
+    }
+    if (recentPriceHighs.length >= 2) {
+      const h1 = recentPriceHighs[recentPriceHighs.length - 2];
+      const h2 = recentPriceHighs[recentPriceHighs.length - 1];
+      if (h2.price > h1.price && h2.rsi < h1.rsi) {
+        return {
+          active: true,
+          type: 'Bearish Divergence',
+          direction: 'bearish',
+          description: 'Price higher, RSI lower = weakening momentum',
+          confidence: 75
+        };
+      }
+    }
+  }
+
+  // Bullish Divergence: Price makes LOWER low, but RSI makes HIGHER low
+  if (priceLowIdx > 5) {
+    const recentPriceLows = [];
+    for (let i = 5; i < priceSlice.length - 1; i++) {
+      if (priceSlice[i] < priceSlice[i-1] && priceSlice[i] < priceSlice[i+1]) {
+        recentPriceLows.push({ idx: i, price: priceSlice[i], rsi: rsiSlice[i] });
+      }
+    }
+    if (recentPriceLows.length >= 2) {
+      const l1 = recentPriceLows[recentPriceLows.length - 2];
+      const l2 = recentPriceLows[recentPriceLows.length - 1];
+      if (l2.price < l1.price && l2.rsi > l1.rsi) {
+        return {
+          active: true,
+          type: 'Bullish Divergence',
+          direction: 'bullish',
+          description: 'Price lower, RSI higher = building momentum',
+          confidence: 75
+        };
+      }
+    }
+  }
+
+  return { active: false, type: 'none' };
+}
+
+// Half Batman Pattern - Level I consolidation without 2nd leg needed
+function detectHalfBatman(candles, btmmLevelCount) {
+  if (!candles || candles.length < 30) return { active: false };
+
+  // Half Batman occurs at Level I - EMA stack tightening
+  if (!btmmLevelCount || btmmLevelCount.level !== 'I') return { active: false };
+
+  const recent = candles.slice(-20);
+  const highs = recent.map(c => c.high);
+  const lows = recent.map(c => c.low);
+
+  // Find consolidation: tight range after move
+  const ranges = recent.map(c => c.high - c.low);
+  const avgRange = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+  const recentRange = ranges.slice(-5).reduce((a, b) => a + b, 0) / 5;
+
+  // Consolidation (tightening) after directional move
+  const tightening = recentRange < avgRange * 0.6;
+
+  if (!tightening) return { active: false };
+
+  // Check for move before consolidation (move to trap)
+  const earlyMove = ranges.slice(0, 8).reduce((a, b) => a + b, 0) / 8;
+  const hadMove = earlyMove > avgRange * 1.3;
+
+  if (hadMove && tightening) {
+    return {
+      active: true,
+      type: 'Half Batman',
+      direction: 'consolidation',
+      description: 'Level I + Tight consolidation after move - entry ready without M/W 2nd leg',
+      confidence: 70
+    };
+  }
+
+  return { active: false };
+}
+
+// Pivot Points (M1-M4) - Midpoint pivots for target zones
+function calculatePivotPoints(candles, pair) {
+  if (!candles || candles.length < 10) return { levels: [], nearest: null };
+
+  // Get previous day's high/low/close
+  const prevDay = candles.slice(-288 < candles.length ? -288 : -1);
+  const high = Math.max(...prevDay.map(c => c.high));
+  const low = Math.min(...prevDay.map(c => c.low));
+  const close = prevDay[prevDay.length - 1].close;
+
+  // Classic Pivot Point (P)
+  const pp = (high + low + close) / 3;
+
+  // Support levels
+  const s1 = (2 * pp) - high;
+  const s2 = pp - (high - low);
+  const s3 = s1 - (high - low);
+
+  // Resistance levels
+  const r1 = (2 * pp) - low;
+  const r2 = pp + (high - low);
+  const r3 = r1 + (high - low);
+
+  // M1-M4 Midpoint Pivots (BTMM specific)
+  const m1 = (pp + r1) / 2;
+  const m2 = (r1 + r2) / 2;
+  const m3 = (r2 + r3) / 2;
+  const m4 = r3 + (high - low) / 2;  // midpoint between R3 and implied R4
+
+  const levels = [
+    { level: 'S3', value: s3, type: 'support' },
+    { level: 'S2', value: s2, type: 'support' },
+    { level: 'S1', value: s1, type: 'support' },
+    { level: 'PP', value: pp, type: 'pivot' },
+    { level: 'M1', value: m1, type: 'midpoint' },
+    { level: 'M2', value: m2, type: 'midpoint' },
+    { level: 'M3', value: m3, type: 'midpoint' },
+    { level: 'M4', value: m4, type: 'midpoint' },
+    { level: 'R1', value: r1, type: 'resistance' },
+    { level: 'R2', value: r2, type: 'resistance' },
+    { level: 'R3', value: r3, type: 'resistance' },
+  ];
+
+  // Find nearest pivot to current price
+  const currentPrice = candles[candles.length - 1].close;
+  let nearest = null;
+  let minDist = Infinity;
+
+  for (const lvl of levels) {
+    const dist = Math.abs(currentPrice - lvl.value);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = lvl;
+    }
+  }
+
+  return {
+    levels,
+    nearest,
+    pp,
+    s1, s2, s3,
+    r1, r2, r3,
+    m1, m2, m3, m4
+  };
+}
+
+// Candle fetch via local fetcher service. Service owns keys, cache, rotation,
+// quota tracking, and incremental fetching. Browser just asks for candles.
+async function fetchRealData(symbol) {
+  try {
+    const url = `${API_CONFIG.baseUrl}${API_CONFIG.endpoint}/${encodeURIComponent(symbol)}`
+              + `?interval=${API_CONFIG.interval}&limit=${API_CONFIG.outputSize}`;
+    const resp = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) {
+      console.error(`  ${symbol}: service HTTP ${resp.status}`);
+      return null;
+    }
+    const data = await resp.json();
+    if (data.stale && (!data.candles || data.candles.length === 0)) {
+      console.warn(`  ${symbol}: stale + empty (service has no cached bars yet)`);
+      staleSymbols.add(symbol);
+      return null;
+    }
+    if (!data.candles || data.candles.length === 0) return null;
+    if (data.stale) {
+      console.warn(`  ${symbol}: served from cache (stale = upstream unavailable)`);
+      staleSymbols.add(symbol);
+    } else {
+      staleSymbols.delete(symbol);
+    }
+    return data.candles.map(c => ({
+      open:   c.open,
+      high:   c.high,
+      low:    c.low,
+      close:  c.close,
+      volume: c.volume || 0,
+      datetime: c.datetime
+    }));
+  } catch (err) {
+    console.error(`  ${symbol}: fetch failed (${err.message}) — is the service running on ${API_CONFIG.baseUrl}?`);
+    return null;
+  }
+}
+
+function calcEMA(data, period) {
+  // ── Industry-standard EMA: seed with SMA of first `period` bars ──────────
+  // TradingView, MetaTrader, Bloomberg all use this approach.
+  // Seeding from data[0] alone biases the EMA toward the oldest price in the
+  // dataset and never converges properly when candle count ≈ period.
+  if (!data || data.length === 0) return [];
+  const k = 2 / (period + 1);
+  const ema = [];
+  if (data.length < period) {
+    // Not enough bars for full SMA seed — use SMA of ALL available bars as the seed.
+    // This is far better than data[0]: it centres the EMA on actual price action
+    // rather than anchoring it to the oldest bar, which causes the line to sit far
+    // from current price and never converge within the visible window.
+    const seed = data.reduce((a, b) => a + b, 0) / data.length;
+    ema.push(seed);
+    for (let i = 1; i < data.length; i++) ema.push(data[i] * k + ema[i-1] * (1-k));
+    return ema;
+  }
+  // Seed = SMA of first `period` bars (matches TradingView exactly)
+  const seed = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  // Pre-fill first (period-1) slots with seed so array length = data.length
+  for (let i = 0; i < period - 1; i++) ema.push(seed);
+  ema.push(seed);
+  // EMA smoothing starts from bar index `period`
+  for (let i = period; i < data.length; i++) ema.push(data[i] * k + ema[ema.length-1] * (1-k));
+  return ema;
+}
+
+function calcRSI(closes, period = 14) {
+  const rsi = [];
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) avgGain += diff;
+    else avgLoss += Math.abs(diff);
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  rsi.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  for (let i = period + 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + (diff > 0 ? diff : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? Math.abs(diff) : 0)) / period;
+    rsi.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  }
+  return rsi;
+}
+
+function calcMACD(closes) {
+  const ema12 = calcEMA(closes, 12);
+  const ema26 = calcEMA(closes, 26);
+  const macdLine = [];
+  for (let i = 0; i < closes.length; i++) {
+    macdLine.push(i >= 25 ? ema12[i] - ema26[i] : 0);
+  }
+  const signalLine = calcEMA(macdLine.slice(26), 9);
+  const histogram = [];
+  for (let i = 0; i < signalLine.length; i++) {
+    histogram.push(macdLine[26 + i] - signalLine[i]);
+  }
+  return { macd: macdLine, signal: signalLine, histogram };
+}
+
+function calcBollingerBands(closes, period = 20, mult = 2) {
+  const upper = [], lower = [], middle = [];
+  for (let i = period - 1; i < closes.length; i++) {
+    const slice = closes.slice(i - period + 1, i + 1);
+    const sma = slice.reduce((a, b) => a + b, 0) / period;
+    const std = Math.sqrt(slice.reduce((sum, val) => sum + Math.pow(val - sma, 2), 0) / period);
+    middle.push(sma);
+    upper.push(sma + mult * std);
+    lower.push(sma - mult * std);
+  }
+  return { upper, middle, lower };
+}
+
+function calcStochastic(candles, kPeriod = 14, dPeriod = 3) {
+  const kValues = [];
+  for (let i = kPeriod - 1; i < candles.length; i++) {
+    const slice = candles.slice(i - kPeriod + 1, i + 1);
+    const high = Math.max(...slice.map(c => c.high));
+    const low = Math.min(...slice.map(c => c.low));
+    const close = candles[i].close;
+    kValues.push(high === low ? 50 : ((close - low) / (high - low)) * 100);
+  }
+  const dValues = calcEMA(kValues, dPeriod);
+  return { k: kValues, d: dValues };
+}
+
+function calcADR(candles, period = 14) {
+  const dailyRanges = [];
+  const dailyCandleMap = {};
+  candles.forEach(c => {
+    if (!c.datetime) return;
+    const dateKey = c.datetime.split(' ')[0];
+    if (!dailyCandleMap[dateKey]) dailyCandleMap[dateKey] = { high: -Infinity, low: Infinity };
+    if (c.high > dailyCandleMap[dateKey].high) dailyCandleMap[dateKey].high = c.high;
+    if (c.low < dailyCandleMap[dateKey].low) dailyCandleMap[dateKey].low = c.low;
+  });
+  Object.values(dailyCandleMap).forEach(d => {
+    dailyRanges.push(d.high - d.low);
+  });
+  const recentRanges = dailyRanges.slice(-period);
+  const adr = recentRanges.length > 0 ? recentRanges.reduce((a, b) => a + b, 0) / recentRanges.length : 0;
+  return { adr, threeX: adr * 3 };
+}
+
+function calcSMA(data, period) {
+  const sma = [];
+  for (let i = period - 1; i < data.length; i++) {
+    const slice = data.slice(i - period + 1, i + 1);
+    sma.push(slice.reduce((a, b) => a + b, 0) / period);
+  }
+  return sma;
+}
+
+function calcTDI(closes) {
+  // BTMM TDI uses RSI(13) — period 13 is intentional (Steve Mauro spec), not RSI(14)
+  const rsiTDI = calcRSI(closes, 13);
+  if (rsiTDI.length < 7) return { fast: 50, slow: 50, fastArr: [50], slowArr: [50], upper: 67, lower: 33, mid: 50 };
+  const rsi2Smoothed = calcSMA(rsiTDI, 2);
+  const rsi7Smoothed = calcSMA(rsiTDI, 7);
+  const fastLine = rsi2Smoothed.length > 0 ? rsi2Smoothed[rsi2Smoothed.length - 1] : 50;
+  const slowLine = rsi7Smoothed.length > 0 ? rsi7Smoothed[rsi7Smoothed.length - 1] : 50;
+  const rsiForBB = rsiTDI.slice(-34);
+  let bbUpper = 67, bbLower = 33, bbMid = 50;
+  if (rsiForBB.length >= 34) {
+    const sma = rsiForBB.reduce((a, b) => a + b, 0) / rsiForBB.length;
+    const std = Math.sqrt(rsiForBB.reduce((sum, val) => sum + Math.pow(val - sma, 2), 0) / rsiForBB.length);
+    bbMid = sma;
+    bbUpper = sma + 1.6185 * std;
+    bbLower = sma - 1.6185 * std;
+  }
+  return { fast: fastLine, slow: slowLine, fastArr: rsi2Smoothed, slowArr: rsi7Smoothed, upper: bbUpper, lower: bbLower, mid: bbMid };
+}
+
+function detectTDILeg(tdi) {
+  const { fastArr, slowArr, upper, lower } = tdi;
+  if (!fastArr || !slowArr || fastArr.length < 10 || typeof upper !== 'number') {
+    return { leg: 0, direction: 'neutral', confidence: 'low', description: 'Insufficient TDI data' };
+  }
+  const lookback = Math.min(fastArr.length, 20);
+  const recentFast = fastArr.slice(-lookback);
+  const currentFast = recentFast[recentFast.length - 1];
+  const wasOutsideBandBear = recentFast.slice(0, -3).some(v => v > upper);
+  const wasOutsideBandBull = recentFast.slice(0, -3).some(v => v < lower);
+  const currentlyOutsideBear = currentFast > upper;
+  const currentlyOutsideBull = currentFast < lower;
+  if (currentlyOutsideBear) return { leg: 1, direction: 'bearish', confidence: 'high', description: 'TDI 1st leg — RSI above upper band (Shark Fin SHORT forming)' };
+  if (currentlyOutsideBull) return { leg: 1, direction: 'bullish', confidence: 'high', description: 'TDI 1st leg — RSI below lower band (Shark Fin LONG forming)' };
+  if (wasOutsideBandBear && currentFast < upper) {
+    const mPattern = currentFast < recentFast[recentFast.length - 3];
+    return { leg: 2, direction: 'bearish', confidence: mPattern ? 'high' : 'medium', description: `TDI 2nd leg — RSI returned inside bands after bear spike${mPattern ? ', M-pattern forming' : ''}` };
+  }
+  if (wasOutsideBandBull && currentFast > lower) {
+    const wPattern = currentFast > recentFast[recentFast.length - 3];
+    return { leg: 2, direction: 'bullish', confidence: wPattern ? 'high' : 'medium', description: `TDI 2nd leg — RSI returned inside bands after bull dip${wPattern ? ', W-pattern forming' : ''}` };
+  }
+  const midRange = (upper + lower) / 2;
+  const direction = currentFast > midRange ? 'bullish' : 'bearish';
+  return { leg: 0, direction, confidence: 'low', description: 'TDI mid-range — no active leg setup' };
+}
+
+function detectPFLevels(candles) {
+  if (!candles || candles.length < 20 || !candles[0].datetime) {
+    const rng = seededRandom(42);
+    const base = candles && candles.length > 0 ? candles[candles.length - 1].close : 1.0;
+    return { pfl: base * 0.995, pfc: base * 1.005, pflDistance: 0, pfcDistance: 0, pfhStatus: 'N/A' };
+  }
+  const dateMap = {};
+  candles.forEach(c => {
+    const dateKey = c.datetime.split(' ')[0];
+    if (!dateMap[dateKey]) dateMap[dateKey] = { high: -Infinity, low: Infinity, candles: [] };
+    dateMap[dateKey].candles.push(c);
+    if (c.high > dateMap[dateKey].high) dateMap[dateKey].high = c.high;
+    if (c.low < dateMap[dateKey].low) dateMap[dateKey].low = c.low;
+  });
+  const dates = Object.keys(dateMap).sort();
+  if (dates.length < 2) {
+    const last = candles[candles.length - 1];
+    return { pfl: last.low * 0.999, pfc: last.high * 1.001, pflDistance: 0, pfcDistance: 0, pfhStatus: 'N/A' };
+  }
+  const prevDay = dateMap[dates[dates.length - 2]];
+  const currentPrice = candles[candles.length - 1].close;
+  const pfl = prevDay.low;
+  const pfc = prevDay.high;
+  const pflDistance = Math.abs(currentPrice - pfl);
+  const pfcDistance = Math.abs(currentPrice - pfc);
+  let pfhStatus = 'Between';
+  if (currentPrice > pfc) pfhStatus = 'Above PFC';
+  else if (currentPrice < pfl) pfhStatus = 'Below PFL';
+  return { pfl, pfc, pflDistance, pfcDistance, pfhStatus };
+}
+
+function detectAMDPhase(candles) {
+  if (!candles || candles.length < 10) return { phase: 'Unknown', score: 0 };
+
+  // Session-based AMD detection (uses real NY time when datetime is available)
+  if (candles.length > 0 && candles[0].datetime) {
+    const nyHour = getCurrentESTHour();
+    // Asian session (19:00–02:00 NY) = Accumulation: tight range, low volume
+    if (nyHour >= 19 || nyHour < 2) return { phase: 'Accumulation', score: -0.15 };
+    // London Open (02:00–05:00 NY) = Manipulation: false moves, stop hunts
+    if (nyHour >= 2 && nyHour < 5) {
+      const recent12 = candles.slice(-12); // ~3 hours of 15-min candles
+      const baseline = candles.slice(-72).map(c => c.high - c.low).reduce((a,b)=>a+b,0) / Math.min(72, candles.length);
+      const spikeDetected = recent12.some(c => (c.high - c.low) > baseline * 2.2);
+      return { phase: 'Manipulation', score: spikeDetected ? 0.4 : 0.15 };
+    }
+    // NY Morning (05:00–12:00 NY) = Distribution: price-based confirmation
+    if (nyHour >= 5 && nyHour < 12) {
+      const todayDate = candles[candles.length - 1].datetime.split(' ')[0];
+      const todayCandles = candles.filter(c => c.datetime && c.datetime.split(' ')[0] === todayDate);
+      if (todayCandles.length > 0) {
+        const open = todayCandles[0].open;
+        const close = candles[candles.length - 1].close;
+        // Price confirmation: strong directional move from session open
+        const priceMove = ((close - open) / open) * 10000; // pips
+        const score = Math.abs(priceMove) > 30 ? (priceMove > 0 ? 0.8 : -0.8) : Math.abs(priceMove) > 15 ? (priceMove > 0 ? 0.5 : -0.5) : 0.2;
+        return { phase: 'Distribution', score: score };
+      }
+      return { phase: 'Distribution', score: 0.3 };
+    }
+    // NY Afternoon / Asian transition (12:00–19:00 NY) = late distribution or new accumulation
+    if (nyHour >= 12 && nyHour < 19) {
+      const todayDate = candles[candles.length - 1].datetime.split(' ')[0];
+      const todayCandles = candles.filter(c => c.datetime && c.datetime.split(' ')[0] === todayDate);
+      if (todayCandles.length > 0) {
+        const open = todayCandles[0].open;
+        const close = candles[candles.length - 1].close;
+        return { phase: 'Distribution', score: close > open ? 0.5 : -0.5 };
+      }
+    }
+    return { phase: 'Accumulation', score: -0.1 };
+  }
+
+  // Fallback for simulated data (no datetime): range-based detection
+  const recent = candles.slice(-30);
+  const ranges = recent.map(c => c.high - c.low);
+  const avgRange = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+  const last10Avg = recent.slice(-10).map(c => c.high - c.low).reduce((a,b)=>a+b,0) / 10;
+  if (last10Avg < avgRange * 0.6) return { phase: 'Accumulation', score: -0.3 };
+  const first10High = Math.max(...recent.slice(0,10).map(c => c.high));
+  const first10Low = Math.min(...recent.slice(0,10).map(c => c.low));
+  const last5 = recent.slice(-5);
+  const spikeSize = Math.max(Math.max(...last5.map(c=>c.high)) - first10High, first10Low - Math.min(...last5.map(c=>c.low)));
+  if ((Math.max(...last5.map(c=>c.high)) > first10High || Math.min(...last5.map(c=>c.low)) < first10Low) && spikeSize > avgRange * 1.5)
+    return { phase: 'Manipulation', score: 0.5 };
+  const directionalMove = Math.abs(recent[recent.length - 1].close - recent[0].open);
+  if (directionalMove > avgRange * 1.2) return { phase: 'Distribution', score: recent[recent.length-1].close > recent[0].open ? 1.0 : -1.0 };
+  return { phase: 'Accumulation', score: -0.1 };
+}
+
+function detectHODLOD(candles, pair) {
+  if (!candles || candles.length < 8) return { valid: false, hod: 0, lod: 0, retestingHOD: false, retestingLOD: false };
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+  const lastDt = candles[candles.length - 1].datetime;
+  if (!lastDt) {
+    const dayCandles = candles.slice(-96);
+    const hod = Math.max(...dayCandles.map(c => c.high));
+    const lod = Math.min(...dayCandles.map(c => c.low));
+    const price = candles[candles.length - 1].close;
+    const nearHOD = Math.abs(price - hod) / pip < 15;
+    const nearLOD = Math.abs(price - lod) / pip < 15;
+    return { valid: true, hod, lod, retestingHOD: nearHOD, retestingLOD: nearLOD, nearHOD, nearLOD };
+  }
+  const todayDate = lastDt.split(' ')[0];
+  const todayCandles = candles.filter(c => c.datetime && c.datetime.split(' ')[0] === todayDate);
+  if (todayCandles.length < 4) return { valid: false, hod: 0, lod: 0, retestingHOD: false, retestingLOD: false };
+  const hod = Math.max(...todayCandles.map(c => c.high));
+  const lod = Math.min(...todayCandles.map(c => c.low));
+  const price = candles[candles.length - 1].close;
+  const nearHOD = Math.abs(price - hod) / pip < 15;
+  const nearLOD = Math.abs(price - lod) / pip < 15;
+  const recentPrices = candles.slice(-8).map(c => c.close);
+  const wasAwayFromHOD = recentPrices.slice(0, 4).some(p => hod - p > 20 * pip);
+  const wasAwayFromLOD = recentPrices.slice(0, 4).some(p => p - lod > 20 * pip);
+  return { valid: true, hod, lod, retestingHOD: nearHOD && wasAwayFromHOD, retestingLOD: nearLOD && wasAwayFromLOD, nearHOD, nearLOD };
+}
+
+function detectNameableCandle(candles) {
+  if (!candles || candles.length < 2) return { found: false, name: 'None', direction: 'neutral' };
+  const curr = candles[candles.length - 1];
+  const prev = candles[candles.length - 2];
+  const currBody = Math.abs(curr.close - curr.open);
+  const currRange = curr.high - curr.low;
+  const prevBody = Math.abs(prev.close - prev.open);
+  const prevRange = prev.high - prev.low;
+  if (currRange === 0 || prevRange === 0) return { found: false, name: 'None', direction: 'neutral' };
+  const currBullish = curr.close > curr.open;
+  const prevBullish = prev.close > prev.open;
+  const currUpperWick = curr.high - Math.max(curr.open, curr.close);
+  const currLowerWick = Math.min(curr.open, curr.close) - curr.low;
+  if (currBody / currRange < 0.15) {
+    return { found: true, name: 'Doji', direction: 'neutral', description: 'Indecision — wait for next candle direction' };
+  }
+  if (currLowerWick >= 2 * currBody && currUpperWick < currBody && currRange > 0) {
+    return { found: true, name: 'Hammer', direction: 'bullish', description: 'Bullish reversal — rejection of lower prices' };
+  }
+  if (currUpperWick >= 2 * currBody && currLowerWick < currBody && currRange > 0) {
+    return { found: true, name: 'Shooting Star', direction: 'bearish', description: 'Bearish reversal — rejection of higher prices' };
+  }
+  if (currBullish !== prevBullish && currBody > prevBody * 1.1 &&
+      Math.min(curr.open, curr.close) <= Math.min(prev.open, prev.close) &&
+      Math.max(curr.open, curr.close) >= Math.max(prev.open, prev.close)) {
+    return { found: true, name: currBullish ? 'Bullish Engulfing' : 'Bearish Engulfing', direction: currBullish ? 'bullish' : 'bearish', description: currBullish ? 'Strong bullish reversal' : 'Strong bearish reversal' };
+  }
+  if (currBullish !== prevBullish && currBody >= prevBody * 0.7 && currBody <= prevBody * 1.3) {
+    return { found: true, name: 'RRT', direction: currBullish ? 'bullish' : 'bearish', description: 'Railroad Track — strong reversal signal' };
+  }
+  const prevBodyHigh = Math.max(prev.open, prev.close);
+  const prevBodyLow = Math.min(prev.open, prev.close);
+  const currBodyHigh = Math.max(curr.open, curr.close);
+  const currBodyLow = Math.min(curr.open, curr.close);
+  if (currBodyHigh <= prevBodyLow || currBodyLow >= prevBodyHigh) {
+    const inUpperWick = currBodyLow >= prevBodyHigh && currBodyHigh <= prev.high;
+    const inLowerWick = currBodyHigh <= prevBodyLow && currBodyLow >= prev.low;
+    if (inUpperWick || inLowerWick) {
+      return { found: true, name: 'COW', direction: inLowerWick ? 'bullish' : 'bearish', description: 'Candle On Wick — price rejecting into wick zone' };
+    }
+  }
+  return { found: false, name: 'None', direction: 'neutral' };
+}
+
+function calcFibs(candles) {
+  if (!candles || candles.length < 20) return { levels: [], nearest: null };
+  const recent = candles.slice(-50);
+  let swingHigh = -Infinity, swingLow = Infinity;
+  let swingHighIdx = 0, swingLowIdx = 0;
+  for (let i = 2; i < recent.length - 2; i++) {
+    if (recent[i].high > recent[i-1].high && recent[i].high > recent[i-2].high && recent[i].high > recent[i+1].high && recent[i].high > recent[i+2].high) {
+      if (recent[i].high > swingHigh) { swingHigh = recent[i].high; swingHighIdx = i; }
+    }
+    if (recent[i].low < recent[i-1].low && recent[i].low < recent[i-2].low && recent[i].low < recent[i+1].low && recent[i].low < recent[i+2].low) {
+      if (recent[i].low < swingLow) { swingLow = recent[i].low; swingLowIdx = i; }
+    }
+  }
+  if (swingHigh === -Infinity || swingLow === Infinity) return { levels: [], nearest: null };
+  const range = swingHigh - swingLow;
+  const levels = [
+    { level: 0, price: swingLow },
+    { level: 23.6, price: swingLow + range * 0.236 },
+    { level: 38.2, price: swingLow + range * 0.382 },
+    { level: 50.0, price: swingLow + range * 0.5 },
+    { level: 61.8, price: swingLow + range * 0.618 },
+    { level: 78.6, price: swingLow + range * 0.786 },
+    { level: 100, price: swingHigh }
+  ];
+  const currentPrice = recent[recent.length - 1].close;
+  let nearest = null;
+  let minDist = Infinity;
+  levels.forEach(l => {
+    const dist = Math.abs(currentPrice - l.price);
+    if (dist < minDist) { minDist = dist; nearest = { ...l, distance: dist }; }
+  });
+  return { levels, nearest };
+}
+
+function calcWeeklyFibs(candles) {
+  if (!candles || candles.length < 8) return { valid: false, weekHigh: 0, weekLow: 0, levels: [], nearest: null, highProbZone: false };
+  let weekCandles;
+  if (candles[0] && candles[0].datetime) {
+    const lastDate = new Date(candles[candles.length - 1].datetime.split(' ')[0] + 'T00:00:00Z');
+    const dayOfWeek = lastDate.getUTCDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(lastDate.getTime() - daysToMonday * 86400000);
+    const mondayStr = monday.toISOString().slice(0, 10);
+    weekCandles = candles.filter(c => c.datetime && c.datetime.split(' ')[0] >= mondayStr);
+  } else {
+    weekCandles = candles.slice(-480);
+  }
+  if (weekCandles.length < 4) return { valid: false, weekHigh: 0, weekLow: 0, levels: [], nearest: null, highProbZone: false };
+  const weekHigh = Math.max(...weekCandles.map(c => c.high));
+  const weekLow  = Math.min(...weekCandles.map(c => c.low));
+  const range = weekHigh - weekLow;
+  if (range === 0) return { valid: false, weekHigh, weekLow, levels: [], nearest: null, highProbZone: false };
+  const levels = [
+    { level: 0,    price: weekLow,                 label: '0%',    highProb: false },
+    { level: 23.6, price: weekLow + range * 0.236, label: '23.6%', highProb: false },
+    { level: 38.2, price: weekLow + range * 0.382, label: '38.2%', highProb: false },
+    { level: 50.0, price: weekLow + range * 0.5,   label: '50%',   highProb: false },
+    { level: 61.8, price: weekLow + range * 0.618, label: '61.8%', highProb: true  },
+    { level: 78.6, price: weekLow + range * 0.786, label: '78.6%', highProb: true  },
+    { level: 100,  price: weekHigh,                label: '100%',  highProb: false }
+  ];
+  const currentPrice = weekCandles[weekCandles.length - 1].close;
+  let nearest = null, minDist = Infinity;
+  levels.forEach(l => {
+    const dist = Math.abs(currentPrice - l.price);
+    if (dist < minDist) { minDist = dist; nearest = { ...l, distance: dist }; }
+  });
+  return { valid: true, weekHigh, weekLow, levels, nearest, highProbZone: nearest ? nearest.highProb : false };
+}
+
+function resampleToH1(candles) {
+  if (!candles || candles.length < 8) return { valid: false, trend: 'neutral', aligned: false, ema50: 0, ema200: 0, candleCount: 0 };
+  let h1Candles = [];
+  if (candles[0] && candles[0].datetime) {
+    const groups = {};
+    candles.forEach(c => {
+      if (!c.datetime || c.datetime.length < 13) return;
+      const hourKey = c.datetime.slice(0, 13);
+      if (!groups[hourKey]) groups[hourKey] = [];
+      groups[hourKey].push(c);
+    });
+    h1Candles = Object.keys(groups).sort().map(key => {
+      const grp = groups[key];
+      return { open: grp[0].open, high: Math.max(...grp.map(c => c.high)), low: Math.min(...grp.map(c => c.low)), close: grp[grp.length - 1].close, volume: grp.reduce((s, c) => s + (c.volume || 0), 0) };
+    });
+  } else {
+    for (let i = 0; i + 3 < candles.length; i += 4) {
+      const grp = candles.slice(i, i + 4);
+      h1Candles.push({ open: grp[0].open, high: Math.max(...grp.map(c => c.high)), low: Math.min(...grp.map(c => c.low)), close: grp[3].close, volume: grp.reduce((s, c) => s + (c.volume || 0), 0) });
+    }
+  }
+  if (h1Candles.length < 10) return { valid: false, trend: 'neutral', aligned: false, ema50: 0, ema200: 0, candleCount: h1Candles.length };
+  const h1Closes  = h1Candles.map(c => c.close);
+  const h1Ema50Arr  = calcEMA(h1Closes, 50);
+  const h1Ema200Arr = calcEMA(h1Closes, 200);
+  const h1Price  = h1Closes[h1Closes.length - 1];
+  const h1Ema50  = h1Ema50Arr.length  > 0 ? h1Ema50Arr[h1Ema50Arr.length - 1]   : h1Price;
+  const h1Ema200 = h1Ema200Arr.length > 0 ? h1Ema200Arr[h1Ema200Arr.length - 1] : h1Price;
+  const trend = h1Price > h1Ema50 && h1Ema50 > h1Ema200 ? 'bullish'
+              : h1Price < h1Ema50 && h1Ema50 < h1Ema200 ? 'bearish'
+              : 'neutral';
+  return { valid: true, trend, ema50: h1Ema50, ema200: h1Ema200, currentPrice: h1Price, candleCount: h1Candles.length };
+}
+
+function calcLaguerreRSI(closes, gamma = 0.5) {
+  // John Ehlers' Laguerre RSI — DSP-based momentum, 4-bar effective lookback
+  // Published in "Cybernetic Analysis for Stocks and Futures" (2002)
+  let L0 = 0, L1 = 0, L2 = 0, L3 = 0;
+  const result = [];
+  for (let i = 0; i < closes.length; i++) {
+    const price = closes[i];
+    const pL0 = L0, pL1 = L1, pL2 = L2, pL3 = L3;
+    L0 = (1 - gamma) * price + gamma * pL0;
+    L1 = -gamma * L0 + pL0 + gamma * pL1;
+    L2 = -gamma * L1 + pL1 + gamma * pL2;
+    L3 = -gamma * L2 + pL2 + gamma * pL3;
+    const CU = Math.max(L0-L1,0) + Math.max(L1-L2,0) + Math.max(L2-L3,0);
+    const CD = Math.max(L1-L0,0) + Math.max(L2-L1,0) + Math.max(L3-L2,0);
+    result.push(CU + CD === 0 ? 0.5 : CU / (CU + CD));
+  }
+  return result;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WYCKOFF METHOD — Full Implementation
+// Covers: Trading Range ID, Phase Classification (A-E), Full Event Sequence,
+//         Volume (Effort vs Result), SOS/SOW Confirmation, Spring/Upthrust,
+//         SC/BC, AR, ST, LPS/LPSY, Markup/Markdown detection
+// Reference: Richard Wyckoff (1931), Hank Pruden "The Three Skills of Top Trading"
+// ══════════════════════════════════════════════════════════════════════════════
+function detectWyckoff(candles) {
+  if (!candles || candles.length < 20) {
+    return {
+      phase: 'Unknown', phaseDetail: 'Need 20+ candles', event: 'none',
+      label: 'Insufficient Data', direction: 'neutral', strength: 0,
+      sosConfirmed: false, volumeConfirms: false,
+      rangeHigh: 0, rangeLow: 0, rangeSize: 0, currentPos: 0.5, hasVolume: false
+    };
+  }
+
+  // ── 1. TRADING RANGE (50-candle lookback — proper Wyckoff range analysis) ──
+  const lb      = Math.min(60, candles.length - 1);
+  const window  = candles.slice(-lb - 1, -1);          // exclude current forming candle
+  const current = candles[candles.length - 1];
+  const prev    = candles[candles.length - 2];
+  const prev2   = candles.length > 2 ? candles[candles.length - 3] : prev;
+
+  const rangeHigh   = Math.max(...window.map(c => c.high));
+  const rangeLow    = Math.min(...window.map(c => c.low));
+  const rangeSize   = rangeHigh - rangeLow;
+  if (rangeSize === 0) return {
+    phase: 'Ranging', phaseDetail: 'Flat range — no data yet', event: 'none',
+    label: 'Flat Range', direction: 'neutral', strength: 0,
+    sosConfirmed: false, volumeConfirms: false,
+    rangeHigh, rangeLow, rangeSize: 0, currentPos: 0.5, hasVolume: false
+  };
+
+  const rangeMid    = (rangeHigh + rangeLow) / 2;
+  const currentPos  = Math.max(0, Math.min(1, (current.close - rangeLow) / rangeSize)); // 0=bottom 1=top
+
+  // ── 2. VOLUME BASELINE (Effort vs Result — Wyckoff's 3rd Law) ─────────────
+  const hasVolume  = window.some(c => (c.volume || 0) > 0);
+  const avgVolume  = hasVolume ? window.reduce((s, c) => s + (c.volume || 0), 0) / window.length : 1;
+  const hiVol  = c => hasVolume ? (c.volume || 0) > avgVolume * 1.3 : false;
+  const loVol  = c => hasVolume ? (c.volume || 0) < avgVolume * 0.75 : false;
+  const avgSpread  = window.reduce((s, c) => s + (c.high - c.low), 0) / window.length;
+  const wideBar    = c => (c.high - c.low) > avgSpread * 1.5;
+  const narrowBar  = c => (c.high - c.low) < avgSpread * 0.6;
+
+  // ── 3. PHASE CLASSIFICATION WITH A-E SUB-PHASES ──────────────────────────
+  // Count boundary touches (within 10% of range from edge)
+  const atSupport    = window.filter(c => c.low  <= rangeLow  + rangeSize * 0.1).length;
+  const atResistance = window.filter(c => c.high >= rangeHigh - rangeSize * 0.1).length;
+
+  // Net price drift and momentum over the window
+  const half      = Math.floor(window.length / 2);
+  const earlyAvg  = window.slice(0, half).reduce((s, c) => s + c.close, 0) / half;
+  const lateAvg   = window.slice(half).reduce((s, c) => s + c.close, 0) / (window.length - half);
+  const earlyVol  = hasVolume ? window.slice(0, half).reduce((s, c) => s + (c.volume || 0), 0) / half : 0;
+  const lateVol   = hasVolume ? window.slice(half).reduce((s, c) => s + (c.volume || 0), 0) / (window.length - half) : 0;
+  const volumeExpanding = hasVolume && lateVol > earlyVol * 1.1;
+  const volumeContracting = hasVolume && lateVol < earlyVol * 0.85;
+
+  // ── Automatic Reaction/Rally (AR) detection ──────────────────────────────
+  // AR = the first strong rally/decline immediately after SC/BC
+  // Identify SC/BC candle: widest bar with highest volume near range extremes
+  let arHigh = rangeHigh, arLow = rangeLow;
+  let hasSC = false, hasBC = false;
+  for (let i = 1; i < window.length - 1; i++) {
+    const c = window[i];
+    if (wideBar(c) && hiVol(c) && c.close < c.open && (c.low - rangeLow) / rangeSize < 0.2) {
+      hasSC = true;
+      // AR high = the highest close in 3-8 candles after SC
+      const afterSC = window.slice(i + 1, Math.min(i + 9, window.length));
+      if (afterSC.length > 0) arHigh = Math.max(...afterSC.map(c2 => c2.high));
+    }
+    if (wideBar(c) && hiVol(c) && c.close > c.open && (rangeHigh - c.high) / rangeSize < 0.2) {
+      hasBC = true;
+      // AR low = the lowest close in 3-8 candles after BC
+      const afterBC = window.slice(i + 1, Math.min(i + 9, window.length));
+      if (afterBC.length > 0) arLow = Math.min(...afterBC.map(c2 => c2.low));
+    }
+  }
+  // In Accumulation: AR high defines top of trading range
+  // In Distribution: AR low defines bottom of trading range
+  const arBound = hasSC ? arHigh : (hasBC ? arLow : null);
+
+  // ── Phase A-E Sub-Classification ─────────────────────────────────────────
+  // Wyckoff Accumulation Phases:
+  //   A — Stopping the downtrend (PS, SC, AR, ST)
+  //   B — Building the cause (repeated support tests, volume declining)
+  //   C — Test (Spring — the shakeout)
+  //   D — Intent revealed (SOS, LPS, rising lows)
+  //   E — Markup (trend in motion)
+  // Wyckoff Distribution Phases:
+  //   A — Stopping the uptrend (PSY, BC, AR, ST)
+  //   B — Building the cause (repeated resistance tests, volume declining)
+  //   C — Test (Upthrust / UTAD)
+  //   D — Intent revealed (SOW, LPSY, lower highs)
+  //   E — Markdown (trend in motion)
+
+  let phase, phaseDetail, subPhase = '';
+
+  if (current.close > rangeHigh) {
+    phase = 'Markup';
+    subPhase = 'E';
+    phaseDetail = 'Phase E — Breakout above range, Accumulation complete. Markup underway.';
+
+  } else if (current.close < rangeLow) {
+    phase = 'Markdown';
+    subPhase = 'E';
+    phaseDetail = 'Phase E — Breakdown below range, Distribution complete. Markdown underway.';
+
+  } else if (atSupport >= 2 && currentPos < 0.45) {
+    if (currentPos < 0.2 && atSupport >= 3 && volumeContracting) {
+      // Phase C Accumulation: Spring zone — low volume tests of support
+      phase = 'Accumulation'; subPhase = 'C';
+      phaseDetail = `Phase C — Spring zone. ${atSupport} support tests, volume contracting ✓. Watch for Spring/Shakeout.`;
+    } else if (currentPos > 0.25 && lateAvg > earlyAvg && volumeExpanding) {
+      // Phase D Accumulation: SOS emerging, rising lows
+      phase = 'Accumulation'; subPhase = 'D';
+      phaseDetail = `Phase D — Intent revealed. Price rising above midpoint, volume expanding. Look for LPS entry.`;
+    } else if (hasSC && atSupport >= 2 && volumeContracting) {
+      // Phase B Accumulation: repeated support tests after SC, volume drying up
+      phase = 'Accumulation'; subPhase = 'B';
+      phaseDetail = `Phase B — Building cause. SC detected, ${atSupport} support tests, volume declining ✓.`;
+    } else if (hasSC) {
+      // Phase A Accumulation: SC/AR identified, range being established
+      phase = 'Accumulation'; subPhase = 'A';
+      phaseDetail = `Phase A — Selling Climax detected. AR high: ${arBound ? arBound.toFixed(5) : 'est.'}. Range forming.`;
+    } else {
+      phase = 'Accumulation'; subPhase = 'B';
+      phaseDetail = `Phase B — ${atSupport} support tests. Smart money absorbing supply at lows.`;
+    }
+
+  } else if (atResistance >= 2 && currentPos > 0.55) {
+    if (currentPos > 0.8 && atResistance >= 3 && volumeContracting) {
+      // Phase C Distribution: UTAD zone
+      phase = 'Distribution'; subPhase = 'C';
+      phaseDetail = `Phase C — UTAD zone. ${atResistance} resistance tests, volume contracting. Watch for Upthrust/UTAD.`;
+    } else if (currentPos < 0.75 && lateAvg < earlyAvg && volumeExpanding) {
+      // Phase D Distribution: SOW emerging, lower highs
+      phase = 'Distribution'; subPhase = 'D';
+      phaseDetail = `Phase D — Intent revealed. Price falling below midpoint, volume expanding. Look for LPSY entry.`;
+    } else if (hasBC && atResistance >= 2 && volumeContracting) {
+      // Phase B Distribution
+      phase = 'Distribution'; subPhase = 'B';
+      phaseDetail = `Phase B — Building cause. BC detected, ${atResistance} resistance tests, volume declining ✓.`;
+    } else if (hasBC) {
+      // Phase A Distribution
+      phase = 'Distribution'; subPhase = 'A';
+      phaseDetail = `Phase A — Buying Climax detected. AR low: ${arBound ? arBound.toFixed(5) : 'est.'}. Range forming.`;
+    } else {
+      phase = 'Distribution'; subPhase = 'B';
+      phaseDetail = `Phase B — ${atResistance} resistance tests. Smart money distributing at highs.`;
+    }
+
+  } else if (currentPos <= 0.3) {
+    phase = 'Possible Accumulation'; subPhase = 'A/B';
+    phaseDetail = 'Near range lows — watching for SC / Spring setup (Phase A or B)';
+  } else if (currentPos >= 0.7) {
+    phase = 'Possible Distribution'; subPhase = 'A/B';
+    phaseDetail = 'Near range highs — watching for BC / Upthrust / UTAD setup (Phase A or B)';
+  } else {
+    phase = 'Ranging'; subPhase = '';
+    phaseDetail = 'Mid-range — insufficient evidence for phase classification';
+  }
+
+  // ── 4. FULL EVENT SEQUENCE DETECTION ─────────────────────────────────────
+  let event = 'none', label = 'None', direction = 'neutral', strength = 0;
+  let sosConfirmed = false, volumeConfirms = false;
+
+  // ── SPRING (Wyckoff Accumulation — most reliable bullish signal) ──────────
+  if (prev.low < rangeLow && prev.close > rangeLow) {
+    const recovery = (prev.close - prev.low) / Math.max(prev.high - prev.low, rangeSize * 0.01);
+    const lowVolSpring = loVol(prev) || !hasVolume;  // low vol = no real selling pressure ✓
+    strength = Math.min(1, recovery * 0.75 + (lowVolSpring ? 0.25 : 0));
+    event = 'spring'; direction = 'bullish'; volumeConfirms = lowVolSpring;
+    // SOS follows Spring: current bar closes strongly above prev close
+    const sosNow = current.close > prev.close + avgSpread * 0.5 && current.close > current.open;
+    if (sosNow) {
+      sosConfirmed = true;
+      label = lowVolSpring ? '🌱 Spring + SOS — A-Grade Bullish Setup' : '🌱 Spring + SOS (High-Vol, confirm bias)';
+    } else {
+      label = lowVolSpring ? '🌱 Wyckoff Spring (Low-Vol ✓) — Watch for SOS' : '🌱 Wyckoff Spring (High-Vol ⚠) — Lower Confidence';
+    }
+  }
+
+  // ── UPTHRUST / UTAD distinction ───────────────────────────────────────────
+  // Upthrust (UT): Phase B false break — less significant, part of building the cause
+  // UTAD (Upthrust After Distribution): Phase C — the definitive shakeout of bulls,
+  //        highest-confidence short signal. Occurs AFTER distribution is established.
+  else if (prev.high > rangeHigh && prev.close < rangeHigh) {
+    const rejection = (prev.high - prev.close) / Math.max(prev.high - prev.low, rangeSize * 0.01);
+    const lowVolUT = loVol(prev) || !hasVolume;
+    strength = Math.min(1, rejection * 0.75 + (lowVolUT ? 0.25 : 0));
+    direction = 'bearish'; volumeConfirms = lowVolUT;
+    const sowNow = current.close < prev.close - avgSpread * 0.5 && current.close < current.open;
+    // UTAD = happens in Phase C Distribution (established range with multiple resistance tests)
+    const isUTAD = subPhase === 'C' && atResistance >= 2;
+    if (isUTAD) {
+      event = 'utad';
+      strength = Math.min(1, strength + 0.15); // UTAD gets a strength bonus — highest confidence
+      if (sowNow) {
+        sosConfirmed = true;
+        label = lowVolUT ? '🔻 UTAD + SOW — Highest-Confidence Short (Phase C)' : '🔻 UTAD + SOW — Phase C Short Signal';
+      } else {
+        label = lowVolUT ? '🔻 UTAD (Low-Vol ✓) — Phase C, Watch for SOW' : '🔻 UTAD — Phase C, Needs SOW Confirmation';
+      }
+    } else {
+      event = 'upthrust';
+      if (sowNow) {
+        sosConfirmed = true;
+        label = lowVolUT ? '🔻 Upthrust + SOW — A-Grade Bearish Setup' : '🔻 Upthrust + SOW (High-Vol, confirm bias)';
+      } else {
+        label = lowVolUT ? '🔻 Wyckoff Upthrust (Low-Vol ✓) — Watch for SOW' : '🔻 Wyckoff Upthrust (High-Vol ⚠) — Lower Confidence';
+      }
+    }
+  }
+
+  // ── SELLING CLIMAX (SC) + Automatic Rally (AR) ────────────────────────────
+  // SC = panic selling, wide bar down, climactic volume, at range lows
+  // AR = the first rally off SC — its high marks the top of the trading range
+  else if (wideBar(prev) && hiVol(prev) && prev.close < prev.open && currentPos < 0.3) {
+    event = 'sc'; direction = 'bullish'; strength = 0.55; volumeConfirms = true;
+    const arStarting = current.close > prev.close && current.close > current.open;
+    if (arStarting) {
+      sosConfirmed = true;
+      label = '⚡ SC + Automatic Rally (AR) beginning — Range top forming';
+    } else {
+      label = '⚡ Selling Climax (SC) — Expect Automatic Rally. Range bottom established.';
+    }
+  }
+
+  // ── BUYING CLIMAX (BC) + Automatic Reaction (AR) ─────────────────────────
+  // BC = euphoric buying, wide bar up, climactic volume, at range highs
+  // AR = the first decline off BC — its low marks the bottom of the trading range
+  else if (wideBar(prev) && hiVol(prev) && prev.close > prev.open && currentPos > 0.7) {
+    event = 'bc'; direction = 'bearish'; strength = 0.55; volumeConfirms = true;
+    const arStarting = current.close < prev.close && current.close < current.open;
+    if (arStarting) {
+      sosConfirmed = true;
+      label = '⚡ BC + Automatic Reaction (AR) beginning — Range bottom forming';
+    } else {
+      label = '⚡ Buying Climax (BC) — Expect Automatic Reaction. Range top established.';
+    }
+  }
+
+  // ── SIGN OF STRENGTH (SOS) — Strong bullish push through range midpoint ────
+  else if (['Accumulation', 'Possible Accumulation'].includes(phase)) {
+    const bullCount = window.slice(-6).filter(c => c.close > c.open).length;
+    const breaksMid = prev.close > rangeMid && prev2.close < rangeMid;
+    if (breaksMid && bullCount >= 3) {
+      event = 'sos'; direction = 'bullish'; strength = 0.65;
+      const volOk = hiVol(prev);
+      volumeConfirms = volOk;
+      sosConfirmed   = volOk;
+      label = `📈 Sign of Strength (SOS)${volOk ? ' + Volume Expansion ✓' : ' — Needs Volume Confirmation'}`;
+    }
+    // Secondary Test (ST): retest of Spring/SC area on decreasing volume
+    else if (currentPos < 0.2 && atSupport >= 1) {
+      event = 'st'; direction = 'bullish'; strength = 0.3;
+      volumeConfirms = loVol(prev);
+      label = `🔄 Secondary Test (ST)${loVol(prev) ? ' — Decreasing Vol ✓' : ''}`;
+    }
+    // Last Point of Support (LPS): pullback after SOS on low volume
+    else if (currentPos > 0.4 && prev.close < prev2.close && loVol(prev)) {
+      event = 'lps'; direction = 'bullish'; strength = 0.5;
+      volumeConfirms = true;
+      label = '🔁 Last Point of Support (LPS) — Pullback-to-Buy';
+    }
+  }
+
+  // ── SIGN OF WEAKNESS (SOW) — Strong bearish push through range midpoint ────
+  else if (['Distribution', 'Possible Distribution'].includes(phase)) {
+    const bearCount = window.slice(-6).filter(c => c.close < c.open).length;
+    const breaksMid = prev.close < rangeMid && prev2.close > rangeMid;
+    if (breaksMid && bearCount >= 3) {
+      event = 'sow'; direction = 'bearish'; strength = 0.65;
+      const volOk = hiVol(prev);
+      volumeConfirms = volOk;
+      sosConfirmed   = volOk;
+      label = `📉 Sign of Weakness (SOW)${volOk ? ' + Volume Expansion ✓' : ' — Needs Volume Confirmation'}`;
+    }
+    // Secondary Test at top
+    else if (currentPos > 0.8 && atResistance >= 1) {
+      event = 'st'; direction = 'bearish'; strength = 0.3;
+      volumeConfirms = loVol(prev);
+      label = `🔄 Secondary Test (ST)${loVol(prev) ? ' — Decreasing Vol ✓' : ''}`;
+    }
+    // LPSY: weak rally on low volume after SOW
+    else if (currentPos < 0.6 && prev.close > prev2.close && loVol(prev)) {
+      event = 'lpsy'; direction = 'bearish'; strength = 0.5;
+      volumeConfirms = true;
+      label = '🔁 LPSY — Dead-Cat Bounce, Short Opportunity';
+    }
+  }
+
+  // ── POST-RANGE MARKUP / MARKDOWN ──────────────────────────────────────────
+  else if (phase === 'Markup') {
+    if (prev.close < prev2.close && loVol(prev)) {
+      event = 'lps'; direction = 'bullish'; strength = 0.5; volumeConfirms = true;
+      label = '🔁 LPS in Markup — Pullback Entry in Uptrend';
+    } else {
+      event = 'markup'; direction = 'bullish'; strength = 0.7;
+      label = '🚀 Markup Phase — Trend in Progress';
+    }
+  } else if (phase === 'Markdown') {
+    if (prev.close > prev2.close && loVol(prev)) {
+      event = 'lpsy'; direction = 'bearish'; strength = 0.5; volumeConfirms = true;
+      label = '🔁 LPSY in Markdown — Dead-Cat Bounce';
+    } else {
+      event = 'markdown'; direction = 'bearish'; strength = 0.7;
+      label = '📉 Markdown Phase — Trend in Progress';
+    }
+  } else {
+    event = 'range'; direction = 'neutral'; strength = 0;
+    label = '↔ In Range — No Clear Wyckoff Event';
+  }
+
+  return {
+    phase, phaseDetail, subPhase, event, label, direction, strength,
+    sosConfirmed, volumeConfirms, hasVolume,
+    rangeHigh, rangeLow, rangeSize, currentPos,
+    atSupport, atResistance, arBound, hasSC, hasBC
+  };
+}
+
+function detectLiquidityLevels(candles) {
+  const lookback = Math.min(50, candles.length);
+  const recent = candles.slice(-lookback);
+  let high = -Infinity, low = Infinity;
+  recent.forEach(c => { if (c.high > high) high = c.high; if (c.low < low) low = c.low; });
+  const swingHighs = [], swingLows = [];
+  for (let i = 2; i < recent.length - 2; i++) {
+    if (recent[i].high > recent[i-1].high && recent[i].high > recent[i-2].high && recent[i].high > recent[i+1].high && recent[i].high > recent[i+2].high) swingHighs.push(recent[i].high);
+    if (recent[i].low < recent[i-1].low && recent[i].low < recent[i-2].low && recent[i].low < recent[i+1].low && recent[i].low < recent[i+2].low) swingLows.push(recent[i].low);
+  }
+  return { sessionHigh: high, sessionLow: low, swingHighs: swingHighs.slice(-3), swingLows: swingLows.slice(-3) };
+}
+
+function detectMarketStructure(candles) {
+  const lookback = Math.min(30, candles.length);
+  const recent = candles.slice(-lookback);
+  let lastHigh = -Infinity, lastLow = Infinity, higherHighs = 0, lowerLows = 0;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i].high > lastHigh) { higherHighs++; lastHigh = recent[i].high; }
+    if (recent[i].low < lastLow) { lowerLows++; lastLow = recent[i].low; }
+  }
+  if (higherHighs > lowerLows + 2) return 'bullish';
+  if (lowerLows > higherHighs + 2) return 'bearish';
+  if (recent[recent.length-1].close > recent[0].open && higherHighs > 1) return 'bullish';
+  if (recent[recent.length-1].close < recent[0].open && lowerLows > 1) return 'bearish';
+  return 'neutral';
+}
+
+function getCurrentESTHour() {
+  // Parse hour/minute/second directly from the Intl formatter — never re-parse as new Date()
+  // because new Date(localeString) interprets the string in LOCAL time (SAST), not New York time.
+  const now = new Date();
+  const parts = now.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
+  }).split(':');
+  return parseInt(parts[0], 10) + parseInt(parts[1], 10) / 60 + parseInt(parts[2], 10) / 3600;
+}
+
+function getCurrentGMTHour() {
+  const now = new Date();
+  return now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+}
+
+function getActiveBTMMKillZone() {
+  const gmtHour = getCurrentGMTHour();
+  for (const zone of BTMM_KILL_ZONES) {
+    if (gmtHour >= zone.startGMT && gmtHour < zone.endGMT) return zone;
+  }
+  return null;
+}
+
+function getNextBTMMKillZone() {
+  const gmtHour = getCurrentGMTHour();
+  for (const zone of BTMM_KILL_ZONES) {
+    if (gmtHour < zone.startGMT) return zone;
+  }
+  return BTMM_KILL_ZONES[0];
+}
+
+function getTimeUntilKillZone(zone) {
+  let diff = zone.startGMT - getCurrentGMTHour();
+  if (diff < 0) diff += 24;
+  return diff;
+}
+
+function formatTimeUntil(hours) {
+  const h = Math.floor(hours), m = Math.floor((hours - h) * 60), s = Math.floor(((hours - h) * 60 - m) * 60);
+  return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+// ── South Africa (SAST = UTC+2) helpers ──────────────────────────────────────
+function getSASTTimeString() {
+  return new Date().toLocaleTimeString('en-ZA', {
+    timeZone: 'Africa/Johannesburg', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  });
+}
+function getNYtoSASTOffset() {
+  // Computes live NY→SAST integer-hour offset (handles EDT vs EST automatically)
+  const now = new Date();
+  const nyH  = parseInt(now.toLocaleString('en-US', { timeZone: 'America/New_York',       hour: 'numeric', hour12: false }));
+  const saH  = parseInt(now.toLocaleString('en-US', { timeZone: 'Africa/Johannesburg',    hour: 'numeric', hour12: false }));
+  let offset = saH - nyH;
+  if (offset > 12)  offset -= 24;
+  if (offset < -12) offset += 24;
+  return offset;
+}
+function nyHourToSAST(nyHour) {
+  return ((nyHour + getNYtoSASTOffset()) + 24) % 24;
+}
+function pad2(n) { return String(Math.floor(n)).padStart(2, '0'); }
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getGrade(score) {
+  const abs = Math.abs(score);
+  if (abs >= 70) return { grade: 'A', cls: 'grade-a' };
+  if (abs >= 40) return { grade: 'B', cls: 'grade-b' };
+  if (abs >= 15) return { grade: 'C', cls: 'grade-c' };
+  return { grade: 'D', cls: 'grade-d' };
+}
+
+function detectLastCross(ema5, ema13) {
+  for (let i = ema5.length - 1; i > Math.max(1, ema5.length - 100); i--) {
+    if ((ema5[i-1] > ema13[i-1]) !== (ema5[i] > ema13[i])) {
+      return { candlesAgo: ema5.length - 1 - i, direction: ema5[i] > ema13[i] ? 'bullish' : 'bearish' };
+    }
+  }
+  return { candlesAgo: 99, direction: ema5[ema5.length-1] > ema13[ema13.length-1] ? 'bullish' : 'bearish' };
+}
+
+function analyzePair(pair, candles, isRealData) {
+  const volatility = pair.base * 0.0008;
+  const seed = pair.symbol.split('').reduce((a, c) => a + c.charCodeAt(0), 0) * 137;
+  let mainCandles, intradayCandles;
+  if (isRealData && candles && candles.length >= 20) { mainCandles = candles; intradayCandles = candles; }
+  else { mainCandles = generateCandles(pair.base, Math.max(API_CONFIG.outputSize, 500), volatility, seed); intradayCandles = generateIntradayCandles(pair.base, 288, volatility * 0.3, seed); }
+
+  const closes = mainCandles.map(c => c.close);
+  const currentPrice = closes[closes.length - 1];
+
+  const ema5 = calcEMA(closes, 5);
+  const ema13 = calcEMA(closes, 13);
+  const ema50 = calcEMA(closes, 50);
+  // Always use the true EMA period — never Math.min().
+  // Math.min(800, closes.length) silently computes EMA(128) when only 128 bars are loaded,
+  // making EMA(200) ≈ EMA(800) ≈ current price. Our calcEMA() handles short datasets gracefully.
+  // Use local calcEMA - Twelve Data provides enough history for accurate EMAs.
+  const ema200 = calcEMA(closes, 200);
+  const ema800 = calcEMA(closes, 800);
+  const ema200Warm = closes.length >= 300;   // EMA(200) converged at ~300 bars (seed influence < 1%)
+  const ema800Warm = closes.length >= 800;   // EMA(800) directionally useful at 800 bars on free plan
+
+  const rsi = calcRSI(closes);
+  const macd = calcMACD(closes);
+  const bb = calcBollingerBands(closes);
+  const stoch = calcStochastic(mainCandles);
+
+  const lastIdx = closes.length - 1;
+  const rsiVal = rsi[rsi.length - 1];
+  const macdHist = macd.histogram.length > 0 ? macd.histogram[macd.histogram.length - 1] : 0;
+  const macdHistPrev = macd.histogram.length > 1 ? macd.histogram[macd.histogram.length - 2] : 0;
+  const stochK = stoch.k.length > 0 ? stoch.k[stoch.k.length - 1] : 50;
+  const stochD = stoch.d.length > 0 ? stoch.d[stoch.d.length - 1] : 50;
+  const bbPos = bb.upper.length > 0 ? (currentPrice - bb.lower[bb.lower.length - 1]) / (bb.upper[bb.upper.length - 1] - bb.lower[bb.lower.length - 1]) : 0.5;
+
+  const tdi = calcTDI(closes);
+  const adr = calcADR(mainCandles);
+  const pfLevels = detectPFLevels(mainCandles);
+  const amd = detectAMDPhase(mainCandles);
+  const fibs = calcFibs(mainCandles);
+
+  // BTMM Pattern Detection
+  const btmmAsianRange = detectAsianRange(mainCandles, pair);
+  const btmmStopHunt = detectStopHunt(mainCandles, btmmAsianRange);
+  const btmmMWPattern = detectMWPattern(mainCandles);
+  const btmmLevelCount = detectLevelCount(mainCandles, ema50, ema200);
+  const btmmSharkFin = detectSharkFin(closes, tdi);
+  const btmmEMA200Bounce = detectEMA200Bounce(mainCandles, ema200, ema50, pair);
+  const btmmWeeklyCycle = detectWeeklyCycle(mainCandles);
+  const btmm3DayCycle = detect3DayCycle(mainCandles);
+  const btmmStraightaway = detectStraightaway(mainCandles);
+  const btmmNYCReversal = detectNYCReversal(mainCandles, btmmLevelCount);
+  const btmmTDIDivergence = detectTDIDivergence(mainCandles, tdi);
+  const btmmHalfBatman = detectHalfBatman(mainCandles, btmmLevelCount);
+  const btmmPivots = calculatePivotPoints(mainCandles, pair);
+  const btmmHODLOD = detectHODLOD(mainCandles, pair);
+  const btmmNameableCandle = detectNameableCandle(mainCandles);
+  const btmmWeeklyFibs = calcWeeklyFibs(mainCandles);
+  const btmmH1MTF = resampleToH1(mainCandles);
+  const btmmTDILeg = detectTDILeg(tdi);
+
+  const todayCandles = mainCandles.filter(c => c.datetime && c.datetime.split(' ')[0] === mainCandles[mainCandles.length - 1].datetime.split(' ')[0]);
+  const todayRange = todayCandles.length > 0 ? Math.max(...todayCandles.map(c => c.high)) - Math.min(...todayCandles.map(c => c.low)) : 0;
+  const adrConsumed = adr.adr > 0 ? (todayRange / adr.adr) * 100 : 0;
+  const adrRemaining = Math.max(0, adr.threeX - todayRange);
+
+  // Consolidated EMA values at current index
+  // Always use the LAST element of the array — this is the current bar's EMA value for both
+  // local arrays (length = closes.length, so last = closes[lastIdx]) and server arrays
+  // (length = outputSize e.g. 150, so last = current bar, not lastIdx which would be 30 bars ago).
+  // Using Math.min(lastIdx, arr.length-1) was WRONG when server array > closes array.
+  const e5 = ema5[lastIdx], e13 = ema13[lastIdx], e50 = ema50[lastIdx];
+  const e200 = ema200.length > 0 ? ema200[ema200.length - 1] : currentPrice;
+  const e800 = ema800.length > 0 ? ema800[ema800.length - 1] : currentPrice;
+  const ema800Val = e800;
+
+  // ── EMA Stack — always check all 4 pairs, always use true periods ──────────
+  // BTMM is built on EMA(800) as the institutional bias line. Never substitute it.
+  // The SMA seeding in calcEMA() means even with 128 candles, EMA(800) starts at
+  // the average of available data and smooths from there — directionally consistent.
+  // Scores are always calculated the same way regardless of candle count.
+  // The warmup flags (ema800Warm / ema200Warm) are used ONLY for user warnings.
+  const bullishAligns = [e5>e13, e13>e50, e50>e200, e200>e800].filter(Boolean).length;
+  const bearishAligns = [e5<e13, e13<e50, e50<e200, e200<e800].filter(Boolean).length;
+  const emaStackScore = bullishAligns === 4 ? 1
+                      : bearishAligns === 4 ? -1
+                      : (bullishAligns - bearishAligns) / 4;
+
+  // 5/13 cross freshness
+  const lastCross = detectLastCross(ema5, ema13);
+
+  // Distance to 50 EMA retest zone (key BTMM entry level)
+  const distTo50Pips = Math.abs(currentPrice - e50) / pair.pip;
+  const nearEMA50 = distTo50Pips <= 10;
+
+  // BTMM primary trend gate — always EMA(800), no substitution
+  const priceAbove800 = currentPrice > e800;
+
+  let emaScore = 0;
+  if (!priceAbove800) {
+    emaScore = -0.6;
+    if (e5 < e13) emaScore = -1.0;
+    else if (e5 > e13) emaScore = -0.3;
+  } else {
+    emaScore = 0.6;
+    if (e5 > e13) emaScore = 1.0;
+    else if (e5 < e13) emaScore = 0.3;
+  }
+  // Blend base EMA score (70%) with full stack alignment (30%)
+  emaScore = emaScore * 0.7 + emaStackScore * 0.3;
+
+  let tdiScore = 0;
+  if (tdi.fast > tdi.slow && tdi.fast > 50) tdiScore = 1.0;
+  else if (tdi.fast > tdi.slow) tdiScore = 0.5;
+  else if (tdi.fast < tdi.slow && tdi.fast < 50) tdiScore = -1.0;
+  else if (tdi.fast < tdi.slow) tdiScore = -0.5;
+  // OB/OS: reduce strength in extended territory but NEVER flip direction
+  if (tdi.fast < 33) tdiScore = Math.max(tdiScore, -0.3);  // OS: cap bearish strength, don't force bullish
+  if (tdi.fast > 67) tdiScore = Math.min(tdiScore, 0.3);   // OB: cap bullish strength, don't force bearish
+
+  let adrScore = 0;
+  if (adrConsumed < 50) adrScore = 0.5;
+  else if (adrConsumed < 80) adrScore = 0.2;
+  else if (adrConsumed < 100) adrScore = -0.2;
+  else adrScore = -0.5;
+
+  const amdScore = amd.score * 0.5;
+
+  const activeZone = getActiveBTMMKillZone();
+  let killZoneScore = 0;
+  if (activeZone) {
+    // Amplify in the direction of the trend, not always bullish
+    const dir = emaScore !== 0 ? Math.sign(emaScore) : Math.sign(tdiScore || 1);
+    killZoneScore = dir * activeZone.weight;
+  }
+
+  // ADR in pips for readable display
+  const adrPips = Math.round(adr.adr / pair.pip);
+  const adrThreeXPips = Math.round(adr.threeX / pair.pip);
+
+  // BTMM Trade Setup Checklist (8 criteria) - Setup 6/8
+  const setupBullish = e5 > e13;
+  const dist50Pips = Math.abs(currentPrice - e50) / pair.pip;
+  const nearEMA50Setup = dist50Pips >= 6 && dist50Pips <= 8;
+  const btmmChecklist = [
+    { name: `Price ${setupBullish ? 'Above' : 'Below'} 800 EMA${!ema800Warm ? ' ⚠' : ''}`, pass: setupBullish ? priceAbove800 : !priceAbove800 },
+    { name: `5/13 Cross Fresh (${lastCross.candlesAgo}c ago)`, pass: lastCross.candlesAgo <= 20 },
+    { name: 'EMA Stack ≥ 3/4 Aligned', pass: setupBullish ? emaStackScore >= 0.5 : emaStackScore <= -0.5 },
+    { name: `TDI Confirms (Fast ${setupBullish ? '>' : '<'} Slow)`, pass: setupBullish ? tdi.fast > tdi.slow : tdi.fast < tdi.slow },
+    { name: 'Kill Zone Active', pass: !!activeZone },
+    { name: 'ADR < 80% Consumed', pass: adrConsumed < 80 },
+    { name: 'AMD Distribution Phase', pass: amd.phase === 'Distribution' },
+    { name: `Near PF Level (< 25 pips)`, pass: setupBullish ? pfLevels.pflDistance / pair.pip < 25 : pfLevels.pfcDistance / pair.pip < 25 },
+    // Additional BTMM Setup 6/8 check
+    { name: `Setup 6/8 (Price 6-8pips from EMA 50)`, pass: nearEMA50Setup },
+    { name: 'HOD/LOD Retest', pass: !!(btmmHODLOD && (btmmHODLOD.retestingHOD || btmmHODLOD.retestingLOD)) },
+    { name: 'TDI 2nd Leg Confirmed', pass: !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence !== 'low') },
+  ];
+  const checklistScore = btmmChecklist.filter(c => c.pass).length;
+
+  // BTMM Pattern Bonus Scoring (normalized 0-10 scale)
+  let patternBonus = 0;
+  // Core patterns (1-3 points each)
+  if (btmmAsianRange && btmmAsianRange.valid) patternBonus += 1; // Valid Asian range < 50 pips
+  if (btmmStopHunt && btmmStopHunt.active) patternBonus += 2; // Stop hunt detected
+  if (btmmMWPattern && btmmMWPattern.formed) patternBonus += 2; // M/W pattern forming
+  if (btmmLevelCount && btmmLevelCount.level === 'III') patternBonus += 1; // Level III - reversal imminent
+  if (btmmSharkFin && btmmSharkFin.active) patternBonus += 3; // Shark Fin - high probability entry
+  if (btmmEMA200Bounce && btmmEMA200Bounce.active) patternBonus += 3; // 200 EMA Bounce - very high probability
+  // Setup confirmations (2 points each)
+  if (nearEMA50Setup) patternBonus += 2; // Setup 6/8 - price 6-8 pips from EMA 50
+  if (checklistScore >= 6) patternBonus += 2; // Consider Setup - 6/8 or higher on checklist
+  // Multi-timeframe patterns (1-3 points each)
+  if (btmmWeeklyCycle && btmmWeeklyCycle.active) patternBonus += 2; // Weekly M/W pattern
+  if (btmm3DayCycle && btmm3DayCycle.level === 'III') patternBonus += 2; // 3-Day Level III
+  if (btmmStraightaway && btmmStraightaway.active) patternBonus += 3; // Straightaway - clean break
+  if (btmmNYCReversal && btmmNYCReversal.active) patternBonus += 3; // NYC Reversal - high probability
+  if (btmmTDIDivergence && btmmTDIDivergence.active) patternBonus += 2; // TDI Divergence - key confirmation
+  if (btmmHalfBatman && btmmHalfBatman.active) patternBonus += 2; // Half Batman - Level I consolidation
+  if (btmmPivots && btmmPivots.nearest) patternBonus += 1; // Near pivot point - target zone
+  if (btmmHODLOD && btmmHODLOD.retestingHOD) patternBonus += 2; // HOD retest — bearish setup
+  if (btmmHODLOD && btmmHODLOD.retestingLOD) patternBonus += 2; // LOD retest — bullish setup
+  if (btmmNameableCandle && btmmNameableCandle.found && btmmNameableCandle.direction !== 'neutral') patternBonus += 2; // Nameable 2nd leg candle
+  if (btmmWeeklyFibs && btmmWeeklyFibs.highProbZone) patternBonus += 2; // At weekly 61.8/78.6 fib zone
+  if (btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence === 'high') patternBonus += 3; // TDI 2nd leg confirmed — Safety Trade ready
+  if (btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence === 'medium') patternBonus += 1; // TDI 2nd leg forming
+  if (btmmH1MTF && btmmH1MTF.valid && btmmH1MTF.trend !== 'neutral') {
+    const h1AlignsWith15m = (btmmH1MTF.trend === 'bullish' && emaScore > 0) || (btmmH1MTF.trend === 'bearish' && emaScore < 0);
+    if (h1AlignsWith15m) patternBonus += 3; // H1 MTF confirmation — strong confluence
+  }
+
+  // Core score (0-100 from indicators) + Pattern bonus signed by trend direction
+  // Bonus is always directional: bearish setups add negative bonus, bullish setups add positive.
+  const coreScore = (emaScore * 0.4 + tdiScore * 0.25 + adrScore * 0.15 + amdScore * 0.1 + killZoneScore * 0.1) * 100;
+  const scoreDir = coreScore !== 0 ? Math.sign(coreScore) : Math.sign(emaScore || tdiScore || 1);
+  const btmmCompositeScore = Math.max(-100, Math.min(100, coreScore + scoreDir * patternBonus));
+
+  let btmmSignal, btmmSignalClass;
+  if (btmmCompositeScore >= 50) { btmmSignal = 'Strong Buy'; btmmSignalClass = 'strong-buy'; }
+  else if (btmmCompositeScore >= 20) { btmmSignal = 'Buy'; btmmSignalClass = 'buy'; }
+  else if (btmmCompositeScore >= -20) { btmmSignal = 'Neutral'; btmmSignalClass = 'neutral'; }
+  else { btmmSignal = 'Strong Sell'; btmmSignalClass = 'strong-sell'; }
+  // BTMM hard gate: outside a kill zone = no actionable signal
+  if (!activeZone) { btmmSignal = 'WAIT'; btmmSignalClass = 'wait'; }
+
+  const dist800Pips = Math.abs(currentPrice - e800) / pair.pip;
+
+  const btmmFactors = [emaScore, tdiScore, adrScore, amdScore * 2, killZoneScore];
+  const bullishCount = btmmFactors.filter(v => v > 0).length;
+  const bearishCount = btmmFactors.filter(v => v < 0).length;
+  const confidence = bullishCount >= 4 || bearishCount >= 4 ? 'High' : bullishCount >= 2 || bearishCount >= 2 ? 'Medium' : 'Low';
+
+  let emaScoreOld = 0;
+  if (lastIdx < ema200.length && ema200[lastIdx] !== undefined) {
+    if (currentPrice > ema50[lastIdx] && ema50[lastIdx] > ema200[lastIdx]) emaScoreOld = 1;
+    else if (currentPrice < ema50[lastIdx] && ema50[lastIdx] < ema200[lastIdx]) emaScoreOld = -1;
+    else if (currentPrice > ema50[lastIdx]) emaScoreOld = 0.5;
+    else if (currentPrice < ema50[lastIdx]) emaScoreOld = -0.5;
+  }
+  let rsiScoreOld = 0;
+  if (rsiVal > 60) rsiScoreOld = 0.5 + (rsiVal - 60) / 40 * 0.5;
+  else if (rsiVal < 40) rsiScoreOld = -0.5 - (40 - rsiVal) / 40 * 0.5;
+  else rsiScoreOld = (rsiVal - 50) / 20;
+  rsiScoreOld = Math.max(-1, Math.min(1, rsiScoreOld));
+  let macdScoreOld = 0;
+  if (macdHist > 0 && macdHist > macdHistPrev) macdScoreOld = 1;
+  else if (macdHist > 0) macdScoreOld = 0.5;
+  else if (macdHist < 0 && macdHist < macdHistPrev) macdScoreOld = -1;
+  else if (macdHist < 0) macdScoreOld = -0.5;
+  let bbScoreOld = 0;
+  if (bbPos > 0.8) bbScoreOld = -0.5;
+  else if (bbPos < 0.2) bbScoreOld = 0.5;
+  else bbScoreOld = (0.5 - bbPos) * 2;
+  let stochScoreOld = 0;
+  if (stochK > stochD && stochK < 80) stochScoreOld = 0.5 + (stochK - stochD) / 40;
+  else if (stochK < stochD && stochK > 20) stochScoreOld = -0.5 - (stochD - stochK) / 40;
+  else if (stochK > 80) stochScoreOld = -0.3;
+  else if (stochK < 20) stochScoreOld = 0.3;
+  stochScoreOld = Math.max(-1, Math.min(1, stochScoreOld));
+  const compositeScore = (emaScoreOld * 0.2 + rsiScoreOld * 0.2 + macdScoreOld * 0.2 + bbScoreOld * 0.2 + stochScoreOld * 0.2) * 100;
+  let signal, signalClass;
+  if (compositeScore >= 50) { signal = 'Strong Buy'; signalClass = 'strong-buy'; }
+  else if (compositeScore >= 20) { signal = 'Buy'; signalClass = 'buy'; }
+  else if (compositeScore >= -20) { signal = 'Neutral'; signalClass = 'neutral'; }
+  else if (compositeScore >= -50) { signal = 'Sell'; signalClass = 'sell'; }
+  else { signal = 'Strong Sell'; signalClass = 'strong-sell'; }
+
+  // === WYCKOFF METHOD ANALYSIS ===
+  // Full implementation: Phase ID, Event Sequence, Volume (Effort vs Result), SOS/SOW
+  // LRSI: Ehlers' Laguerre RSI — used as MOMENTUM CONFIRMATION only, not a Wyckoff tool
+  const wyckoff = detectWyckoff(mainCandles);
+  const lrsiValues = calcLaguerreRSI(closes, 0.5);
+  const lrsiCurrent = lrsiValues.length > 0 ? lrsiValues[lrsiValues.length - 1] : 0.5;
+  const lrsiPrev = lrsiValues.length > 1 ? lrsiValues[lrsiValues.length - 2] : 0.5;
+  const lrsiRising = lrsiCurrent > lrsiPrev;
+  const lrsiZone = lrsiCurrent > 0.8 ? 'Overbought' : lrsiCurrent < 0.2 ? 'Oversold' : lrsiCurrent > 0.5 ? 'Bullish' : 'Bearish';
+
+  // ── Wyckoff Score (0-1 → signed) ────────────────────────────────────────
+  // Phase direction sets the base bias (30%)
+  const phaseDir = ['Accumulation', 'Possible Accumulation', 'Markup'].includes(wyckoff.phase) ? 1
+                 : ['Distribution', 'Possible Distribution', 'Markdown'].includes(wyckoff.phase) ? -1 : 0;
+  let wyckoffScore = phaseDir * 0.3;
+
+  // Event score (40%) — Spring/SOS/Markup/LPS = bullish, Upthrust/UTAD/SOW/Markdown/LPSY = bearish
+  const eventDir = wyckoff.direction === 'bullish' ? 1 : wyckoff.direction === 'bearish' ? -1 : 0;
+  // UTAD and Spring get the highest weights — they are the definitive Phase C signals
+  const eventWeight = ['spring', 'utad'].includes(wyckoff.event) ? 0.45
+                    : ['upthrust', 'sos', 'sow'].includes(wyckoff.event) ? 0.4 : 0.25;
+  wyckoffScore += eventDir * wyckoff.strength * eventWeight;
+
+  // SOS/SOW confirmation bonus (20%)
+  if (wyckoff.sosConfirmed) wyckoffScore += eventDir * 0.2;
+
+  // Volume confirmation (10%) — only counted when real volume data exists
+  if (wyckoff.volumeConfirms && wyckoff.hasVolume) wyckoffScore += eventDir * 0.1;
+
+  wyckoffScore = Math.max(-1, Math.min(1, wyckoffScore));
+
+  // ── Laguerre RSI momentum score (standalone — NOT Wyckoff) ───────────────
+  let lrsiScore = 0;
+  if (lrsiCurrent > 0.5 && lrsiRising) lrsiScore = Math.min(1, (lrsiCurrent - 0.5) * 2);
+  else if (lrsiCurrent < 0.5 && !lrsiRising) lrsiScore = -Math.min(1, (0.5 - lrsiCurrent) * 2);
+  else if (lrsiCurrent > 0.5) lrsiScore = Math.min(0.5, (lrsiCurrent - 0.5) * 1.5);
+  else lrsiScore = -Math.min(0.5, (0.5 - lrsiCurrent) * 1.5);
+
+  // Composite: Wyckoff structure (70%) + LRSI momentum confirmation (30%)
+  const wyckoffCompositeScore = Math.max(-100, Math.min(100, (wyckoffScore * 0.7 + lrsiScore * 0.3) * 100));
+  let wyckoffSignal, wyckoffSignalClass;
+  if (wyckoffCompositeScore >= 50) { wyckoffSignal = 'Strong Buy'; wyckoffSignalClass = 'strong-buy'; }
+  else if (wyckoffCompositeScore >= 20) { wyckoffSignal = 'Buy'; wyckoffSignalClass = 'buy'; }
+  else if (wyckoffCompositeScore >= -20) { wyckoffSignal = 'Neutral'; wyckoffSignalClass = 'neutral'; }
+  else { wyckoffSignal = 'Strong Sell'; wyckoffSignalClass = 'strong-sell'; }
+
+  // Combined: BTMM is primary (60%), Wyckoff+LRSI is confirmation layer (40%)
+  const combinedScore = Math.max(-100, Math.min(100, btmmCompositeScore * 0.6 + wyckoffCompositeScore * 0.4));
+  let combinedSignal, combinedSignalClass;
+  // 4 signal types only - reduces overlap with BTMM-only view
+  if (combinedScore >= 50) { combinedSignal = 'Strong Buy'; combinedSignalClass = 'strong-buy'; }
+  else if (combinedScore >= 20) { combinedSignal = 'Buy'; combinedSignalClass = 'buy'; }
+  else if (combinedScore >= -20) { combinedSignal = 'Neutral'; combinedSignalClass = 'neutral'; }
+  else { combinedSignal = 'Strong Sell'; combinedSignalClass = 'strong-sell'; }
+
+  // Change% vs today's open (not oldest candle — that was measuring multi-day drift, not daily change)
+  const _todayKey = mainCandles[mainCandles.length - 1].datetime ? mainCandles[mainCandles.length - 1].datetime.split(' ')[0] : null;
+  const _todayFirstCandle = _todayKey ? (mainCandles.find(c => c.datetime && c.datetime.split(' ')[0] === _todayKey) || mainCandles[0]) : mainCandles[0];
+  const changePercent = ((_todayFirstCandle.open > 0) ? ((currentPrice - _todayFirstCandle.open) / _todayFirstCandle.open) * 100 : ((currentPrice - mainCandles[0].open) / mainCandles[0].open) * 100);
+
+  return {
+    ...pair, currentPrice, changePercent, candles: mainCandles, intradayCandles,
+    ema5, ema13, ema50, ema200, ema800,
+    rsi: rsiVal,
+    macd: { value: macd.macd[lastIdx] || 0, signal: macd.signal.length > 0 ? macd.signal[macd.signal.length - 1] : 0, histogram: macdHist },
+    bb: { upper: bb.upper.length > 0 ? bb.upper[bb.upper.length - 1] : currentPrice, middle: bb.middle.length > 0 ? bb.middle[bb.middle.length - 1] : currentPrice, lower: bb.lower.length > 0 ? bb.lower[bb.lower.length - 1] : currentPrice, position: bbPos },
+    stoch: { k: stochK, d: stochD },
+    scores: { ema: emaScoreOld, rsi: rsiScoreOld, macd: macdScoreOld, bb: bbScoreOld, stoch: stochScoreOld },
+    compositeScore, signal, signalClass, confidence, bullishCount,
+    wyckoff, lrsiCurrent, lrsiPrev, lrsiRising, lrsiZone, lrsiScore,
+    wyckoffScore, wyckoffCompositeScore, wyckoffSignal, wyckoffSignalClass,
+    btmmCompositeScore, btmmSignal, btmmSignalClass,
+    combinedScore, combinedSignal, combinedSignalClass,
+    tdi, adr, adrConsumed, adrRemaining, pfLevels, amd, fibs,
+    activeZone, isRealData,
+    emaScore, tdiScore, adrScore, amdScore, killZoneScore,
+    dist800Pips, ema800Val,
+    adrPips, adrThreeXPips, distTo50Pips, nearEMA50,
+    emaStackScore, lastCross, setupBullish, btmmChecklist, checklistScore,
+    ema800Warm, ema200Warm, candleCount: closes.length,
+    // BTMM Pattern Detection Results
+    btmmAsianRange, btmmStopHunt, btmmMWPattern, btmmLevelCount,
+    btmmSharkFin, btmmEMA200Bounce,
+    btmmWeeklyCycle, btmm3DayCycle, btmmStraightaway, btmmNYCReversal,
+    btmmTDIDivergence, btmmHalfBatman, btmmPivots, btmmHODLOD, btmmNameableCandle, btmmWeeklyFibs, btmmH1MTF, btmmTDILeg
+  };
+}
+
+async function fetchAllData() {
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  loadingOverlay.classList.add('active');
+  document.getElementById('loadingText').textContent = 'Fetching real market data...';
+  pairData = {};
+  let successCount = 0;
+  staleSymbols = new Set();
+
+  // Fetch priority pairs (11 majors) for live data - like v6/v7/v8
+  for (const pair of FOREX_PAIRS) {
+    const isPriority = PRIORITY_PAIRS.includes(pair.symbol);
+    let candles = null, isRealData = false;
+    
+    if (isPriority) {
+      document.getElementById('loadingText').textContent = `Fetching ${pair.symbol}...`;
+      candles = await fetchRealData(pair.symbol);
+      if (candles && candles.length >= 20) { isRealData = true; successCount++; }
+    }
+    
+    pairData[pair.symbol] = analyzePair(pair, candles, isRealData);
+  }
+
+  apiConnected = successCount > 0;
+  lastFetchTime = new Date();
+  await syncServiceStatus();
+  updateApiStatus();
+  updateLastUpdated();
+  loadingOverlay.classList.remove('active');
+}
+
+function updateApiStatus() {
+  const statusEl = document.getElementById('apiStatus');
+  const statusText = document.getElementById('apiStatusText');
+  const rateLimitEl = document.getElementById('rateLimit');
+  
+  if (apiConnected) {
+    if (staleSymbols.size > 0) {
+      statusEl.className = 'api-status error';
+      statusText.textContent = `Cached (${staleSymbols.size} stale)`;
+    } else {
+      statusEl.className = 'api-status connected';
+      statusText.textContent = 'Live Data';
+    }
+  } else {
+    statusEl.className = 'api-status error';
+    statusText.textContent = 'Simulated';
+  }
+  
+  const totalUsed = API_KEYS.reduce((s, k) => s + (k.used || 0), 0);
+  const totalLimit = API_KEYS.reduce((s, k) => s + (k.limit || 800), 0);
+  const activeKeys = API_KEYS.filter(k => k.active).length;
+  rateLimitEl.textContent = `${activeKeys}/${API_KEYS.length} keys · ${totalUsed}/${totalLimit}`;
+}
+
+function updateLastUpdated() {
+  const el = document.getElementById('lastUpdated');
+  if (lastFetchTime) {
+    el.textContent = `Last updated: ${lastFetchTime.toLocaleTimeString()} | ${Object.values(pairData).filter(p => p.isRealData).length} pairs live, ${Object.values(pairData).filter(p => !p.isRealData).length} simulated`;
+  }
+}
+
+function getFilteredSortedPairs() {
+  let pairs = Object.values(pairData);
+  if (currentFilter !== 'all') {
+    pairs = pairs.filter(p => {
+      if (currentMode === 'indicator') return p.btmmSignalClass === currentFilter;
+      if (currentMode === 'wyckoff') return p.wyckoffSignalClass === currentFilter;
+      return p.combinedSignalClass === currentFilter;
+    });
+  }
+  if (currentTypeFilter !== 'all') pairs = pairs.filter(p => p.type === currentTypeFilter);
+  if (searchTerm) pairs = pairs.filter(p => p.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
+  switch (currentSort) {
+    case 'score-desc':
+      pairs.sort((a, b) => {
+        if (currentMode === 'indicator') return b.btmmCompositeScore - a.btmmCompositeScore;
+        if (currentMode === 'wyckoff') return b.wyckoffCompositeScore - a.wyckoffCompositeScore;
+        return b.combinedScore - a.combinedScore;
+      });
+      break;
+    case 'score-asc':
+      pairs.sort((a, b) => {
+        if (currentMode === 'indicator') return a.btmmCompositeScore - b.btmmCompositeScore;
+        if (currentMode === 'wyckoff') return a.wyckoffCompositeScore - b.wyckoffCompositeScore;
+        return a.combinedScore - b.combinedScore;
+      });
+      break;
+    case 'change-desc': pairs.sort((a, b) => b.changePercent - a.changePercent); break;
+    case 'change-asc': pairs.sort((a, b) => a.changePercent - b.changePercent); break;
+    case 'name': pairs.sort((a, b) => a.symbol.localeCompare(b.symbol)); break;
+  }
+  return pairs;
+}
+
+function renderStats() {
+  const pairs = Object.values(pairData);
+  let scoreKey = 'btmmCompositeScore', signalKey = 'btmmSignalClass';
+  if (currentMode === 'wyckoff') { scoreKey = 'wyckoffCompositeScore'; signalKey = 'wyckoffSignalClass'; }
+  if (currentMode === 'combined') { scoreKey = 'combinedScore'; signalKey = 'combinedSignalClass'; }
+  const strongBuy = pairs.filter(p => p[signalKey] === 'strong-buy').length;
+  const buy = pairs.filter(p => p[signalKey] === 'buy').length;
+  const neutral = pairs.filter(p => p[signalKey] === 'neutral').length;
+  const sell = pairs.filter(p => p[signalKey] === 'sell').length;
+  const strongSell = pairs.filter(p => p[signalKey] === 'strong-sell').length;
+  const avgScore = (pairs.reduce((s, p) => s + p[scoreKey], 0) / pairs.length).toFixed(1);
+  const bestPair = pairs.reduce((a, b) => a[scoreKey] > b[scoreKey] ? a : b);
+  const worstPair = pairs.reduce((a, b) => a[scoreKey] < b[scoreKey] ? a : b);
+  const activeZone = getActiveBTMMKillZone();
+  const pairsWithSpring = pairs.filter(p => p.wyckoff && p.wyckoff.event === 'spring').length;
+  const pairsWithUpthrust = pairs.filter(p => p.wyckoff && p.wyckoff.event === 'upthrust').length;
+  const livePairs = pairs.filter(p => p.isRealData).length;
+  const avgADR = (pairs.reduce((s, p) => s + p.adr.adr, 0) / pairs.length);
+  const avgADRConsumed = (pairs.reduce((s, p) => s + p.adrConsumed, 0) / pairs.length).toFixed(0);
+
+  let statsHTML = `
+    <div class="stat-card"><div class="stat-label">Strong Buy</div><div class="stat-value green">${strongBuy}</div></div>
+    <div class="stat-card"><div class="stat-label">Buy</div><div class="stat-value green">${buy}</div></div>
+    <div class="stat-card"><div class="stat-label">Neutral</div><div class="stat-value yellow">${neutral}</div></div>
+    <div class="stat-card"><div class="stat-label">Sell</div><div class="stat-value red">${sell}</div></div>
+    <div class="stat-card"><div class="stat-label">Strong Sell</div><div class="stat-value red">${strongSell}</div></div>
+    <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value blue">${avgScore}</div></div>
+    <div class="stat-card"><div class="stat-label">Best Pair</div><div class="stat-value green">${bestPair.symbol} <span style="font-size:.7rem">(${bestPair[scoreKey].toFixed(0)})</span></div></div>
+    <div class="stat-card"><div class="stat-label">Worst Pair</div><div class="stat-value red">${worstPair.symbol} <span style="font-size:.7rem">(${worstPair[scoreKey].toFixed(0)})</span></div></div>
+  `;
+  if (currentMode === 'wyckoff' || currentMode === 'combined') {
+    statsHTML += `
+      <div class="stat-card"><div class="stat-label">🌱 Springs Detected</div><div class="stat-value green">${pairsWithSpring}</div></div>
+      <div class="stat-card"><div class="stat-label">🔻 Upthrusts Detected</div><div class="stat-value red">${pairsWithUpthrust}</div></div>
+    `;
+  }
+  statsHTML += `
+    <div class="stat-card"><div class="stat-label">Avg ADR Consumed</div><div class="stat-value ${avgADRConsumed > 80 ? 'red' : 'green'}">${avgADRConsumed}%</div></div>
+    <div class="stat-card"><div class="stat-label">Live Pairs</div><div class="stat-value cyan">${livePairs}/${pairs.length}</div></div>
+  `;
+  const actualCandles = pairs.length > 0 && pairs[0].candleCount ? pairs[0].candleCount : API_CONFIG.outputSize;
+  if (actualCandles >= 1000) {
+    statsHTML += `<div class="stat-card" style="border-color:var(--green-border);background:var(--green-bg)" title="Twelve Data provides sufficient candle history"><div class="stat-label" style="color:var(--green)">✓ DATA READY</div><div class="stat-value" style="font-size:.7rem;color:var(--green)">${actualCandles} candles</div></div>`;
+  } else if (actualCandles < 500) {
+    statsHTML += `<div class="stat-card" style="border-color:var(--orange-border);background:var(--orange-bg)" title="More candles loading..."><div class="stat-label" style="color:var(--orange)">⚠ WARMUP</div><div class="stat-value" style="font-size:.7rem;color:var(--orange)">${actualCandles} candles</div></div>`;
+  }
+  document.getElementById('statsBar').innerHTML = statsHTML;
+}
+
+function renderTable() {
+  const pairs = getFilteredSortedPairs();
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  let scoreKey = 'btmmCompositeScore', signalKey = 'btmmSignal', signalClassKey = 'btmmSignalClass';
+  if (currentMode === 'wyckoff') { scoreKey = 'wyckoffCompositeScore'; signalKey = 'wyckoffSignal'; signalClassKey = 'wyckoffSignalClass'; }
+  if (currentMode === 'combined') { scoreKey = 'combinedScore'; signalKey = 'combinedSignal'; signalClassKey = 'combinedSignalClass'; }
+
+  pairs.forEach((pair, idx) => {
+    const rank = idx + 1;
+    const rankClass = rank <= 3 ? 'top-3' : rank >= pairs.length - 2 && pairs.length > 5 ? 'bottom-3' : '';
+    const scoreColor = pair[scoreKey] >= 20 ? 'var(--green)' : pair[scoreKey] >= -20 ? 'var(--yellow)' : 'var(--red)';
+    const scoreWidth = Math.abs(pair[scoreKey]);
+    const changeClass = pair.changePercent >= 0 ? 'positive' : 'negative';
+    const changeSign = pair.changePercent >= 0 ? '+' : '';
+    const confidenceClass = pair.confidence.toLowerCase();
+    const grade = getGrade(pair[scoreKey]);
+
+    let indicatorsHTML = '';
+    if (currentMode === 'indicator') {
+      const emaBullish = pair.ema5[pair.ema5.length-1] > pair.ema13[pair.ema13.length-1];
+      const tdiBullish = pair.tdi.fast > pair.tdi.slow;
+      const amdBullish = pair.amd.score > 0;
+      const adrBullish = pair.adrConsumed < 70;
+      indicatorsHTML = `<div class="indicators-cell">
+        <div class="indicator-dot ${emaBullish ? 'bullish' : 'bearish'}" title="EMA Stack"></div>
+        <div class="indicator-dot ${tdiBullish ? 'bullish' : 'bearish'}" title="TDI"></div>
+        <div class="indicator-dot ${adrBullish ? 'bullish' : 'bearish'}" title="ADR"></div>
+        <div class="indicator-dot ${amdBullish ? 'bullish' : 'bearish'}" title="AMD"></div>
+        <div class="indicator-dot ${pair.activeZone ? 'bullish' : 'neutral'}" title="Kill Zone"></div>
+      </div>`;
+    } else if (currentMode === 'wyckoff' || currentMode === 'combined') {
+      const wyckoffIndicators = [
+        pair.wyckoff.direction === 'bullish' ? 'bullish' : pair.wyckoff.direction === 'bearish' ? 'bearish' : 'neutral',
+        pair.lrsiCurrent > 0.5 ? 'bullish' : pair.lrsiCurrent < 0.5 ? 'bearish' : 'neutral',
+        pair.lrsiRising ? 'bullish' : 'bearish',
+        pair.activeZone ? 'bullish' : 'neutral'
+      ];
+      indicatorsHTML = `<div class="indicators-cell">${wyckoffIndicators.map((ind, i) => `<div class="indicator-dot ${ind}" title="${['Wyckoff Event','LRSI Level','LRSI Direction','Kill Zone'][i]}"></div>`).join('')}</div>`;
+    }
+
+    let extraCells = '';
+    if (currentMode === 'indicator') {
+      const tdiCross = pair.tdi.fast > pair.tdi.slow ? '↑' : '↓';
+      let tdiBadge = `<span class="tdi-badge normal">${tdiCross}</span>`;
+      if (pair.tdi.fast > 67) tdiBadge = `<span class="tdi-badge ob">OB ${tdiCross}</span>`;
+      else if (pair.tdi.fast < 33) tdiBadge = `<span class="tdi-badge os">OS ${tdiCross}</span>`;
+
+      const dist800Class = pair.dist800Pips > 50 ? 'stretched' : 'normal';
+      const dist800Display = pair.dist800Pips.toFixed(1);
+
+      extraCells = `
+        <td><span class="amd-badge ${pair.amd.phase.toLowerCase()}">${({Accumulation:'ACC',Manipulation:'MAN',Distribution:'DIST'}[pair.amd.phase]||'?')}</span></td>
+        <td>${tdiBadge}</td>
+        <td class="mono">${pair.adrConsumed.toFixed(0)}%</td>
+        <td class="dist800 ${dist800Class}">${dist800Display}p</td>
+        <td class="mono">${pair.pfLevels ? pair.pfLevels.pfhStatus : '--'}</td>
+      `;
+    } else if (currentMode === 'wyckoff' || currentMode === 'combined') {
+      const lrsiDisplay = (pair.lrsiCurrent * 100).toFixed(1);
+      extraCells = `
+        <td><span class="wyckoff-badge ${pair.wyckoff.event}">${pair.wyckoff.label}</span></td>
+        <td><span class="lrsi-badge ${pair.lrsiZone.toLowerCase()}">${lrsiDisplay} ${pair.lrsiRising ? '↑' : '↓'}</span></td>
+        <td><span class="session-badge ${pair.activeZone ? pair.activeZone.session : 'inactive'}">${pair.activeZone ? pair.activeZone.name : 'Inactive'}</span></td>
+      `;
+    }
+
+    const tr = document.createElement('tr');
+    tr.dataset.symbol = pair.symbol;
+    tr.innerHTML = `
+      <td class="rank-cell ${rankClass}">${rank}</td>
+      <td>
+        <div class="pair-cell">
+          <div class="pair-icon ${pair.type}">${pair.symbol.substring(0, 2)}</div>
+          <div><div class="pair-name">${pair.symbol}</div><div class="pair-type">${pair.type}</div></div>
+        </div>
+      </td>
+      <td><div class="price-cell mono">${pair.currentPrice.toFixed(pair.decimals)}</div><span class="data-source ${pair.isRealData ? 'live' : 'simulated'}">${pair.isRealData ? 'LIVE' : 'SIM'}</span></td>
+      <td class="change-cell mono ${changeClass}">${changeSign}${pair.changePercent.toFixed(2)}%</td>
+      <td><span class="signal-badge ${pair[signalClassKey]}">${pair[signalKey]}</span><span class="grade-badge ${grade.cls}">${grade.grade}</span></td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="score-bar"><div class="score-fill" style="width:${Math.min(scoreWidth, 100)}%;background:${scoreColor}"></div></div><span class="score-value" style="color:${scoreColor}">${pair[scoreKey] >= 0 ? '+' : ''}${pair[scoreKey].toFixed(0)}</span></div></td>
+      <td>${indicatorsHTML}</td>
+      <td>${currentMode === 'indicator' && pair.checklistScore !== undefined
+        ? `<span class="confidence ${pair.checklistScore >= 6 ? 'high' : pair.checklistScore >= 4 ? 'medium' : 'low'}">${pair.checklistScore}/11</span>`
+        : `<span class="confidence ${confidenceClass}">${pair.confidence}</span>`}</td>
+      ${extraCells}
+    `;
+    tr.addEventListener('click', () => openModal(pair.symbol));
+    tbody.appendChild(tr);
+  });
+}
+
+function updateTableHeaders() {
+  const thead = document.getElementById('tableHead');
+  let headers = `<tr><th data-sort="rank">#</th><th data-sort="pair">Pair</th><th data-sort="price">Price</th><th data-sort="change">Change %</th><th data-sort="signal">Signal</th><th data-sort="score">Score</th><th>Indicators</th><th data-sort="confidence">${currentMode === 'indicator' ? 'Setup' : 'Confidence'}</th>`;
+  if (currentMode === 'indicator') {
+    headers += `<th>AMD</th><th>TDI</th><th>ADR %</th><th>800 Dist</th><th>PF Target</th>`;
+  } else if (currentMode === 'wyckoff' || currentMode === 'combined') {
+    headers += `<th>Wyckoff Event</th><th>LRSI</th><th>Session</th>`;
+  }
+  headers += '</tr>';
+  thead.innerHTML = headers;
+}
+
+function render() { updateTableHeaders(); renderStats(); renderTable(); }
+
+function openModal(symbol) {
+  const pair = pairData[symbol];
+  if (!pair) return;
+  document.getElementById('modalTitle').textContent = pair.symbol;
+  const modalBody = document.getElementById('modalBody');
+  const changeClass = pair.changePercent >= 0 ? 'positive' : 'negative';
+  const changeSign = pair.changePercent >= 0 ? '+' : '';
+  const scoreColor = pair.btmmCompositeScore >= 20 ? 'var(--green)' : pair.btmmCompositeScore >= -20 ? 'var(--yellow)' : 'var(--red)';
+  const grade = getGrade(pair.btmmCompositeScore);
+
+  let btmmHTML = '';
+  if (currentMode === 'indicator' || currentMode === 'combined') {
+    let tdiBadge = '<span class="tdi-badge normal">Normal</span>';
+    if (pair.tdi.fast > 67) tdiBadge = '<span class="tdi-badge ob">Overbought (OB)</span>';
+    else if (pair.tdi.fast < 33) tdiBadge = '<span class="tdi-badge os">Oversold (OS)</span>';
+
+    btmmHTML = `
+      <div class="detail-card"><h4>BTMM Analysis</h4>
+        <div class="detail-row"><span class="detail-label">BTMM Signal</span><span class="signal-badge ${pair.btmmSignalClass}">${pair.btmmSignal}</span><span class="grade-badge ${grade.cls}">${grade.grade}</span></div>
+        <div class="detail-row"><span class="detail-label">BTMM Score</span><span class="detail-value mono" style="color:var(--cyan)">${pair.btmmCompositeScore >= 0 ? '+' : ''}${pair.btmmCompositeScore.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">Confidence</span><span class="detail-value confidence ${pair.confidence.toLowerCase()}">${pair.confidence}</span></div>
+        ${!pair.ema800Warm ? `<div style="background:var(--orange-bg);border:1px solid var(--orange-border);border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:.7rem;color:var(--orange)">⚠ <strong>${pair.candleCount} candles loaded.</strong> Loading more data for accurate EMA(800)...</div>` : ''}
+        <div class="detail-row"><span class="detail-label">EMA 800</span><span class="detail-value mono" style="color:var(--blue)">${pair.ema800Val.toFixed(pair.decimals)}</span>${!pair.ema800Warm ? `<span class="ema-warn">⚠ ${pair.candleCount}c</span>` : '<span style="font-size:.65rem;color:var(--green);margin-left:4px">✓</span>'}</div>
+        <div class="detail-row"><span class="detail-label">EMA 200</span><span class="detail-value mono" style="color:var(--grey)">${pair.ema200 && pair.ema200.length > 0 ? pair.ema200[pair.ema200.length-1].toFixed(pair.decimals) : 'N/A'}</span>${!pair.ema200Warm ? `<span class="ema-warn">⚠ approx</span>` : '<span style="font-size:.65rem;color:var(--green);margin-left:4px">✓</span>'}</div>
+        <div class="detail-row"><span class="detail-label">800 EMA Distance</span><span class="detail-value mono" style="color:${pair.dist800Pips > 50 ? 'var(--orange)' : 'var(--text-muted)'}">${pair.dist800Pips.toFixed(1)} pips</span></div>
+        <div class="detail-row"><span class="detail-label">50 EMA Retest Zone</span><span class="detail-value mono" style="color:${pair.nearEMA50 ? 'var(--green)' : 'var(--text-muted)'}"><strong>${pair.nearEMA50 ? '✓ ENTRY ZONE' : pair.distTo50Pips.toFixed(1) + ' pips away'}</strong></span></div>
+        <div class="detail-row"><span class="detail-label">5/13 Cross</span><span class="detail-value mono" style="color:${pair.lastCross.direction === 'bullish' ? 'var(--green)' : 'var(--red)'}"> ${pair.lastCross.direction.toUpperCase()} (${pair.lastCross.candlesAgo}c ago / ${(pair.lastCross.candlesAgo * 15)}min)</span></div>
+        <div class="detail-row"><span class="detail-label">EMA Stack Alignment</span><span class="detail-value mono" style="color:${Math.abs(pair.emaStackScore) === 1 ? 'var(--green)' : Math.abs(pair.emaStackScore) > 0.5 ? 'var(--yellow)' : 'var(--text-muted)'}">${pair.emaStackScore === 1 ? 'Fully Bullish ✓' : pair.emaStackScore === -1 ? 'Fully Bearish ✓' : (Math.round((pair.emaStackScore * 2 + 2)) + '/4 aligned')}</span></div>
+        <div class="detail-row"><span class="detail-label">EMA 5/13 Cross</span><span class="detail-value mono" style="color:${pair.ema5[pair.ema5.length-1] > pair.ema13[pair.ema13.length-1] ? 'var(--green)' : 'var(--red)'}">${pair.ema5[pair.ema5.length-1] > pair.ema13[pair.ema13.length-1] ? 'Bullish' : 'Bearish'}</span></div>
+        <div class="detail-row"><span class="detail-label">TDI Fast/Slow</span><span class="detail-value mono">${pair.tdi.fast.toFixed(1)} / ${pair.tdi.slow.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">TDI Status</span>${tdiBadge}</div>
+        <div class="detail-row"><span class="detail-label">ADR</span><span class="detail-value mono">${pair.adrPips} pips (3x: ${pair.adrThreeXPips} pips)</span></div>
+        <div class="detail-row"><span class="detail-label">ADR Consumed</span><span class="detail-value mono" style="color:${pair.adrConsumed > 80 ? 'var(--red)' : 'var(--green)'}">${pair.adrConsumed.toFixed(0)}%</span></div>
+        <div class="detail-row"><span class="detail-label">ADR Remaining</span><span class="detail-value mono">${Math.round(pair.adrRemaining / pair.pip)} pips</span></div>
+        <div class="detail-row"><span class="detail-label">AMD Phase</span><span class="detail-value mono"><span class="amd-badge ${pair.amd.phase.toLowerCase()}">${pair.amd.phase}</span></span></div>
+        <div class="detail-row"><span class="detail-label">Kill Zone</span><span class="detail-value mono">${pair.activeZone ? pair.activeZone.name : 'Inactive'}</span></div>
+        <div class="detail-row"><span class="detail-label">PFL</span><span class="detail-value mono">${pair.pfLevels.pfl.toFixed(pair.decimals)}</span></div>
+        <div class="detail-row"><span class="detail-label">PFC</span><span class="detail-value mono">${pair.pfLevels.pfc.toFixed(pair.decimals)}</span></div>
+        <div class="detail-row"><span class="detail-label">PF Status</span><span class="detail-value mono">${pair.pfLevels.pfhStatus}</span></div>
+        <div class="detail-row"><span class="detail-label" style="color:var(--cyan)">BTMM Patterns</span></div>
+        <div class="detail-row"><span class="detail-label">Asian Range</span><span class="detail-value mono" style="color:${pair.btmmAsianRange && pair.btmmAsianRange.valid ? 'var(--green)' : 'var(--orange)'}">${pair.btmmAsianRange ? (pair.btmmAsianRange.valid ? 'Valid (<50pips)' : 'Invalid (>50pips)') : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">Stop Hunt</span><span class="detail-value mono" style="color:${pair.btmmStopHunt && pair.btmmStopHunt.active ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmStopHunt ? (pair.btmmStopHunt.active ? 'Active (' + pair.btmmStopHunt.pushes + ' pushes)' : 'Inactive') : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">M/W Pattern</span><span class="detail-value mono" style="color:${pair.btmmMWPattern && pair.btmmMWPattern.formed ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmMWPattern ? (pair.btmmMWPattern.formed ? pair.btmmMWPattern.type + ' Formed' : 'None') : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">Cycle Level</span><span class="detail-value mono" style="color:${pair.btmmLevelCount ? (pair.btmmLevelCount.level === 'III' ? 'var(--red)' : pair.btmmLevelCount.level === 'I' ? 'var(--green)' : 'var(--yellow)') : 'var(--text-muted)'}">${pair.btmmLevelCount ? 'Level ' + pair.btmmLevelCount.level : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">Shark Fin</span><span class="detail-value mono" style="color:${pair.btmmSharkFin && pair.btmmSharkFin.active ? 'var(--cyan)' : 'var(--text-muted)'}">${pair.btmmSharkFin && pair.btmmSharkFin.active ? pair.btmmSharkFin.type + ' (' + pair.btmmSharkFin.confidence + '%)' : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">200 EMA Bounce</span><span class="detail-value mono" style="color:${pair.btmmEMA200Bounce && pair.btmmEMA200Bounce.active ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmEMA200Bounce && pair.btmmEMA200Bounce.active ? pair.btmmEMA200Bounce.type + ' (' + pair.btmmEMA200Bounce.confidence + '%)' : 'None'}</span></div>
+        <div class="detail-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px"><span class="detail-label" style="color:var(--yellow)">Multi-Timeframe (H1/H4 Derived)</span></div>
+        <div class="detail-row"><span class="detail-label">Weekly Cycle</span><span class="detail-value mono" style="color:${pair.btmmWeeklyCycle && pair.btmmWeeklyCycle.active ? 'var(--cyan)' : 'var(--text-muted)'}">${pair.btmmWeeklyCycle ? (pair.btmmWeeklyCycle.active ? pair.btmmWeeklyCycle.description : 'No pattern') : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">3-Day Cycle</span><span class="detail-value mono" style="color:${pair.btmm3DayCycle && pair.btmm3DayCycle.active ? (pair.btmm3DayCycle.level === 'III' ? 'var(--red)' : 'var(--yellow)') : 'var(--text-muted)'}">${pair.btmm3DayCycle ? 'Level ' + pair.btmm3DayCycle.level : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">Straightaway</span><span class="detail-value mono" style="color:${pair.btmmStraightaway && pair.btmmStraightaway.active ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmStraightaway && pair.btmmStraightaway.active ? pair.btmmStraightaway.setup + ' (' + pair.btmmStraightaway.confidence + '%)' : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">NYC Reversal</span><span class="detail-value mono" style="color:${pair.btmmNYCReversal && pair.btmmNYCReversal.active ? 'var(--orange)' : 'var(--text-muted)'}">${pair.btmmNYCReversal && pair.btmmNYCReversal.active ? pair.btmmNYCReversal.type + ' (' + pair.btmmNYCReversal.confidence + '%)' : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">TDI Divergence</span><span class="detail-value mono" style="color:${pair.btmmTDIDivergence && pair.btmmTDIDivergence.active ? 'var(--magenta)' : 'var(--text-muted)'}">${pair.btmmTDIDivergence && pair.btmmTDIDivergence.active ? pair.btmmTDIDivergence.type + ' (' + pair.btmmTDIDivergence.confidence + '%)' : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">Half Batman</span><span class="detail-value mono" style="color:${pair.btmmHalfBatman && pair.btmmHalfBatman.active ? 'var(--yellow)' : 'var(--text-muted)'}">${pair.btmmHalfBatman && pair.btmmHalfBatman.active ? pair.btmmHalfBatman.type + ' (' + pair.btmmHalfBatman.confidence + '%)' : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">Pivot Points</span><span class="detail-value mono" style="color:${pair.btmmPivots && pair.btmmPivots.nearest ? 'var(--cyan)' : 'var(--text-muted)'}">${pair.btmmPivots && pair.btmmPivots.nearest ? 'Nearest: ' + pair.btmmPivots.nearest.level + ' (' + pair.btmmPivots.nearest.type + ')' : 'Calculating...'}</span></div>
+      </div>
+    `;
+  }
+
+  let wyckoffHTML = '';
+  if (currentMode === 'wyckoff' || currentMode === 'combined') {
+    const lrsiColor = pair.lrsiCurrent > 0.8 ? 'var(--red)' : pair.lrsiCurrent < 0.2 ? 'var(--green)' : pair.lrsiCurrent > 0.5 ? 'var(--orange)' : 'var(--blue)';
+    const wyDir = pair.wyckoff.direction;
+    const wyColor = wyDir === 'bullish' ? 'var(--green)' : wyDir === 'bearish' ? 'var(--red)' : 'var(--text-muted)';
+    const phaseColor = ['Markup','Accumulation','Possible Accumulation'].includes(pair.wyckoff.phase) ? 'var(--green)'
+                     : ['Markdown','Distribution','Possible Distribution'].includes(pair.wyckoff.phase) ? 'var(--red)' : 'var(--yellow)';
+    const volNote = pair.wyckoff.hasVolume
+      ? (pair.wyckoff.volumeConfirms ? '<span style="color:var(--green);font-size:.7rem">✓ Volume Confirms</span>' : '<span style="color:var(--orange);font-size:.7rem">⚠ Volume Diverges</span>')
+      : '<span style="color:var(--text-muted);font-size:.7rem">No tick volume (forex)</span>';
+    const sosNote = pair.wyckoff.sosConfirmed
+      ? `<span style="color:var(--green);font-weight:700">✓ ${wyDir === 'bullish' ? 'SOS' : 'SOW'} Confirmed</span>`
+      : `<span style="color:var(--text-muted)">Watching for ${wyDir === 'bullish' ? 'SOS' : wyDir === 'bearish' ? 'SOW' : 'SOS/SOW'}</span>`;
+    const rangePct = (pair.wyckoff.currentPos * 100).toFixed(0);
+    wyckoffHTML = `
+    <div class="detail-card"><h4>Wyckoff Structure Analysis</h4>
+      <div class="detail-row"><span class="detail-label">Signal</span><span class="signal-badge ${pair.wyckoffSignalClass}">${pair.wyckoffSignal}</span></div>
+      <div class="detail-row"><span class="detail-label">Score</span><span class="detail-value mono" style="color:var(--orange)">${pair.wyckoffCompositeScore >= 0 ? '+' : ''}${pair.wyckoffCompositeScore.toFixed(1)}</span></div>
+      <div class="detail-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <span class="detail-label">Phase</span>
+        <span class="detail-value" style="color:${phaseColor};font-weight:700">
+          ${pair.wyckoff.phase}${pair.wyckoff.subPhase ? ` <span style="font-size:.7rem;background:var(--bg-elevated);padding:1px 6px;border-radius:3px;margin-left:4px">Phase ${pair.wyckoff.subPhase}</span>` : ''}
+        </span>
+        <span style="font-size:.7rem;color:var(--text-muted)">${pair.wyckoff.phaseDetail}</span>
+        ${pair.wyckoff.arBound ? `<span style="font-size:.68rem;color:var(--blue)">AR boundary: ${pair.wyckoff.arBound.toFixed(pair.decimals)}</span>` : ''}
+      </div>
+      <div class="detail-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <span class="detail-label">Event Detected</span>
+        <span class="detail-value" style="color:${wyColor}">${pair.wyckoff.label}</span>
+      </div>
+      <div class="detail-row"><span class="detail-label">Event Strength</span><span class="detail-value mono">${(pair.wyckoff.strength * 100).toFixed(0)}%</span></div>
+      <div class="detail-row"><span class="detail-label">SOS / SOW</span>${sosNote}</div>
+      <div class="detail-row"><span class="detail-label">Volume (Effort)</span>${volNote}</div>
+      <div class="detail-row"><span class="detail-label">Range Boundaries</span><span class="detail-value mono" style="font-size:.7rem">${pair.wyckoff.rangeLow.toFixed(pair.decimals)} — ${pair.wyckoff.rangeHigh.toFixed(pair.decimals)}</span></div>
+      <div class="detail-row"><span class="detail-label">Position in Range</span>
+        <span class="detail-value mono" style="color:${parseInt(rangePct) < 30 ? 'var(--green)' : parseInt(rangePct) > 70 ? 'var(--red)' : 'var(--yellow)'}">
+          ${rangePct}% from bottom
+        </span>
+      </div>
+      <div class="detail-row"><span class="detail-label">Support Tests</span><span class="detail-value mono">${pair.wyckoff.atSupport} touches</span></div>
+      <div class="detail-row"><span class="detail-label">Resistance Tests</span><span class="detail-value mono">${pair.wyckoff.atResistance} touches</span></div>
+    </div>
+    <div class="detail-card"><h4>Momentum Confirmation (Laguerre RSI)</h4>
+      <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:8px;padding:4px 8px;background:var(--bg-surface);border-radius:4px;border-left:2px solid var(--orange)">
+        LRSI is John Ehlers' DSP oscillator — used here as momentum confirmation, not a Wyckoff tool
+      </div>
+      <div class="detail-row"><span class="detail-label">LRSI Value</span><span class="detail-value mono" style="color:${lrsiColor}">${(pair.lrsiCurrent * 100).toFixed(1)} ${pair.lrsiRising ? '↑' : '↓'}</span></div>
+      <div class="detail-row"><span class="detail-label">LRSI Zone</span><span class="detail-value mono" style="color:${lrsiColor}">${pair.lrsiZone}</span></div>
+      <div class="detail-row"><span class="detail-label">Aligns with Wyckoff?</span><span class="detail-value mono" style="color:${
+        (pair.lrsiRising && wyDir === 'bullish') || (!pair.lrsiRising && wyDir === 'bearish') ? 'var(--green)' : 'var(--orange)'
+      }">${(pair.lrsiRising && wyDir === 'bullish') || (!pair.lrsiRising && wyDir === 'bearish') ? '✓ Aligned' : '⚠ Diverging'}</span></div>
+    </div>`;
+  }
+
+  let combinedHTML = '';
+  if (currentMode === 'combined') {
+    combinedHTML = `<div class="detail-card"><h4>Combined Signal</h4>
+      <div class="detail-row"><span class="detail-label">Combined Signal</span><span class="signal-badge ${pair.combinedSignalClass}">${pair.combinedSignal}</span></div>
+      <div class="detail-row"><span class="detail-label">Combined Score</span><span class="detail-value mono" style="color:var(--cyan)">${pair.combinedScore >= 0 ? '+' : ''}${pair.combinedScore.toFixed(1)}</span></div>
+      <div class="detail-row"><span class="detail-label">BTMM Score (60%)</span><span class="detail-value mono" style="color:var(--cyan)">${pair.btmmCompositeScore >= 0 ? '+' : ''}${pair.btmmCompositeScore.toFixed(1)}</span></div>
+      <div class="detail-row"><span class="detail-label">Wyckoff Score (40%)</span><span class="detail-value mono" style="color:var(--orange)">${pair.wyckoffCompositeScore >= 0 ? '+' : ''}${pair.wyckoffCompositeScore.toFixed(1)}</span></div>
+    </div>`;
+  }
+
+  let fibsHTML = '';
+  if (pair.fibs && pair.fibs.levels.length > 0) {
+    fibsHTML = `<div class="detail-card"><h4>Fibonacci Levels</h4>
+      ${pair.fibs.levels.map(l => {
+        const isKey = l.level === 61.8 || l.level === 78.6;
+        const dist = Math.abs(pair.currentPrice - l.price);
+        return `<div class="detail-row"><span class="detail-label">${l.level}%</span><span class="detail-value mono" style="color:${isKey && dist < 0.0005 ? 'var(--green)' : 'inherit'}">${l.price.toFixed(pair.decimals)} (${dist.toFixed(1)})</span></div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  modalBody.innerHTML = `
+    <div class="chart-container">
+      <div class="chart-header">
+        <div><div class="chart-pair">${pair.symbol} <span style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase">${pair.type}</span> <span class="data-source ${pair.isRealData ? 'live' : 'simulated'}">${pair.isRealData ? 'LIVE' : 'SIM'}</span></div>
+        <div class="chart-change ${changeClass}" style="margin-top:4px">${changeSign}${pair.changePercent.toFixed(2)}% today</div></div>
+        <div class="chart-price mono" style="color:${scoreColor}">${pair.currentPrice.toFixed(pair.decimals)}</div>
+      </div>
+      <div class="chart-timeframe"><button class="tf-btn active" data-candles="120" data-factor="1">M15</button><button class="tf-btn" data-candles="60" data-factor="4">1H</button><button class="tf-btn" data-candles="30" data-factor="16">4H</button><button class="tf-btn" data-candles="10" data-factor="96">Daily</button></div>
+      <canvas id="candleChart" width="850" height="350"></canvas>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-card"><h4>Signal Summary</h4>
+        <div class="detail-row"><span class="detail-label">BTMM Signal</span><span class="signal-badge ${pair.btmmSignalClass}">${pair.btmmSignal}</span><span class="grade-badge ${grade.cls}">${grade.grade}</span></div>
+        <div class="detail-row"><span class="detail-label">BTMM Score</span><span class="detail-value mono" style="color:${scoreColor}">${pair.btmmCompositeScore >= 0 ? '+' : ''}${pair.btmmCompositeScore.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">Confidence</span><span class="detail-value confidence ${pair.confidence.toLowerCase()}">${pair.confidence}</span></div>
+        <div class="detail-row"><span class="detail-label">800 EMA Distance</span><span class="detail-value mono" style="color:${pair.dist800Pips > 50 ? 'var(--orange)' : 'var(--text-muted)'}">${pair.dist800Pips.toFixed(1)} pips</span></div>
+      </div>
+      ${btmmHTML}${wyckoffHTML}${combinedHTML}${fibsHTML}
+      <div class="detail-card"><h4>EMA Stack</h4>
+        <div class="detail-row"><span class="detail-label" style="color:var(--yellow)">EMA 5</span><span class="detail-value mono">${pair.ema5[pair.ema5.length-1]?.toFixed(pair.decimals) || 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label" style="color:var(--red)">EMA 13</span><span class="detail-value mono">${pair.ema13[pair.ema13.length-1]?.toFixed(pair.decimals) || 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label" style="color:var(--cyan)">EMA 50</span><span class="detail-value mono">${pair.ema50[pair.ema50.length-1]?.toFixed(pair.decimals) || 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label" style="color:var(--grey)">EMA 200</span><span class="detail-value mono">${pair.ema200[pair.ema200.length-1]?.toFixed(pair.decimals) || 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label" style="color:var(--blue)">EMA 800</span><span class="detail-value mono">${pair.ema800[pair.ema800.length-1]?.toFixed(pair.decimals) || 'N/A'}</span></div>
+      </div>
+      <div class="detail-card"><h4>TDI</h4>
+        <div class="detail-row"><span class="detail-label">Fast Line</span><span class="detail-value mono">${pair.tdi.fast.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">Slow Line</span><span class="detail-value mono">${pair.tdi.slow.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">Upper Band</span><span class="detail-value mono">${pair.tdi.upper.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">Lower Band</span><span class="detail-value mono">${pair.tdi.lower.toFixed(1)}</span></div>
+        <div class="detail-row"><span class="detail-label">TDI Leg</span><span class="signal-badge ${pair.btmmTDILeg && pair.btmmTDILeg.leg === 2 ? (pair.btmmTDILeg.direction === 'bullish' ? 'buy' : 'sell') : 'neutral'}" style="font-size:.7rem">${pair.btmmTDILeg ? (pair.btmmTDILeg.leg === 0 ? 'Mid-Range' : `Leg ${pair.btmmTDILeg.leg} ${pair.btmmTDILeg.direction}`) : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label" style="font-size:.7rem;color:var(--text-muted)">${pair.btmmTDILeg ? pair.btmmTDILeg.description : ''}</span></div>
+      </div>
+    </div>
+    <div class="signal-breakdown"><h3>BTMM Component Breakdown</h3>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.emaScore > 0 ? 'bullish' : 'bearish'}"></div><span class="signal-item-name">EMA Stack (5/13/50/200/800)</span></div><div style="display:flex;align-items:center;gap:12px"><span class="signal-item-value mono">Score: ${(pair.emaScore * 0.4 * 100).toFixed(0)}</span><span class="signal-badge ${pair.emaScore > 0 ? 'buy' : pair.emaScore < 0 ? 'sell' : 'neutral'}">${pair.emaScore > 0 ? 'Bullish' : pair.emaScore < 0 ? 'Bearish' : 'Neutral'}</span></div></div>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.tdiScore > 0 ? 'bullish' : 'bearish'}"></div><span class="signal-item-name">TDI (Fast/Slow)</span></div><div style="display:flex;align-items:center;gap:12px"><span class="signal-item-value mono">Fast: ${pair.tdi.fast.toFixed(1)} Slow: ${pair.tdi.slow.toFixed(1)}</span><span class="signal-badge ${pair.tdiScore > 0 ? 'buy' : 'sell'}">${pair.tdiScore > 0 ? 'Bullish' : 'Bearish'}</span></div></div>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.adrScore > 0 ? 'bullish' : 'bearish'}"></div><span class="signal-item-name">ADR Consumed</span></div><div style="display:flex;align-items:center;gap:12px"><span class="signal-item-value mono">${pair.adrConsumed.toFixed(0)}% of ADR</span><span class="signal-badge ${pair.adrScore > 0 ? 'buy' : 'sell'}">${pair.adrScore > 0 ? 'Room Left' : 'Extended'}</span></div></div>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.amdScore > 0 ? 'bullish' : 'bearish'}"></div><span class="signal-item-name">AMD Phase</span></div><div style="display:flex;align-items:center;gap:12px"><span class="detail-value mono"><span class="amd-badge ${pair.amd.phase.toLowerCase()}">${pair.amd.phase}</span></span><span class="signal-badge ${pair.amdScore > 0 ? 'buy' : 'sell'}">Score: ${pair.amdScore.toFixed(2)}</span></div></div>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.btmmH1MTF && pair.btmmH1MTF.valid ? (pair.btmmH1MTF.trend === 'bullish' ? 'bullish' : pair.btmmH1MTF.trend === 'bearish' ? 'bearish' : 'neutral') : 'neutral'}"></div><span class="signal-item-name">H1 MTF Trend</span></div><div style="display:flex;align-items:center;gap:12px"><span class="signal-item-value mono">${pair.btmmH1MTF && pair.btmmH1MTF.valid ? `EMA50: ${pair.btmmH1MTF.ema50.toFixed(pair.digits || 5)}` : 'N/A'}</span><span class="signal-badge ${pair.btmmH1MTF && pair.btmmH1MTF.trend === 'bullish' ? 'buy' : pair.btmmH1MTF && pair.btmmH1MTF.trend === 'bearish' ? 'sell' : 'neutral'}">${pair.btmmH1MTF && pair.btmmH1MTF.valid ? pair.btmmH1MTF.trend.toUpperCase() : 'N/A'}</span></div></div>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.btmmNameableCandle && pair.btmmNameableCandle.found ? (pair.btmmNameableCandle.direction === 'bullish' ? 'bullish' : 'bearish') : 'neutral'}"></div><span class="signal-item-name">2nd Leg Candle</span></div><div style="display:flex;align-items:center;gap:12px"><span class="signal-item-value mono">${pair.btmmNameableCandle && pair.btmmNameableCandle.found ? pair.btmmNameableCandle.name : 'None'}</span><span class="signal-badge ${pair.btmmNameableCandle && pair.btmmNameableCandle.found ? (pair.btmmNameableCandle.direction === 'bullish' ? 'buy' : 'sell') : 'neutral'}">${pair.btmmNameableCandle && pair.btmmNameableCandle.found ? pair.btmmNameableCandle.direction : 'No Pattern'}</span></div></div>
+      <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.killZoneScore > 0 ? 'bullish' : 'neutral'}"></div><span class="signal-item-name">Kill Zone</span></div><div style="display:flex;align-items:center;gap:12px"><span class="detail-value mono">${pair.activeZone ? pair.activeZone.name : 'Inactive'}</span><span class="signal-badge ${pair.activeZone ? 'buy' : 'neutral'}">Weight: ${pair.activeZone ? pair.activeZone.weight : 0}</span></div></div>
+    </div>
+    <div class="signal-breakdown" style="margin-top:16px">
+      <h3>HOD / LOD Levels</h3>
+      ${pair.btmmHODLOD && pair.btmmHODLOD.valid ? `
+        <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.btmmHODLOD.nearHOD ? 'bearish' : 'neutral'}"></div><span class="signal-item-name">High of Day</span></div><span class="signal-item-value mono">${pair.btmmHODLOD.hod.toFixed(pair.digits || 5)}${pair.btmmHODLOD.retestingHOD ? ' ⚡ RETEST' : ''}</span></div>
+        <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.btmmHODLOD.nearLOD ? 'bullish' : 'neutral'}"></div><span class="signal-item-name">Low of Day</span></div><span class="signal-item-value mono">${pair.btmmHODLOD.lod.toFixed(pair.digits || 5)}${pair.btmmHODLOD.retestingLOD ? ' ⚡ RETEST' : ''}</span></div>
+      ` : '<div class="signal-item"><span class="detail-label" style="color:var(--text-muted)">Insufficient data</span></div>'}
+    </div>
+    <div class="signal-breakdown" style="margin-top:16px">
+      <h3>BTMM Setup Checklist — <span style="color:${pair.checklistScore >= 7 ? 'var(--green)' : pair.checklistScore >= 5 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore}/11</span> <span style="font-size:.75rem;font-weight:400;color:${pair.checklistScore >= 7 ? 'var(--green)' : pair.checklistScore >= 5 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore >= 7 ? '— High Probability Setup' : pair.checklistScore >= 5 ? '— Consider Setup' : '— Wait for More Confluence'}</span></h3>
+      ${pair.btmmChecklist.map(c => `
+        <div class="signal-item">
+          <div class="signal-item-left">
+            <span style="font-size:1rem;color:${c.pass ? 'var(--green)' : 'var(--red)'}">●</span>
+            <span class="signal-item-name">${c.name}</span>
+          </div>
+          <span style="color:${c.pass ? 'var(--green)' : 'var(--red)'};font-size:.8rem;font-weight:700">${c.pass ? '✓ PASS' : '✗ FAIL'}</span>
+        </div>`).join('')}
+    </div>
+    <div class="signal-breakdown" style="margin-top:16px">
+      <h3>Weekly Fibonacci Levels</h3>
+      ${pair.btmmWeeklyFibs && pair.btmmWeeklyFibs.valid ? `
+        <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot neutral"></div><span class="signal-item-name">Week High</span></div><span class="signal-item-value mono">${pair.btmmWeeklyFibs.weekHigh.toFixed(pair.digits || 5)}</span></div>
+        <div class="signal-item"><div class="signal-item-left"><div class="indicator-dot neutral"></div><span class="signal-item-name">Week Low</span></div><span class="signal-item-value mono">${pair.btmmWeeklyFibs.weekLow.toFixed(pair.digits || 5)}</span></div>
+        ${pair.btmmWeeklyFibs.nearest ? `<div class="signal-item"><div class="signal-item-left"><div class="indicator-dot ${pair.btmmWeeklyFibs.highProbZone ? 'bullish' : 'neutral'}"></div><span class="signal-item-name">Nearest Fib</span></div><div style="display:flex;align-items:center;gap:12px"><span class="signal-item-value mono">${pair.btmmWeeklyFibs.nearest.label} @ ${pair.btmmWeeklyFibs.nearest.price.toFixed(pair.digits || 5)}</span><span class="signal-badge ${pair.btmmWeeklyFibs.highProbZone ? 'buy' : 'neutral'}">${pair.btmmWeeklyFibs.highProbZone ? '⭐ High Prob' : 'Low Prob'}</span></div></div>` : ''}
+      ` : '<div class="signal-item"><span class="detail-label" style="color:var(--text-muted)">Insufficient weekly data</span></div>'}
+    </div>
+    <div class="strategy-info"><h3>Strategy: ${STRATEGY.name}</h3><p>${STRATEGY.description}</p><div style="margin-top:12px">${STRATEGY.indicators.map(ind => `<div style="margin-bottom:8px"><strong style="font-size:.8rem;color:var(--text-primary)">${ind.name}</strong><span style="font-size:.75rem;color:var(--text-muted)"> (Weight: ${ind.weight}%)</span><p style="font-size:.75rem;color:var(--text-secondary);margin-top:2px">${ind.desc}</p></div>`).join('')}</div></div>
+  `;
+
+  document.getElementById('modalOverlay').classList.add('active');
+  setTimeout(() => {
+    drawCandleChart(pair);
+    document.querySelectorAll('.tf-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        drawCandleChart(pair, parseInt(btn.dataset.candles), parseInt(btn.dataset.factor));
+      });
+    });
+  }, 50);
+}
+
+function aggregateCandles(candles, factor) {
+  if (factor <= 1) return candles;
+  const agg = [];
+  for (let i = 0; i + factor <= candles.length; i += factor) {
+    const slice = candles.slice(i, i + factor);
+    agg.push({
+      open: slice[0].open,
+      high: Math.max(...slice.map(c => c.high)),
+      low: Math.min(...slice.map(c => c.low)),
+      close: slice[slice.length - 1].close,
+      volume: slice.reduce((s, c) => s + (c.volume || 0), 0),
+      datetime: slice[0].datetime
+    });
+  }
+  return agg;
+}
+
+function drawCandleChart(pair, candleCount = 120, aggregateFactor = 1) {
+  const canvas = document.getElementById('candleChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 350 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 350;
+  ctx.fillStyle = '#111318';
+  ctx.fillRect(0, 0, W, H);
+  const source = aggregateFactor > 1 ? aggregateCandles(pair.candles, aggregateFactor) : pair.candles;
+  const candles = source.slice(-candleCount);
+  if (candles.length === 0) return;
+  const allHigh = Math.max(...candles.map(c => c.high));
+  const allLow = Math.min(...candles.map(c => c.low));
+  const range = allHigh - allLow || 1;
+  const padding = { top: 20, bottom: 30, left: 10, right: 60 };
+  const chartW = W - padding.left - padding.right;
+  const chartH = H - padding.top - padding.bottom;
+  const candleW = chartW / candles.length;
+  const bodyW = candleW * 0.65;
+  const toY = (price) => padding.top + (1 - (price - allLow) / range) * chartH;
+
+  ctx.strokeStyle = '#252a3a';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 5; i++) {
+    const y = padding.top + (chartH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(W - padding.right, y); ctx.stroke();
+    const price = allHigh - (range / 4) * i;
+    ctx.fillStyle = '#5c6078'; ctx.font = '10px JetBrains Mono'; ctx.textAlign = 'left';
+    ctx.fillText(price.toFixed(pair.decimals), W - padding.right + 5, y + 4);
+  }
+
+  // ── Draw EMAs with proper alignment ────────────────────────────────────────
+  // Right-align EMAs to candles so latest value aligns with rightmost candle.
+  const drawEMA = (emaArr, color) => {
+    if (!emaArr || emaArr.length === 0) return;
+    const emaLen = emaArr.length;
+    const startIdx = Math.max(0, candles.length - emaLen);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < emaLen; i++) {
+      const val = emaArr[i];
+      if (val === undefined || val === null) continue;
+      const candleIdx = startIdx + i;
+      const x = padding.left + candleIdx * candleW + candleW / 2;
+      if (!started) { ctx.moveTo(x, toY(val)); started = true; }
+      else ctx.lineTo(x, toY(val));
+    }
+    ctx.stroke();
+  };
+
+  drawEMA(pair.ema800, '#448aff');
+  drawEMA(pair.ema200, '#9e9e9e');
+  drawEMA(pair.ema50, '#18ffff');
+  drawEMA(pair.ema13, '#ff5252');
+  drawEMA(pair.ema5, '#ffd740');
+
+  candles.forEach((candle, i) => {
+    const x = padding.left + i * candleW + candleW / 2;
+    const isBullish = candle.close >= candle.open;
+    const color = isBullish ? '#00e676' : '#ff5252';
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, toY(candle.high)); ctx.lineTo(x, toY(candle.low)); ctx.stroke();
+    const bodyTop = toY(Math.max(candle.open, candle.close));
+    const bodyBottom = toY(Math.min(candle.open, candle.close));
+    const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
+    if (isBullish) {
+      ctx.fillStyle = '#0a0b0e'; ctx.strokeStyle = color; ctx.lineWidth = 1.2;
+      ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
+      ctx.strokeRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
+    } else { ctx.fillStyle = color; ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight); }
+  });
+
+  ctx.fillStyle = '#5c6078'; ctx.font = '9px JetBrains Mono'; ctx.textAlign = 'left';
+  const tfLabel = aggregateFactor === 1 ? '15m' : aggregateFactor === 4 ? '1H' : aggregateFactor === 16 ? '4H' : 'Daily';
+  ctx.fillText(`${candles.length} candles (${tfLabel})`, padding.left, H - 8);
+  const legendY = padding.top + 5;
+  const legendItems = [
+    { color: '#448aff', label: '800 EMA' },
+    { color: '#9e9e9e', label: '200 EMA' },
+    { color: '#18ffff', label: '50 EMA' },
+    { color: '#ff5252', label: '13 EMA' },
+    { color: '#ffd740', label: '5 EMA' }
+  ];
+  legendItems.forEach((item, i) => {
+    ctx.fillStyle = item.color;
+    ctx.fillRect(W - 180, legendY + i * 14, 8, 8);
+    ctx.fillStyle = '#8b90a5';
+    ctx.fillText(item.label, W - 168, legendY + i * 14 + 8);
+  });
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+
+function updateSBTimer() {
+  // BTMM_KILL_ZONES has exactly 3 zones indexed 0–2 — safe destructure
+  const londonZone  = BTMM_KILL_ZONES[0];
+  const overlapZone = BTMM_KILL_ZONES[1];
+  const nyZone      = BTMM_KILL_ZONES[2];
+  const activeZone  = getActiveBTMMKillZone();
+
+  // Update SAST clock in header
+  const sastEl = document.getElementById('sastClock');
+  if (sastEl) sastEl.textContent = getSASTTimeString();
+
+  // Kill zone labels — SAST primary (our local time), GMT in parens as secondary reference
+  const londonLbl  = document.getElementById('sbLondonLabel');
+  const overlapLbl = document.getElementById('sbOverlapLabel');
+  const nyLbl      = document.getElementById('sbNyLabel');
+  if (londonLbl)  londonLbl.textContent  = `${londonZone.name}  ${londonZone.sastStart}–${londonZone.sastEnd} SAST  (${pad2(londonZone.startGMT)}:${londonZone.startGMT % 1 ? '15' : '00'}–${pad2(londonZone.endGMT)}:${londonZone.endGMT % 1 ? '15' : '00'} GMT)`;
+  if (overlapLbl) overlapLbl.textContent = `${overlapZone.name}  ${overlapZone.sastStart}–${overlapZone.sastEnd} SAST  (${pad2(overlapZone.startGMT)}:00–${pad2(overlapZone.endGMT)}:00 GMT)`;
+  if (nyLbl)      nyLbl.textContent      = `${nyZone.name}  ${nyZone.sastStart}–${nyZone.sastEnd} SAST  (${pad2(nyZone.startGMT)}:${nyZone.startGMT % 1 ? '15' : '00'}–${pad2(nyZone.endGMT)}:${nyZone.endGMT % 1 ? '15' : '00'} GMT)`;
+
+  document.getElementById('sbLondon').className  = `sb-timer-item ${activeZone && activeZone.session === 'london'  ? 'active-window' : ''}`;
+  document.getElementById('sbOverlap').className = `sb-timer-item ${activeZone && activeZone.session === 'overlap' ? 'active-window' : ''}`;
+  document.getElementById('sbNy').className      = `sb-timer-item ${activeZone && activeZone.session === 'ny'      ? 'active-window' : ''}`;
+  document.getElementById('sbLondonTimer').textContent  = formatTimeUntil(getTimeUntilKillZone(londonZone));
+  document.getElementById('sbOverlapTimer').textContent = formatTimeUntil(getTimeUntilKillZone(overlapZone));
+  document.getElementById('sbNyTimer').textContent      = formatTimeUntil(getTimeUntilKillZone(nyZone));
+
+  const nextZone = getNextBTMMKillZone();
+  document.getElementById('sbNext').innerHTML = `Next Kill Zone: <strong>${nextZone.name} &mdash; ${nextZone.sastStart} SAST / ${pad2(nextZone.startGMT)}:${nextZone.startGMT % 1 ? '15' : '00'} GMT</strong>`;
+}
+
+function updateRiskCalc() {
+  const balance = parseFloat(document.getElementById('riskBalance').value) || 10000;
+  const riskPercent = parseFloat(document.getElementById('riskPercent').value) || 1;
+  const slPips = parseFloat(document.getElementById('riskSL').value) || 15;
+  const rr = parseFloat(document.getElementById('riskRR').value) || 2;
+  const pipVal = parseFloat(document.getElementById('riskPair').value) || 10;
+  const riskAmount = balance * (riskPercent / 100);
+  const lotSize = riskAmount / (slPips * pipVal);
+  const tpPips = slPips * rr;
+  const potentialProfit = riskAmount * rr;
+  document.getElementById('riskAmount').textContent = `$${riskAmount.toFixed(0)}`;
+  document.getElementById('riskLotSize').textContent = lotSize.toFixed(2);
+  document.getElementById('riskTP').textContent = tpPips.toFixed(0);
+  document.getElementById('riskProfit').textContent = `$${potentialProfit.toFixed(0)}`;
+}
+
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
+
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentMode = tab.dataset.mode;
+    render();
+  });
+});
+
+document.getElementById('filterGroup').addEventListener('click', (e) => {
+  if (e.target.classList.contains('filter-btn')) {
+    document.querySelectorAll('#filterGroup .filter-btn').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    currentFilter = e.target.dataset.filter;
+    render();
+  }
+});
+
+document.querySelectorAll('[data-type]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-type]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTypeFilter = btn.dataset.type;
+    render();
+  });
+});
+
+document.getElementById('sortSelect').addEventListener('change', (e) => { currentSort = e.target.value; render(); });
+document.getElementById('searchInput').addEventListener('input', (e) => { searchTerm = e.target.value; render(); });
+
+document.getElementById('btnRefresh').addEventListener('click', () => {
+  const btn = document.getElementById('btnRefresh');
+  if (btn.disabled) return;
+  // 30-second cooldown prevents burst API calls from spam-clicking
+  btn.disabled = true;
+  btn.textContent = '↻ Wait 30s';
+  btn.style.opacity = '0.5';
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '↻ Refresh';
+    btn.style.opacity = '';
+  }, 30000);
+  fetchAllData().then(() => { render(); refreshCountdown = API_CONFIG.refreshInterval / 1000; });
+});
+
+['riskBalance', 'riskPercent', 'riskSL', 'riskRR', 'riskPair'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateRiskCalc);
+  document.getElementById(id).addEventListener('change', updateRiskCalc);
+});
+
+// Populate risk pair selector from FOREX_PAIRS (uses correct pip value per pair)
+const riskPairEl = document.getElementById('riskPair');
+FOREX_PAIRS.forEach(p => {
+  const opt = document.createElement('option');
+  opt.value = p.pipValue;
+  opt.textContent = `${p.symbol} ($${p.pipValue}/pip)`;
+  if (p.symbol === 'EUR/USD') opt.selected = true;
+  riskPairEl.appendChild(opt);
+});
+
+function renderKeyStatusRows() {
+  return API_KEYS.map(k => {
+    const pct = Math.min(100, Math.round(((k.used || 0) / (k.limit || 800)) * 100));
+    const colour = k.exhausted ? 'var(--red)' : k.active ? 'var(--green)' : 'var(--text-muted)';
+    const glyph = k.exhausted ? '✗' : k.active ? '✓' : '…';
+    const err = k.lastError ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${k.lastError}</div>` : '';
+    return `<div style="margin:4px 0;padding:6px;background:var(--bg-card);border-radius:4px">
+      <span style="color:${colour}">${glyph}</span>
+      <strong>${k.name}</strong>: ${k.used || 0}/${k.limit || 800} (${pct}%)
+      ${err}
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btnSettings').addEventListener('click', async () => {
+  const list = document.getElementById('apiKeysList');
+  list.innerHTML = 'Loading status from service…';
+  await syncServiceStatus();
+  list.innerHTML = renderKeyStatusRows();
+  document.getElementById('settingsRefresh').value = (API_CONFIG.refreshInterval / 60000).toString();
+  document.getElementById('settingsDepth').value = API_CONFIG.outputSize.toString();
+  document.getElementById('settingsOverlay').classList.add('active');
+});
+
+document.getElementById('testApiKeys').addEventListener('click', async () => {
+  const list = document.getElementById('apiKeysList');
+  list.innerHTML = 'Refreshing status from service…';
+  const data = await syncServiceStatus();
+  if (!data) {
+    list.innerHTML = `<div style="color:var(--red)">Service not reachable at ${API_CONFIG.baseUrl}.<br>Start it with: <code>python service/app.py</code></div>`;
+    return;
+  }
+  list.innerHTML = renderKeyStatusRows();
+});
+
+document.getElementById('settingsCancel').addEventListener('click', () => { document.getElementById('settingsOverlay').classList.remove('active'); });
+
+document.getElementById('settingsSave').addEventListener('click', () => {
+  const newRefresh = parseInt(document.getElementById('settingsRefresh').value);
+  const newDepth = parseInt(document.getElementById('settingsDepth').value);
+  localStorage.setItem('twelvedata_refresh', newRefresh.toString());
+  localStorage.setItem('twelvedata_depth', newDepth.toString());
+  API_CONFIG.refreshInterval = newRefresh * 60 * 1000;
+  API_CONFIG.outputSize = newDepth;
+  refreshCountdown = API_CONFIG.refreshInterval / 1000;
+  document.getElementById('settingsOverlay').classList.remove('active');
+  fetchAllData().then(() => render());
+});
+
+function startRefreshTimer() {
+  refreshInterval = setInterval(() => {
+    refreshCountdown--;
+    const minutes = Math.floor(refreshCountdown / 60);
+    const seconds = refreshCountdown % 60;
+    document.getElementById('refreshTimer').textContent = `Next refresh: ${minutes}m ${seconds}s`;
+    if (refreshCountdown <= 0) {
+      fetchAllData().then(() => { render(); refreshCountdown = API_CONFIG.refreshInterval / 1000; });
+    }
+  }, 1000);
+}
+
+function startSBTimer() { sbTimerInterval = setInterval(updateSBTimer, 1000); updateSBTimer(); }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeModal(); document.getElementById('settingsOverlay').classList.remove('active'); }
+});
+
+fetchAllData().then(() => { render(); updateRiskCalc(); startRefreshTimer(); startSBTimer(); });
+</script>
+</body>
+</html>

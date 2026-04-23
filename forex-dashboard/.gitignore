@@ -1,0 +1,29 @@
+# API keys and secrets — never commit
+service/.env
+service/candles.db
+service/candles.db-journal
+service/candles.db-wal
+service/candles.db-shm
+
+# Python
+service/__pycache__/
+service/*.pyc
+service/.venv/
+service/venv/
+
+# Old dashboard versions (keep only current index.html)
+index\ -\ v2.html
+index\ -v1.html
+index\ -v3.html
+index-10B.html
+index_backup_working.html
+index_new.html
+index_v5.html
+index_v6.html
+index_v7.html
+index_v8.html
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
