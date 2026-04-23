@@ -87,9 +87,12 @@ class TwelveDataClient:
         """Keys that can afford `expected_credits` for incremental fetches."""
         usage = cache.all_key_usage()
         threshold = DAILY_CREDIT_LIMIT - CREDIT_SAFETY_MARGIN
+        now = time.time()
         out = []
         for k in self._keys:
             if k["name"] in self._exhausted_runtime:
+                continue
+            if now < self._rate_limited_until.get(k["name"], 0):
                 continue
             used = usage.get(k["name"], 0)
             if used < threshold and used + expected_credits <= DAILY_CREDIT_LIMIT:
