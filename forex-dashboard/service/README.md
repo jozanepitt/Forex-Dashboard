@@ -26,14 +26,14 @@ Service listens on `http://127.0.0.1:3002`.
 
 ## Budget math
 
-Free Twelve Data plan: **1 credit per candle**, **800 credits/day/key**, 4 keys
-= **3,200 credits/day** budget.
+Free Twelve Data plan: **1 credit per candle**, **800 credits/day/key**, 6 keys
+= **4,800 credits/day** budget.
 
 - Initial backfill (one-time): 15 pairs × 800 = **12,000 credits** (spread
-  across 4 keys = ~3,000 each, fits the daily budget).
-- Steady state: 15 pairs × ~2 credits per refresh × 48 refreshes/day
-  = **~1,440 credits/day** (≈45% utilisation).
-- Headroom exists for dropping the cadence to 15-min (2,880/day) later.
+  across 6 keys = ~2,000 each, fits the daily budget).
+- Steady state: 15 pairs × ~2 credits per refresh × 96 refreshes/day (15-min)
+  = **~2,880 credits/day** (≈60% utilisation with 6 keys).
+- Keys rotate automatically via `TWELVEDATA_KEY_1..N` in `.env`.
 
 ## Files
 

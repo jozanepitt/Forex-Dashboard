@@ -1,4 +1,8 @@
-"""Orchestrates cache-first, incremental fetch, with Stooq CSV failover."""
+"""Orchestrates cache-first, incremental fetch.
+
+Source priority: MT5 (local terminal, no quota) -> TwelveData (REST, quota'd)
+-> Stooq CSV (last resort, requires apikey).
+"""
 from __future__ import annotations
 
 import logging
@@ -6,8 +10,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import cache
-from config import DEFAULT_BACKFILL, INTERVAL_SECS
-from providers import stooq
+from config import DEFAULT_BACKFILL, INTERVAL_SECS, MT5_ENABLED
+from providers import exness_mt5, stooq
+from providers.exness_mt5 import MT5Error, MT5NotConnected
 from providers.stooq import StooqError, StooqNeedsApiKey
 from providers.twelvedata import ProviderError, QuotaExhausted, TwelveDataClient
 
@@ -21,6 +26,33 @@ def client() -> TwelveDataClient:
     if _td is None:
         _td = TwelveDataClient()
     return _td
+
+
+def _try_mt5(symbol: str, interval: str, limit: int,
+             start_ts: Optional[int]) -> Optional[bool]:
+    """Try MT5 first. Returns False on success (not stale), None to fall through."""
+    if not MT5_ENABLED:
+        return None
+    try:
+        bars = exness_mt5.client().fetch(symbol, interval,
+                                         outputsize=limit, start_ts=start_ts)
+        if not bars:
+            return None
+        n = cache.upsert_candles(symbol, interval, bars)
+        cache.log_refresh(symbol, interval, "mt5", n, credits=0)
+        return False
+    except MT5NotConnected as e:
+        log.info("MT5 unavailable for %s; falling through: %s", symbol, e)
+        cache.log_refresh(symbol, interval, "mt5", 0, error="not connected")
+        return None
+    except MT5Error as e:
+        log.warning("MT5 error for %s; falling through: %s", symbol, e)
+        cache.log_refresh(symbol, interval, "mt5", 0, error=str(e))
+        return None
+    except Exception as e:
+        log.error("MT5 unexpected error for %s; falling through: %s", symbol, e)
+        cache.log_refresh(symbol, interval, "mt5", 0, error=str(e))
+        return None
 
 
 def get_candles(symbol: str, interval: str = "15min",
@@ -42,6 +74,10 @@ def get_candles(symbol: str, interval: str = "15min",
 
 
 def _backfill(symbol: str, interval: str, limit: int) -> bool:
+    mt5_result = _try_mt5(symbol, interval, limit, start_ts=None)
+    if mt5_result is not None:
+        return mt5_result
+
     try:
         bars = client().fetch(symbol, interval, outputsize=limit)
         n = cache.upsert_candles(symbol, interval, bars)
@@ -59,6 +95,11 @@ def _backfill(symbol: str, interval: str, limit: int) -> bool:
 
 def _incremental(symbol: str, interval: str, last_ts: int) -> bool:
     start_ts = last_ts + INTERVAL_SECS[interval]
+
+    mt5_result = _try_mt5(symbol, interval, DEFAULT_BACKFILL, start_ts=start_ts)
+    if mt5_result is not None:
+        return mt5_result
+
     try:
         bars = client().fetch(symbol, interval,
                               outputsize=DEFAULT_BACKFILL, start_ts=start_ts)
@@ -119,4 +160,8 @@ def status_summary(interval: str = "15min") -> dict:
                          .strftime("%Y-%m-%d %H:%M:%S") if last_ts else None),
             "fresh":   bool(last_ts and now_ts < last_ts + 2 * interval_secs),
         })
-    return {"pairs": pairs, "keys": client().status()}
+    return {
+        "pairs": pairs,
+        "keys": client().status(),
+        "mt5":  exness_mt5.client().status(),
+    }

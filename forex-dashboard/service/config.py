@@ -14,6 +14,11 @@ DB_PATH = SERVICE_ROOT / "candles.db"
 
 SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "3002"))
 SERVICE_HOST = os.environ.get("SERVICE_HOST", "127.0.0.1")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+
+# MT5 provider — primary source when terminal is running and logged in.
+MT5_ENABLED = os.environ.get("MT5_ENABLED", "true").lower() in ("1", "true", "yes")
+MT5_SYMBOL_SUFFIX = os.environ.get("MT5_SYMBOL_SUFFIX", "m")
 
 DAILY_CREDIT_LIMIT = int(os.environ.get("DAILY_CREDIT_LIMIT", "800"))
 CREDIT_SAFETY_MARGIN = int(os.environ.get("CREDIT_SAFETY_MARGIN", "50"))
@@ -22,6 +27,8 @@ PRIORITY_PAIRS = [
     "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD",
     "USD/CAD", "NZD/USD", "EUR/GBP", "EUR/JPY", "EUR/CHF",
     "EUR/AUD", "GBP/JPY", "GBP/CHF", "AUD/JPY", "CAD/JPY",
+    "XAU/USD", "XAG/USD",  # Gold, Silver — MT5 maps to XAUUSDm / XAGUSDm
+    "DE30",                 # DAX (Germany 40) — MT5 maps to DE30m
 ]
 
 INTERVAL_SECS = {
@@ -35,7 +42,7 @@ INTERVAL_SECS = {
 }
 
 DEFAULT_INTERVAL = "15min"
-DEFAULT_BACKFILL = 800
+DEFAULT_BACKFILL = 3200
 
 
 def load_keys():

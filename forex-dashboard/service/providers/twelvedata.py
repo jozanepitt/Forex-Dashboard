@@ -27,6 +27,8 @@ log = logging.getLogger("twelvedata")
 BASE_URL = "https://api.twelvedata.com/time_series"
 TIMEOUT = 12
 QUOTA_MARKERS = ("credit", "quota", "daily", "limit")
+RATE_LIMIT_MARKERS = ("minute",)  # subset of QUOTA_MARKERS hits — transient, not daily exhaustion
+RATE_LIMIT_COOLDOWN_SECS = 60
 
 
 class QuotaExhausted(Exception):
@@ -188,7 +190,12 @@ class TwelveDataClient:
             msg = str(data.get("message", "unknown")).lower()
             self._last_error[key_name] = data.get("message", "error")
             if any(m in msg for m in QUOTA_MARKERS):
-                self._exhausted_runtime.add(key_name)
+                if any(m in msg for m in RATE_LIMIT_MARKERS):
+                    # Per-minute throttle — recoverable. Cool down briefly, don't blacklist.
+                    self._rate_limited_until[key_name] = time.time() + RATE_LIMIT_COOLDOWN_SECS
+                else:
+                    # Daily quota — won't recover until UTC midnight resets cache.all_key_usage().
+                    self._exhausted_runtime.add(key_name)
                 raise QuotaExhausted(f"{key_name}: {data.get('message')}")
             raise ProviderError(f"{key_name}: {data.get('message')}")
 

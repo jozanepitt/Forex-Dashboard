@@ -1,15 +1,25 @@
 """Flask HTTP service serving cached candles to the dashboard."""
 from __future__ import annotations
 
+import json
 import logging
+import time
+from pathlib import Path
 from urllib.parse import unquote
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from flask_socketio import SocketIO
 
+import alerts
+import backtest as bt
 import cache
+import crt_strategy
+import snr_strategy
+import snr_m15_strategy
 import fetcher
 import scheduler
+from providers import forexfactory
 from config import (
     DEFAULT_BACKFILL,
     DEFAULT_INTERVAL,
@@ -25,13 +35,54 @@ logging.basicConfig(
 )
 log = logging.getLogger("app")
 
-app = Flask(__name__)
+import os as _os
+DASHBOARD_DIR = str(Path(_os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..'))))
+
+app = Flask(__name__, static_folder=DASHBOARD_DIR, static_url_path="")
 CORS(app)
+
+
+@app.get("/")
+def dashboard():
+    return send_from_directory(DASHBOARD_DIR, "index.html")
+sio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", logger=False, engineio_logger=False)
+
+
+def emit_refresh_complete(pairs_updated: int):
+    """Called by scheduler after each successful refresh cycle. Pushes to all subscribers."""
+    try:
+        sio.emit("refresh-complete", {"ts": int(time.time()), "pairs_updated": pairs_updated})
+    except Exception as e:
+        log.warning("emit_refresh_complete failed: %s", e)
+
+
+@sio.on("connect")
+def _on_connect():
+    log.info("websocket client connected")
+
+
+@sio.on("disconnect")
+def _on_disconnect():
+    log.info("websocket client disconnected")
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/news")
+def news():
+    try:
+        minutes = int(request.args.get("minutes", 60))
+    except ValueError:
+        return jsonify({"error": "minutes must be integer"}), 400
+    impact = request.args.get("impact")  # optional: "high" | "medium" | "low"
+    force = request.args.get("refresh", "").lower() in ("1", "true")
+    if force:
+        forexfactory.get_events(force_refresh=True)
+    events = forexfactory.upcoming(minutes=minutes, impact_filter=impact or None)
+    return jsonify({"count": len(events), "events": events})
 
 
 @app.get("/status")
@@ -65,6 +116,252 @@ def candles(symbol: str):
     })
 
 
+# 5-minute TTL cache for /crt — analyses are computed against H4-aligned candles
+# that only change every 4 hours. 5 min keeps tab-clicks instant, shields MT5 from
+# refresh storms, and avoids long blocking fetches when multiple tabs click rapidly.
+# The 15-min scheduler refresh keeps data fresh anyway.
+_CRT_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_CRT_TTL_SECS = 300
+
+
+@app.get("/crt")
+def crt():
+    """1AM CRT scanner across the universe.
+
+    Uses `fetcher.get_candles()` (live MT5 with TwelveData/Stooq fallback) for the
+    same data path as the BTMM tab. Fetches run in parallel
+    (ThreadPoolExecutor, 8 workers); inside the MT5 client a per-instance lock
+    serializes the actual IPC calls so concurrent symbols don't race on
+    `symbol_select`. Result memoized for 30s.
+    """
+    import time as _t
+    from concurrent.futures import ThreadPoolExecutor
+
+    now = _t.time()
+    if _CRT_CACHE["payload"] is not None and (now - _CRT_CACHE["ts"]) < _CRT_TTL_SECS:
+        return jsonify(_CRT_CACHE["payload"])
+
+    universe = crt_strategy.CRT_UNIVERSE
+    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("15min", "1day")]
+
+    def _fetch(job):
+        sym, iv = job
+        bars, stale = fetcher.get_candles(sym, iv, limit=(400 if iv == "15min" else 60))
+        return sym, iv, bars, stale
+
+    candles_by_pair: dict[str, dict] = {sym: {"m15": [], "1d": []} for sym in universe}
+    stale_set: set[str] = set()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sym, iv, bars, stale in pool.map(_fetch, jobs):
+            candles_by_pair[sym]["m15" if iv == "15min" else "1d"] = bars
+            if stale:
+                stale_set.add(sym)
+
+    result = crt_strategy.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _CRT_CACHE["payload"] = result
+    _CRT_CACHE["ts"] = now
+    return jsonify(result)
+
+
+# ── SNR endpoint (Malaysian SNR Emperor) ─────────────────────────────────────────────────────────────
+_SNR_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_SNR_TTL_SECS = 300
+
+
+@app.get("/snr")
+def snr():
+    """SNR (Support & Resistance) scanner across the universe."""
+    import time as _t
+    from concurrent.futures import ThreadPoolExecutor
+
+    now = _t.time()
+    if _SNR_CACHE["payload"] is not None and (now - _SNR_CACHE["ts"]) < _SNR_TTL_SECS:
+        return jsonify(_SNR_CACHE["payload"])
+
+    universe = snr_strategy.SNR_UNIVERSE
+    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("15min", "1day")]
+
+    def _fetch(job):
+        sym, iv = job
+        bars, stale = fetcher.get_candles(sym, iv, limit=(400 if iv == "15min" else 60))
+        return sym, iv, bars, stale
+
+    candles_by_pair: dict[str, dict] = {sym: {"m15": [], "1d": []} for sym in universe}
+    stale_set: set[str] = set()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sym, iv, bars, stale in pool.map(_fetch, jobs):
+            candles_by_pair[sym]["m15" if iv == "15min" else "1d"] = bars
+            if stale:
+                stale_set.add(sym)
+
+    result = snr_strategy.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _SNR_CACHE["payload"] = result
+    _SNR_CACHE["ts"] = now
+    return jsonify(result)
+
+
+# ── SNR M15 Fast Scanner endpoint ─────────────────────────────────────────────────────────────────────
+_SNR_M15_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_SNR_M15_TTL_SECS = 120  # 2-min cache — fast scanner needs fresher data
+
+
+@app.get("/snr-m15")
+def snr_m15():
+    """SNR M15 Fast Scanner — same Emperor methodology, lower timeframes.
+
+    Fetches H1 (for level marking) + M15 (for breakout/engulfing).
+    Catches setups hours earlier than the H4 scanner.
+    """
+    import time as _t
+    from concurrent.futures import ThreadPoolExecutor
+
+    now = _t.time()
+    if _SNR_M15_CACHE["payload"] is not None and (now - _SNR_M15_CACHE["ts"]) < _SNR_M15_TTL_SECS:
+        return jsonify(_SNR_M15_CACHE["payload"])
+
+    universe = snr_m15_strategy.SNR_M15_UNIVERSE
+    # Fetch H1 (for level marking) + M15 (for breakout/engulfing confirmation)
+    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("15min", "1h")]
+
+    def _fetch(job):
+        sym, iv = job
+        limit = 400 if iv == "15min" else 200  # ~8 days H1, ~4 days M15
+        bars, stale = fetcher.get_candles(sym, iv, limit=limit)
+        return sym, iv, bars, stale
+
+    candles_by_pair: dict[str, dict] = {sym: {"1h": [], "m15": []} for sym in universe}
+    stale_set: set[str] = set()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sym, iv, bars, stale in pool.map(_fetch, jobs):
+            candles_by_pair[sym]["1h" if iv == "1h" else "m15"] = bars
+            if stale:
+                stale_set.add(sym)
+
+    result = snr_m15_strategy.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _SNR_M15_CACHE["payload"] = result
+    _SNR_M15_CACHE["ts"] = now
+    return jsonify(result)
+
+
+@app.get("/alerts/config")
+def alerts_config():
+    return jsonify({
+        "webhook_set": bool(alerts.WEBHOOK_URL),
+        "rate_limit_secs": alerts.RATE_LIMIT_SECS,
+        "tracked_pairs": len(PRIORITY_PAIRS),
+    })
+
+
+@app.post("/alerts/test")
+def alerts_test():
+    """Send a test embed to Discord to verify the webhook works."""
+    if not alerts.WEBHOOK_URL:
+        return jsonify({"error": "DISCORD_WEBHOOK_URL not set in .env"}), 400
+    ok = alerts._post_discord({
+        "title": "✅ BTMM Dashboard — Test Alert",
+        "description": "Discord webhook is connected. Alerts are live.",
+        "color": 0x00E676,
+        "footer": {"text": "BTMM Dashboard alert system"},
+    })
+    return jsonify({"sent": ok})
+
+
+@app.post("/journal/trade")
+def journal_open():
+    body = request.get_json(silent=True) or {}
+    required = ("pair", "direction", "entry", "sl", "tp1")
+    missing = [f for f in required if f not in body]
+    if missing:
+        return jsonify({"error": f"missing fields: {missing}"}), 400
+    try:
+        trade_id = cache.open_trade(
+            pair=body["pair"].upper(),
+            direction=body["direction"],
+            entry=float(body["entry"]),
+            sl=float(body["sl"]),
+            tp1=float(body["tp1"]),
+            tp2=float(body["tp2"]) if body.get("tp2") else None,
+            setup=body.get("setup"),
+            signal=body.get("signal"),
+            signal_score=float(body["signal_score"]) if body.get("signal_score") else None,
+            gates_json=json.dumps(body["gates"]) if body.get("gates") else None,
+            notes=body.get("notes"),
+        )
+        return jsonify({"id": trade_id, "status": "open"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.patch("/journal/trade/<int:trade_id>")
+def journal_close(trade_id: int):
+    body = request.get_json(silent=True) or {}
+    if "exit_price" not in body or "result" not in body:
+        return jsonify({"error": "exit_price and result required"}), 400
+    if body["result"] not in ("win", "loss", "be"):
+        return jsonify({"error": "result must be win|loss|be"}), 400
+    ok = cache.close_trade(
+        trade_id=trade_id,
+        exit_price=float(body["exit_price"]),
+        result=body["result"],
+        pl_pips=float(body["pl_pips"]) if body.get("pl_pips") is not None else None,
+        pl_dollars=float(body["pl_dollars"]) if body.get("pl_dollars") is not None else None,
+        notes=body.get("notes"),
+    )
+    if not ok:
+        return jsonify({"error": "trade not found"}), 404
+    return jsonify({"id": trade_id, "status": body["result"]})
+
+
+@app.get("/journal/trades")
+def journal_list():
+    try:
+        limit = int(request.args.get("limit", 50))
+    except ValueError:
+        limit = 50
+    trades = cache.get_trades(
+        limit=limit,
+        pair=request.args.get("pair"),
+        setup=request.args.get("setup"),
+    )
+    return jsonify({"count": len(trades), "trades": trades})
+
+
+@app.get("/journal/stats")
+def journal_stats():
+    stats = cache.get_journal_stats(
+        setup=request.args.get("setup"),
+        pair=request.args.get("pair"),
+    )
+    return jsonify(stats)
+
+
+@app.post("/backtest")
+def run_backtest():
+    body = request.get_json(silent=True) or {}
+    pair  = (body.get("pair") or "EUR/USD").upper()
+    start = body.get("start")
+    end   = body.get("end")
+    if not start or not end:
+        return jsonify({"error": "start and end timestamps required"}), 400
+    try:
+        result = bt.run(
+            pair=pair,
+            start_ts=int(start),
+            end_ts=int(end),
+            setups=body.get("setups", ["safety"]),
+            min_gates=int(body.get("min_gates", 5)),
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify(result)
+
+
 @app.post("/refresh")
 def refresh():
     only = request.args.get("symbol")
@@ -82,9 +379,13 @@ def refresh():
 def main():
     cache.init_db()
     log.info("DB initialised at %s", cache.DB_PATH if False else "candles.db")
+    try:
+        forexfactory.get_events()
+    except Exception as e:
+        log.warning("news prefetch failed: %s", e)
     scheduler.start()
-    log.info("listening on http://%s:%d", SERVICE_HOST, SERVICE_PORT)
-    app.run(host=SERVICE_HOST, port=SERVICE_PORT, debug=False, use_reloader=False)
+    log.info("listening on http://%s:%d (with WebSocket)", SERVICE_HOST, SERVICE_PORT)
+    sio.run(app, host=SERVICE_HOST, port=SERVICE_PORT, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
 
 
 if __name__ == "__main__":

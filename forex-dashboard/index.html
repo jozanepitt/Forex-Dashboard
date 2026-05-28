@@ -136,6 +136,20 @@ td.mono{font-family:var(--font-mono)}
 .signal-badge.sell{background:rgba(255,23,68,.06);color:var(--red-dim);border:1px solid rgba(255,23,68,.15)}
 .signal-badge.strong-sell{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
 .signal-badge.wait{background:var(--grey-bg);color:var(--text-muted);border:1px solid var(--grey-border)}
+.setup-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:.65rem;font-weight:700;letter-spacing:.04em;margin-top:3px}
+.setup-badge.bullish{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.setup-badge.bearish{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.setup-badge.neutral{background:var(--grey-bg);color:var(--text-muted);border:1px solid var(--grey-border)}
+.setup-gates{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.setup-card{background:var(--card-bg,rgba(255,255,255,.02));border:1px solid var(--border,rgba(255,255,255,.08));border-radius:6px;padding:10px 12px}
+.setup-card .setup-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.setup-card .setup-name{font-size:.85rem;font-weight:700;color:var(--text-primary)}
+.setup-card .gate-row{display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text-secondary);padding:2px 0}
+.setup-card .gate-row .dot{width:6px;height:6px;border-radius:50%}
+.setup-card .gate-row .dot.pass{background:var(--green)} .setup-card .gate-row .dot.fail{background:var(--red)}
+.setup-targets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;font-size:.7rem}
+.setup-targets div{display:flex;flex-direction:column} .setup-targets .lbl{color:var(--text-muted);font-size:.62rem;text-transform:uppercase;letter-spacing:.04em}
+.setup-targets .val{font-family:'JetBrains Mono',monospace;color:var(--text-primary)}
 
 .grade-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:4px;font-size:.7rem;font-weight:800;margin-left:6px}
 .grade-badge.grade-a{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
@@ -168,9 +182,10 @@ td.mono{font-family:var(--font-mono)}
 .dist800.normal{color:var(--text-muted)}
 
 .wyckoff-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:3px;font-size:.65rem;font-weight:600}
-.wyckoff-badge.spring{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
-.wyckoff-badge.upthrust{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
-.wyckoff-badge.range{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.wyckoff-badge.spring,.wyckoff-badge.testofspring,.wyckoff-badge.sos,.wyckoff-badge.lps,.wyckoff-badge.markup,.wyckoff-badge.sc{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.wyckoff-badge.upthrust,.wyckoff-badge.utad,.wyckoff-badge.testofutad,.wyckoff-badge.sow,.wyckoff-badge.lpsy,.wyckoff-badge.markdown,.wyckoff-badge.bc{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.wyckoff-badge.range,.wyckoff-badge.st,.wyckoff-badge.ar{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border)}
+.wyckoff-badge.evr_divergence{background:var(--orange-bg);color:var(--orange);border:1px solid var(--orange-border)}
 .wyckoff-badge.none{background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border)}
 .lrsi-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:3px;font-size:.65rem;font-weight:600}
 .lrsi-badge.overbought{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
@@ -278,7 +293,96 @@ td.mono{font-family:var(--font-mono)}
   .modal{width:95%;margin:10px}
   .mode-tabs{margin:12px 16px 0}
 }
+.ws-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-muted);margin-left:6px;vertical-align:middle;transition:background .3s}
+.ws-dot.connected{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ws-dot.disconnected{background:var(--red)}
+/* News ticker */
+.news-ticker{overflow:hidden;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.06);height:26px;display:flex;align-items:center;font-size:.7rem;letter-spacing:.04em}
+.news-ticker.hidden{display:none}
+.news-ticker-label{flex-shrink:0;padding:0 10px;color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:.65rem}
+.news-ticker-track{flex:1;overflow:hidden;white-space:nowrap;position:relative}
+.news-ticker-inner{display:inline-block;animation:tickerScroll 60s linear infinite;padding-left:100%}
+.news-ticker-inner:hover{animation-play-state:paused}
+@keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+.news-item{display:inline-block;margin-right:40px}
+.news-item.high{color:#ff6b6b}
+.news-item.medium{color:#ffd93d}
+.news-item.low{color:var(--text-muted)}
+.news-block-badge{display:inline-block;background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.3);color:#ff6b6b;font-size:.6rem;padding:1px 4px;border-radius:3px;vertical-align:middle;margin-left:4px}
+/* 1AM CRT scanner (reuses trend-* class names for layout) */
+.trend-controls{display:flex;align-items:center;gap:14px;padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;flex-wrap:wrap}
+.trend-control-group{display:flex;flex-direction:column;gap:4px}
+.trend-control-group label{font-size:.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.trend-control-group input{background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:6px 10px;font-size:.85rem;width:140px}
+.trend-refresh-btn{background:#38bdf8;color:#0a0a0a;border:none;border-radius:6px;padding:8px 16px;font-weight:600;font-size:.78rem;cursor:pointer;align-self:flex-end}
+.trend-refresh-btn:hover{background:#0ea5e9}
+.trend-refresh-btn:disabled{opacity:.5;cursor:not-allowed}
+.trend-meta{margin-left:auto;font-size:.7rem;color:var(--text-muted)}
+.trend-summary{padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;font-size:.8rem;color:var(--text-secondary);margin-bottom:12px}
+.trend-summary .longs{color:var(--green);font-weight:600}
+.trend-summary .shorts{color:var(--red);font-weight:600}
+.trend-table{width:100%;border-collapse:collapse}
+.trend-table th,.trend-table td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);font-size:.82rem}
+.trend-table th{background:var(--bg-surface);font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.trend-table tr:hover{background:var(--bg-elevated)}
+.trend-footer{padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;margin-top:14px;font-size:.78rem;color:var(--text-secondary);line-height:1.6}
+/* Journal */
+.mode-tab[data-mode="snr-m15"].active{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)}
+.mode-tab[data-mode="journal"].active{background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
+.mode-tab[data-mode="backtest"].active{background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
+#backtestView{display:none;padding:0 24px 24px}
+#backtestView.active{display:block}
+.bt-header{display:flex;align-items:center;gap:12px;margin:16px 0 14px;flex-wrap:wrap}
+.bt-header label{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.bt-header select,.bt-header input{background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:6px 10px;font-size:.78rem}
+.btn-run-bt{background:rgba(251,146,60,.2);color:#fb923c;border:1px solid rgba(251,146,60,.4);border-radius:6px;padding:7px 18px;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.btn-run-bt:hover{background:rgba(251,146,60,.35)}
+.bt-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.bt-stat{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:11px 14px}
+.bt-stat-label{font-size:.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.bt-stat-value{font-size:1.25rem;font-weight:700;font-family:var(--font-mono)}
+.bt-chart-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px}
+.bt-trades-wrap{overflow-x:auto;margin-top:8px}
+.bt-trades{width:100%;border-collapse:collapse;font-size:.76rem}
+.bt-trades th{padding:7px 10px;text-align:left;color:var(--text-muted);font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap}
+.bt-trades td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04)}
+#journalView{display:none;padding:0 24px 24px}
+#journalView.active{display:block}
+.journal-header{display:flex;align-items:center;justify-content:space-between;margin:16px 0 12px}
+.journal-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.jstat{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.jstat-label{font-size:.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.jstat-value{font-size:1.3rem;font-weight:700;font-family:var(--font-mono)}
+.journal-table-wrap{overflow-x:auto}
+.journal-table{width:100%;border-collapse:collapse;font-size:.78rem}
+.journal-table th{padding:8px 10px;text-align:left;color:var(--text-muted);font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap}
+.journal-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+.journal-table tr:hover td{background:rgba(255,255,255,.02)}
+.jtag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.65rem;font-weight:700;text-transform:uppercase}
+.jtag.win{background:rgba(0,230,118,.12);color:var(--green);border:1px solid var(--green-border)}
+.jtag.loss{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.jtag.be{background:rgba(255,255,255,.06);color:var(--text-muted);border:1px solid var(--border)}
+.jtag.open{background:rgba(255,211,77,.08);color:var(--yellow);border:1px solid rgba(255,211,77,.2)}
+.btn-log-trade{background:rgba(168,85,247,.15);color:#a855f7;border:1px solid rgba(168,85,247,.3);border-radius:5px;padding:3px 9px;font-size:.65rem;font-weight:700;cursor:pointer;margin-top:4px;display:block}
+.btn-log-trade:hover{background:rgba(168,85,247,.25)}
+/* Log Trade Modal */
+#logTradeModal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;display:none;align-items:center;justify-content:center}
+#logTradeModal.active{display:flex}
+.log-trade-box{background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:12px;padding:24px;width:440px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.log-trade-box h3{margin:0 0 16px;font-size:1rem;color:var(--text-primary)}
+.lf-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.lf-row.full{grid-template-columns:1fr}
+.lf-group label{display:block;font-size:.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.lf-group input,.lf-group select,.lf-group textarea{width:100%;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:7px 10px;font-size:.8rem;font-family:var(--font-mono);box-sizing:border-box}
+.lf-group textarea{resize:vertical;min-height:60px;font-family:var(--font-sans)}
+.lf-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.btn-submit-trade{background:rgba(168,85,247,.2);color:#a855f7;border:1px solid rgba(168,85,247,.4);border-radius:6px;padding:8px 18px;font-size:.8rem;font-weight:700;cursor:pointer}
+.btn-submit-trade:hover{background:rgba(168,85,247,.35)}
+/* Close Trade inline */
+.btn-close-trade{background:rgba(255,80,80,.1);color:var(--red);border:1px solid rgba(255,80,80,.2);border-radius:4px;padding:2px 7px;font-size:.65rem;cursor:pointer}
+.btn-close-trade:hover{background:rgba(255,80,80,.2)}
 </style>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
 
@@ -291,6 +395,11 @@ td.mono{font-family:var(--font-mono)}
     <div class="api-status" id="apiStatus">
       <div class="status-dot"></div>
       <span class="api-status-text" id="apiStatusText">Connecting...</span>
+      <span class="ws-dot disconnected" id="wsDot" title="WebSocket: disconnected"></span>
+    </div>
+    <div class="api-status" id="mt5Status" title="MT5 terminal status">
+      <div class="status-dot"></div>
+      <span class="api-status-text" id="mt5StatusText">MT5: --</span>
     </div>
     <div class="rate-limit" id="rateLimit">API: --/--</div>
     <div class="refresh-timer" id="refreshTimer">Next refresh: 30m</div>
@@ -303,8 +412,18 @@ td.mono{font-family:var(--font-mono)}
 
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
-  <button class="mode-tab" data-mode="wyckoff">🌊 Wyckoff Structure</button>
-  <button class="mode-tab" data-mode="combined">⚡ Combined View</button>
+  <button class="mode-tab" data-mode="crt">🕐 1AM CRT</button>
+  <button class="mode-tab" data-mode="snr">🇲🇾 SNR Emperor</button>
+  <button class="mode-tab" data-mode="snr-m15">⚡ M15 SNR</button>
+  <button class="mode-tab" data-mode="journal">📒 Journal</button>
+  <button class="mode-tab" data-mode="backtest">📈 Backtest</button>
+</div>
+
+<div class="news-ticker hidden" id="newsTicker">
+  <span class="news-ticker-label">NEWS</span>
+  <div class="news-ticker-track">
+    <span class="news-ticker-inner" id="newsTickerInner">Loading...</span>
+  </div>
 </div>
 
 <div class="sb-timer-bar active" id="sbTimerBar">
@@ -334,7 +453,170 @@ td.mono{font-family:var(--font-mono)}
 
 <div class="stats-bar" id="statsBar"></div>
 
-<div class="controls">
+<!-- ── Journal View ─────────────────────────────────────────────────── -->
+<div id="journalView">
+  <div class="journal-header">
+    <h2 style="margin:0;font-size:1rem;color:var(--text-primary)">📒 Trade Journal</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="journalSetupFilter" style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:5px 8px;font-size:.75rem">
+        <option value="">All Setups</option>
+        <option value="safety">Safety Trade</option>
+        <option value="trade22">22 Trade</option>
+        <option value="bounce5050">50/50 Bounce</option>
+        <option value="threeDrive">Three-Drive</option>
+        <option value="manual">Manual</option>
+      </select>
+      <button onclick="loadJournal()" style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:5px 10px;font-size:.75rem;cursor:pointer">↻ Refresh</button>
+    </div>
+  </div>
+  <div class="journal-stats" id="journalStats">
+    <div class="jstat"><div class="jstat-label">Total Trades</div><div class="jstat-value" id="jTotalTrades">—</div></div>
+    <div class="jstat"><div class="jstat-label">Win Rate</div><div class="jstat-value" id="jWinRate" style="color:var(--green)">—</div></div>
+    <div class="jstat"><div class="jstat-label">Avg P&L (pips)</div><div class="jstat-value" id="jAvgPL">—</div></div>
+    <div class="jstat"><div class="jstat-label">Expectancy</div><div class="jstat-value" id="jExpectancy">—</div></div>
+    <div class="jstat"><div class="jstat-label">Avg Win</div><div class="jstat-value" id="jAvgWin" style="color:var(--green)">—</div></div>
+    <div class="jstat"><div class="jstat-label">Avg Loss</div><div class="jstat-value" id="jAvgLoss" style="color:var(--red)">—</div></div>
+  </div>
+  <div class="journal-table-wrap">
+    <table class="journal-table">
+      <thead><tr>
+        <th>#</th><th>Pair</th><th>Dir</th><th>Setup</th>
+        <th>Entry</th><th>SL</th><th>TP1</th><th>Exit</th>
+        <th>P&L (pips)</th><th>Result</th><th>Opened</th><th>Action</th>
+      </tr></thead>
+      <tbody id="journalTableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">No trades yet — log your first trade from a pair card.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Backtest View ──────────────────────────────────────────────────── -->
+<div id="backtestView">
+  <div class="bt-header">
+    <div><label>Pair</label><br>
+      <select id="btPair">
+        <option>EUR/USD</option><option>GBP/USD</option><option>USD/JPY</option>
+        <option>USD/CHF</option><option>AUD/USD</option><option>USD/CAD</option>
+        <option>NZD/USD</option><option>EUR/GBP</option><option>EUR/JPY</option>
+        <option>EUR/CHF</option><option>EUR/AUD</option><option>GBP/JPY</option>
+        <option>GBP/CHF</option><option>AUD/JPY</option><option>CAD/JPY</option>
+      </select>
+    </div>
+    <div><label>Setup</label><br>
+      <select id="btSetup">
+        <option value="safety">Safety Trade</option>
+        <option value="trade22">22 Trade</option>
+        <option value="bounce5050">50/50 Bounce</option>
+        <option value="threeDrive">Three-Drive</option>
+      </select>
+    </div>
+    <div><label>From (days ago)</label><br>
+      <select id="btDays">
+        <option value="7">7 days</option>
+        <option value="14" selected>14 days</option>
+        <option value="30">30 days</option>
+        <option value="60">60 days</option>
+      </select>
+    </div>
+    <div><label>Min Gates</label><br>
+      <select id="btMinGates">
+        <option value="4">4+</option>
+        <option value="5" selected>5+</option>
+        <option value="6">6+</option>
+        <option value="7">7+</option>
+      </select>
+    </div>
+    <div style="align-self:flex-end">
+      <button class="btn-run-bt" onclick="runBacktest()">▶ Run Backtest</button>
+    </div>
+    <div id="btStatus" style="align-self:flex-end;font-size:.75rem;color:var(--text-muted)"></div>
+  </div>
+
+  <div class="bt-stats" id="btStats" style="display:none">
+    <div class="bt-stat"><div class="bt-stat-label">Trades</div><div class="bt-stat-value" id="btTrades">—</div></div>
+    <div class="bt-stat"><div class="bt-stat-label">Win Rate</div><div class="bt-stat-value" id="btWinRate" style="color:var(--green)">—</div></div>
+    <div class="bt-stat"><div class="bt-stat-label">Total Pips</div><div class="bt-stat-value" id="btTotalPips">—</div></div>
+    <div class="bt-stat"><div class="bt-stat-label">Expectancy</div><div class="bt-stat-value" id="btExpectancy">—</div></div>
+    <div class="bt-stat"><div class="bt-stat-label">Avg Win</div><div class="bt-stat-value" id="btAvgWin" style="color:var(--green)">—</div></div>
+    <div class="bt-stat"><div class="bt-stat-label">Avg Loss</div><div class="bt-stat-value" id="btAvgLoss" style="color:var(--red)">—</div></div>
+    <div class="bt-stat"><div class="bt-stat-label">Max Drawdown</div><div class="bt-stat-value" id="btMaxDD" style="color:var(--red)">—</div></div>
+  </div>
+
+  <div class="bt-chart-wrap" id="btChartWrap" style="display:none">
+    <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:10px;font-weight:600">EQUITY CURVE (pips)</div>
+    <canvas id="btChart" height="120"></canvas>
+  </div>
+
+  <div class="bt-trades-wrap" id="btTradesWrap" style="display:none">
+    <table class="bt-trades">
+      <thead><tr>
+        <th>#</th><th>Direction</th><th>Entry</th><th>SL</th><th>TP1</th>
+        <th>Exit</th><th>Pips</th><th>Result</th><th>Gates</th><th>Opened</th>
+      </tr></thead>
+      <tbody id="btTradesList"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Log Trade Modal ───────────────────────────────────────────────── -->
+<div id="logTradeModal">
+  <div class="log-trade-box">
+    <h3>🪙 Log Trade</h3>
+    <div class="lf-row">
+      <div class="lf-group"><label>Pair</label><input id="ltPair" readonly></div>
+      <div class="lf-group"><label>Direction</label>
+        <select id="ltDirection"><option value="bullish">Long (Buy)</option><option value="bearish">Short (Sell)</option></select>
+      </div>
+    </div>
+    <div class="lf-row">
+      <div class="lf-group"><label>Setup</label>
+        <select id="ltSetup">
+          <option value="manual">Manual</option>
+          <option value="safety">Safety Trade</option>
+          <option value="trade22">22 Trade</option>
+          <option value="bounce5050">50/50 Bounce</option>
+          <option value="threeDrive">Three-Drive</option>
+        </select>
+      </div>
+      <div class="lf-group"><label>Signal Score</label><input id="ltScore" type="number" step="0.1"></div>
+    </div>
+    <div class="lf-row">
+      <div class="lf-group"><label>Entry</label><input id="ltEntry" type="number" step="0.00001"></div>
+      <div class="lf-group"><label>Stop Loss</label><input id="ltSL" type="number" step="0.00001"></div>
+    </div>
+    <div class="lf-row">
+      <div class="lf-group"><label>TP1</label><input id="ltTP1" type="number" step="0.00001"></div>
+      <div class="lf-group"><label>TP2 (optional)</label><input id="ltTP2" type="number" step="0.00001"></div>
+    </div>
+    <div class="lf-row full">
+      <div class="lf-group"><label>Notes</label><textarea id="ltNotes" placeholder="e.g. London KZ, 2nd TDI leg confirmed..."></textarea></div>
+    </div>
+    <div class="lf-actions">
+      <button onclick="closeLogTradeModal()" style="background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:8px 14px;font-size:.8rem;cursor:pointer">Cancel</button>
+      <button class="btn-submit-trade" onclick="submitLogTrade()">Log Trade</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Close Trade Modal ─────────────────────────────────────────────── -->
+<div id="closeTradeModal" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;display:none;align-items:center;justify-content:center">
+  <div class="log-trade-box" style="width:340px">
+    <h3>✅ Close Trade</h3>
+    <input type="hidden" id="ctTradeId">
+    <div class="lf-row full"><div class="lf-group"><label>Exit Price</label><input id="ctExit" type="number" step="0.00001"></div></div>
+    <div class="lf-row full"><div class="lf-group"><label>P&L (pips)</label><input id="ctPLPips" type="number" step="0.1" placeholder="e.g. +25 or -15"></div></div>
+    <div class="lf-row full">
+      <div class="lf-group"><label>Result</label>
+        <select id="ctResult"><option value="win">Win</option><option value="loss">Loss</option><option value="be">Break Even</option></select>
+      </div>
+    </div>
+    <div class="lf-actions">
+      <button onclick="document.getElementById('closeTradeModal').style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:8px 14px;font-size:.8rem;cursor:pointer">Cancel</button>
+      <button class="btn-submit-trade" onclick="submitCloseTrade()">Close Trade</button>
+    </div>
+  </div>
+</div>
+
+<div class="controls" id="controlsBar">
   <div class="filter-group" id="filterGroup">
     <button class="filter-btn active" data-filter="all">All Signals</button>
     <button class="filter-btn" data-filter="strong-buy">Strong Buy</button>
@@ -349,6 +631,11 @@ td.mono{font-family:var(--font-mono)}
     <button class="filter-btn" data-type="major">Majors</button>
     <button class="filter-btn" data-type="minor">Minors</button>
     <button class="filter-btn" data-type="exotic">Exotics</button>
+    <button class="filter-btn" data-type="metal">Metals</button>
+  </div>
+  <div class="filter-group" id="confidenceGroup">
+    <button class="filter-btn active" data-confidence="high" style="color:var(--green)">🎯 High Only</button>
+    <button class="filter-btn" data-confidence="all">All Confidence</button>
   </div>
   <select class="sort-select" id="sortSelect">
     <option value="score-desc">Score: Best → Worst</option>
@@ -409,7 +696,7 @@ td.mono{font-family:var(--font-mono)}
     </div>
   </div>
 
-  <div class="table-container">
+  <div class="table-container" id="btmmTableContainer">
     <table>
       <thead id="tableHead"></thead>
       <tbody id="tableBody"></tbody>
@@ -426,6 +713,123 @@ td.mono{font-family:var(--font-mono)}
       <span style="margin-left:auto;font-size:.65rem;color:var(--text-muted)">Click any row for detailed chart & analysis</span>
     </div>
     <div class="last-updated" id="lastUpdated">Last updated: --</div>
+  </div>
+
+  <!-- ── 1AM CRT (MADO / @Im-speculator) ─────────────────────────────────── -->
+  <div class="table-container" id="crtContainer" style="display:none">
+    <div class="trend-controls">
+      <div class="trend-control-group" style="min-width:260px">
+        <label>NY Anchors (converted to your SAST)</label>
+        <div id="crtAnchorsLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Loading anchors…</div>
+      </div>
+      <button class="trend-refresh-btn" id="crtRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="crtMeta">5PM CBDR · 9PM Asia · 1AM CRT · Key time 2–4AM NY</div>
+    </div>
+    <div class="trend-summary" id="crtSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table crt-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>DOL</th>
+          <th>CRT Range</th>
+          <th>1AM Candle</th>
+          <th>Profile</th>
+          <th>OHLC</th>
+          <th>SMT</th>
+          <th>Setup</th>
+          <th>Entry</th>
+          <th>Key Time (SAST)</th>
+          <th>Grade</th>
+        </tr>
+      </thead>
+      <tbody id="crtTableBody"><tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>1AM CRT (MADO method):</b> 5PM &amp; 9PM NY H4 candles form the CRT range (CBDR + Asia).
+      The 1AM NY H4 candle is the manipulation/expansion. Buy <b>below</b> the 1AM open if low printed first (OLHC).
+      Sell <b>above</b> the 1AM open if high printed first (OHLC). Entry on M15 OB during the
+      <b>2–3AM NY (London open)</b> or <b>3–4AM NY (Silver Bullet)</b> key-time windows.
+      SMT compares EUR/USD ↔ GBP/USD divergence. All times shown are SAST (NY-anchored with auto-DST).
+    </div>
+  </div>
+
+  <!-- ── Malaysian SNR Emperor ─────────────────────────────────────────── -->
+  <div class="table-container" id="snrContainer" style="display:none">
+    <div class="trend-controls">
+      <div class="trend-control-group" style="min-width:260px">
+        <label>🇲🇾 Malaysian SNR Emperor</label>
+        <div id="snrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Close-to-open junctions · Fresh/Unfresh/MISS · Storyline · Emperor Setups 1-4</div>
+      </div>
+      <button class="trend-refresh-btn" id="snrRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="snrMeta">5-Action SOP: Zone → Rejection → Breakout → Confluence → Entry</div>
+    </div>
+    <div class="trend-summary" id="snrSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table snr-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Price</th>
+          <th>Nearest S</th>
+          <th>Nearest R</th>
+          <th>Levels</th>
+          <th>Storyline</th>
+          <th>Setup</th>
+          <th>Engulfing</th>
+          <th>Trendline</th>
+          <th>Roadblocks</th>
+          <th>Signal</th>
+          <th>Grade</th>
+        </tr>
+      </thead>
+      <tbody id="snrTableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>Malaysian SNR Emperor:</b> Levels from close-to-open junctions (A-shape resistance, V-shape support).
+      Types: Classic, RBS/SBR, Gap, QMR. <b>Fresh</b> = untouched, <b>Unfresh</b> = wick-touched, <b>MISS</b> = validated (candles passed without touching).
+      <b>Storyline</b> = 4 rules: same-TF levels, rejection, H4 breakout confirmation, roadblocks.
+      <b>Setups:</b> 1 = High risk (50/50), 2 = Medium (rejection+refinement), 3 = Low (BO+QM pullback), 4 = Continuation.
+      <b>Engulfing:</b> Perfect, Quasimodo, Hidden + PEZ (intact zone) / FEZ (broken zone).
+      <b>X-Factor:</b> Trendline + SNR convergence = highest confluence.
+    </div>
+  </div>
+
+  <!-- ── M15 SNR Fast Scanner ────────────────────────────────────────────── -->
+  <div class="table-container" id="snrM15Container" style="display:none">
+    <div class="trend-controls">
+      <div class="trend-control-group" style="min-width:260px">
+        <label>⚡ M15 SNR Fast Scanner</label>
+        <div id="snrM15StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">H1 levels · M15 breakout/engulfing · Catches entries hours earlier</div>
+      </div>
+      <button class="trend-refresh-btn" id="snrM15RefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="snrM15Meta">Same Emperor methodology — faster timeframes: H1→M15→M5</div>
+    </div>
+    <div class="trend-summary" id="snrM15Summary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table snr-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Price</th>
+          <th>Nearest S</th>
+          <th>Nearest R</th>
+          <th>Levels</th>
+          <th>Storyline</th>
+          <th>Setup</th>
+          <th>Engulfing</th>
+          <th>Trendline</th>
+          <th>Roadblocks</th>
+          <th>Signal</th>
+          <th>Grade</th>
+        </tr>
+      </thead>
+      <tbody id="snrM15TableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>M15 SNR Fast Scanner:</b> Same Malaysian SNR Emperor methodology shifted down one timeframe.
+      <b>H1</b> close-to-open junctions for level marking (refreshes every hour vs once daily).
+      <b>M15</b> for breakout confirmation, engulfing patterns, storyline, and trendlines.
+      Catches the same setups <b>hours earlier</b> than the H4 scanner. Tighter stop losses.
+      Discord alerts fire with ⚡ M15 prefix.
+    </div>
   </div>
 </div>
 
@@ -493,12 +897,16 @@ const FOREX_PAIRS = [
   { symbol:'GBP/JPY', base:195.40, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
   { symbol:'GBP/CHF', base:1.1160, type:'minor', pip:0.0001, decimals:5, pipValue:10.2 },
   { symbol:'AUD/JPY', base:100.70, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
-  { symbol:'CAD/JPY', base:113.20, type:'minor', pip:0.01, decimals:3, pipValue:6.5 }
+  { symbol:'CAD/JPY', base:113.20, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
+  { symbol:'XAU/USD', base:2050.0, type:'metal', pip:0.10, decimals:2, pipValue:10 },
+  { symbol:'XAG/USD', base:24.50,  type:'metal', pip:0.01, decimals:3, pipValue:50 },
+  { symbol:'DE30',    base:25000,  type:'index', pip:1.0,  decimals:1, pipValue:1 }
 ];
 
 const PRIORITY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
-  'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD'
+  'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD',
+  'XAU/USD', 'XAG/USD', 'DE30'
 ];
 
 // API keys live in the local fetcher service (service/.env), not in the browser.
@@ -507,14 +915,19 @@ let API_KEYS = [
   { name: 'key1',       used: 0, limit: 800, active: false, exhausted: false },
   { name: 'JZPITT01',   used: 0, limit: 800, active: false, exhausted: false },
   { name: 'jozanepitt', used: 0, limit: 800, active: false, exhausted: false },
-  { name: 'JZPITT02',   used: 0, limit: 800, active: false, exhausted: false }
+  { name: 'JZPITT02',   used: 0, limit: 800, active: false, exhausted: false },
+  { name: 'JZ0',        used: 0, limit: 800, active: false, exhausted: false },
+  { name: 'JZ04',       used: 0, limit: 800, active: false, exhausted: false }
 ];
+
+// Mirror of /status `mt5` field. Updated each syncServiceStatus() tick.
+let MT5_STATUS = null;
 
 const API_CONFIG = {
   baseUrl: localStorage.getItem('fx_service_url') || 'http://127.0.0.1:3002',
   endpoint: '/candles',
   interval: '15min',
-  outputSize: parseInt(localStorage.getItem('twelvedata_depth') || '800'),
+  outputSize: parseInt(localStorage.getItem('twelvedata_depth') || '3200'),
   refreshInterval: parseInt(localStorage.getItem('twelvedata_refresh') || '30') * 60 * 1000,
 };
 
@@ -533,9 +946,11 @@ async function syncServiceStatus() {
         lastError: k.lastError || null
       }));
     }
+    MT5_STATUS = data.mt5 || null;
     return data;
   } catch (err) {
     API_KEYS.forEach(k => { k.active = false; });
+    MT5_STATUS = null;
     return null;
   }
 }
@@ -554,18 +969,21 @@ const STRATEGY = {
 
 const BTMM_KILL_ZONES = [
   // BTMM Official Kill Zones — times in GMT (UTC), displayed as SAST (UTC+2, fixed, no DST)
-  // London Kill Zone:  09:15–11:15 GMT = 11:15–13:15 SAST
+  // London Kill Zone:  07:00–10:00 GMT = 09:00–12:00 SAST
   // LDN/NY Overlap:    12:00–13:00 GMT = 14:00–15:00 SAST
-  // NY Kill Zone:      14:15–15:15 GMT = 16:15–17:15 SAST
-  { name: 'London Kill Zone', startGMT: 9.25,  endGMT: 11.25, weight: 1.0,  session: 'london',  sastStart: '11:15', sastEnd: '13:15' },
+  // NY Kill Zone:      13:00–16:00 GMT = 15:00–18:00 SAST
+  // Asian Kill Zone:   19:00–22:00 GMT = 21:00–00:00 SAST (22 Trade setup window)
+  { name: 'London Kill Zone', startGMT:  7.0,  endGMT: 10.0,  weight: 1.0,  session: 'london',  sastStart: '09:00', sastEnd: '12:00' },
   { name: 'LDN/NY Overlap',   startGMT: 12.0,  endGMT: 13.0,  weight: 0.9,  session: 'overlap', sastStart: '14:00', sastEnd: '15:00' },
-  { name: 'NY Kill Zone',     startGMT: 14.25, endGMT: 15.25, weight: 0.85, session: 'ny',      sastStart: '16:15', sastEnd: '17:15' }
+  { name: 'NY Kill Zone',     startGMT: 13.0,  endGMT: 16.0,  weight: 0.85, session: 'ny',      sastStart: '15:00', sastEnd: '18:00' },
+  { name: 'Asian Kill Zone',  startGMT: 19.0,  endGMT: 22.0,  weight: 0.7,  session: 'asian',   sastStart: '21:00', sastEnd: '00:00' },
 ];
 
 let pairData = {};
 let currentMode = 'indicator';
 let currentFilter = 'all';
 let currentTypeFilter = 'all';
+let currentConfidenceFilter = 'high';   // default: only show high-confidence trades
 let currentSort = 'score-desc';
 let searchTerm = '';
 let refreshCountdown = API_CONFIG.refreshInterval / 1000;
@@ -677,7 +1095,7 @@ function detectAsianRange(candles, pair) {
 }
 
 // Stop Hunt Detection - BTMM 3-Push Pattern
-function detectStopHunt(candles, asianRange) {
+function detectStopHunt(candles, asianRange, pair) {
   if (!candles || !asianRange || candles.length < 50) return null;
   
   const recentCandles = candles.slice(-50);
@@ -690,8 +1108,11 @@ function detectStopHunt(candles, asianRange) {
   for (let i = recentCandles.length - 1; i >= 0; i--) {
     const c = recentCandles[i];
     // Use wicks (high/low) — stop hunts pierce the range via wick, close rarely confirms
-    const aboveAsia = c.high > asianRange.high + (asianRange.range * 0.5);
-    const belowAsia = c.low  < asianRange.low  - (asianRange.range * 0.5);
+    // BTMM spec: 25–50 pips beyond the range (fixed pip threshold, not % of range)
+    const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+    const huntThreshold = 25 * pip;
+    const aboveAsia = c.high > asianRange.high + huntThreshold;
+    const belowAsia = c.low  < asianRange.low  - huntThreshold;
     
     if ((aboveAsia || belowAsia) && !inPush) {
       inPush = true;
@@ -790,27 +1211,46 @@ function detectMWPattern(candles, lookback = 50) {
 }
 
 // Level Counting - BTMM 3-Level Cycle Detection
-function detectLevelCount(candles, ema50, ema200) {
+function detectLevelCount(candles, ema13, ema50, ema200) {
   if (!candles || candles.length < 50 || !ema50 || !ema200) return { level: 'unknown' };
-  
-  const recent = candles.slice(-50);
-  const closes = recent.map(c => c.close);
-  const e50 = ema50.slice(-50);
-  const e200 = ema200.slice(-50);
-  
-  let score = 0;
-  for (let i = 0; i < closes.length; i++) {
-    if (e50[i] > e200[i]) score++;
-    else score--;
+
+  const len = 50;
+  const e13  = (ema13  || []).slice(-len);
+  const e50  = ema50.slice(-len);
+  const e200 = ema200.slice(-len);
+
+  // Level I: EMA13 crossed EMA50 — measure how consistently 13 is above/below 50
+  let score13_50 = 0;
+  for (let i = 0; i < e50.length; i++) {
+    if (e13[i] !== undefined) {
+      if (e13[i] > e50[i]) score13_50++;
+      else score13_50--;
+    }
   }
-  
-  const trendRatio = score / closes.length;
-  
-  if (trendRatio > 0.6) return { level: 'I', trend: 'bullish', consolidation: false };
-  if (trendRatio > 0.2) return { level: 'II', trend: 'transition', consolidation: false };
-  if (trendRatio < -0.6) return { level: 'III', trend: 'bearish', consolidation: true };
-  if (trendRatio < -0.2) return { level: 'II', trend: 'transition', consolidation: false };
-  
+
+  // Level II: EMA50 vs EMA200 — how consistently 50 is above/below 200
+  let score50_200 = 0;
+  for (let i = 0; i < e50.length; i++) {
+    if (e50[i] > e200[i]) score50_200++;
+    else score50_200--;
+  }
+
+  const r13  = score13_50  / e50.length;  // +1 = all bullish, -1 = all bearish
+  const r200 = score50_200 / e50.length;
+
+  // BTMM Level rules:
+  // Level I:   EMA13 has crossed EMA50 (strong momentum, early trend)
+  // Level II:  EMA50 crosses EMA200 (confirmed trend continuation)
+  // Level III: Choppy / extended — EMA stack not aligned
+  if (Math.abs(r13) > 0.6 && Math.abs(r200) < 0.4) {
+    return { level: 'I',   trend: r13 > 0 ? 'bullish' : 'bearish', consolidation: false };
+  }
+  if (Math.abs(r200) > 0.6) {
+    return { level: 'II',  trend: r200 > 0 ? 'bullish' : 'bearish', consolidation: false };
+  }
+  if (Math.abs(r13) > 0.2 || Math.abs(r200) > 0.2) {
+    return { level: 'II',  trend: 'transition', consolidation: false };
+  }
   return { level: 'III', trend: 'choppy', consolidation: true };
 }
 
@@ -1441,7 +1881,7 @@ function calcStochastic(candles, kPeriod = 14, dPeriod = 3) {
     const close = candles[i].close;
     kValues.push(high === low ? 50 : ((close - low) / (high - low)) * 100);
   }
-  const dValues = calcEMA(kValues, dPeriod);
+  const dValues = calcSMA(kValues, dPeriod);  // %D uses SMA per standard Stochastic spec
   return { k: kValues, d: dValues };
 }
 
@@ -1680,6 +2120,233 @@ function detectNameableCandle(candles) {
   return { found: false, name: 'None', direction: 'neutral' };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// NAMED BTMM SETUP DETECTORS
+// ═══════════════════════════════════════════════════════════════════════════
+// Each setup consolidates the component detectors above into a discrete,
+// named pattern (Safety Trade / 22 Trade / 50/50 Bounce / Three-Drive).
+// All return: { active, direction, gates: [{name, pass}], gatesPassed,
+//              entry, sl, tp1, tp2, confidence }
+// They are called from analyzePair after all btmm* component detectors run.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SETUP_NAMES = {
+  safety:     'Safety Trade',
+  trade22:    '22 Trade',
+  bounce5050: '50/50 Bounce',
+  threeDrive: 'Three-Drive'
+};
+
+function _gateResult(gates, direction, currentPrice, entry, sl, tp1, tp2) {
+  const passed = gates.filter(g => g.pass).length;
+  const required = Math.ceil(gates.length * 0.7);
+  const active = passed >= required && direction !== 'neutral';
+  const confidence = passed === gates.length ? 'high'
+                   : passed >= required + 1   ? 'medium'
+                   : passed >= required        ? 'low' : 'none';
+  return { active, direction, gates, gatesPassed: passed, gatesTotal: gates.length,
+           entry, sl, tp1, tp2, confidence };
+}
+
+// Safety Trade — the canonical BTMM setup. Kill zone + Asian box pierce + TDI 2nd leg
+// + 50/200 EMA bounce + nameable candle + Level II/III maturity.
+function detectSafetyTrade(pair, ctx) {
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+  const { activeZone, btmmAsianRange, btmmTDILeg, btmmEMA200Bounce,
+          btmmNameableCandle, btmmLevelCount, currentPrice, e50, e200,
+          nearEMA50Setup, btmmH1MTF } = ctx;
+
+  // Direction: TDI 2nd leg drives bias; nameable candle must agree
+  let direction = 'neutral';
+  if (btmmTDILeg && btmmTDILeg.leg === 2) direction = btmmTDILeg.direction;
+
+  const inKZ = !!activeZone && (activeZone.session === 'london' || activeZone.session === 'ny' || activeZone.session === 'overlap');
+  const asianValid = !!(btmmAsianRange && btmmAsianRange.valid);
+  const piercedAsian = !!(btmmAsianRange && (currentPrice <= btmmAsianRange.low + 5 * pip || currentPrice >= btmmAsianRange.high - 5 * pip));
+  const tdi2nd = !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence !== 'low');
+  const emaBounce = !!(btmmEMA200Bounce && btmmEMA200Bounce.active) || !!nearEMA50Setup;
+  const candleAgrees = !!(btmmNameableCandle && btmmNameableCandle.found && btmmNameableCandle.direction === direction);
+  const levelMatured = !!(btmmLevelCount && (btmmLevelCount.level === 'II' || btmmLevelCount.level === 'III'));
+  const h1Aligned = !btmmH1MTF || !btmmH1MTF.valid || btmmH1MTF.trend === direction || btmmH1MTF.trend === 'neutral';
+
+  const gates = [
+    { name: 'Kill Zone Active',          pass: inKZ },
+    { name: 'Asian Range Valid',         pass: asianValid },
+    { name: 'Asian Box Pierce/Touch',    pass: piercedAsian },
+    { name: 'TDI 2nd Leg Confirmed',     pass: tdi2nd },
+    { name: '50/200 EMA Bounce Zone',    pass: emaBounce },
+    { name: 'Nameable Candle Agrees',    pass: candleAgrees },
+    { name: '13/50 Cross Level II/III',  pass: levelMatured },
+    { name: 'H1 MTF Aligned',            pass: h1Aligned }
+  ];
+
+  // Entry: nameable candle close. SL: 5 pips beyond Asian extreme. TP1: opposite extreme.
+  let entry = 0, sl = 0, tp1 = 0, tp2 = 0;
+  if (direction !== 'neutral' && asianValid) {
+    entry = currentPrice;
+    if (direction === 'bullish') {
+      sl = btmmAsianRange.low - 5 * pip;
+      tp1 = btmmAsianRange.high;
+      tp2 = btmmAsianRange.high + (btmmAsianRange.high - btmmAsianRange.low);
+    } else {
+      sl = btmmAsianRange.high + 5 * pip;
+      tp1 = btmmAsianRange.low;
+      tp2 = btmmAsianRange.low - (btmmAsianRange.high - btmmAsianRange.low);
+    }
+  }
+
+  return _gateResult(gates, direction, currentPrice, entry, sl, tp1, tp2);
+}
+
+// 22 Trade — fires at 02:00 / 22:00 GMT (London prep + Asian open).
+// Fade the manipulation push that hunts stops at session boundary.
+function detect22Trade(pair, ctx) {
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+  const { btmmAsianRange, btmmStopHunt, btmmHODLOD, tdi, currentPrice, mainCandles } = ctx;
+
+  // Determine current GMT hour from latest candle datetime, fallback to clock.
+  let gmtHour;
+  const lastDt = mainCandles && mainCandles.length ? mainCandles[mainCandles.length - 1].datetime : null;
+  if (lastDt && lastDt.length >= 13) gmtHour = parseInt(lastDt.slice(11, 13), 10);
+  else gmtHour = new Date().getUTCHours();
+
+  const inWindow = (gmtHour >= 2 && gmtHour < 4) || (gmtHour >= 22 && gmtHour < 24);
+  const asianRangeOK = !!(btmmAsianRange && btmmAsianRange.valid && btmmAsianRange.pips >= 15);
+  const stopHuntActive = !!(btmmStopHunt && btmmStopHunt.active);
+
+  // Fade direction = opposite of stop-hunt direction
+  let direction = 'neutral';
+  if (stopHuntActive) direction = btmmStopHunt.direction === 'up' ? 'bearish' : 'bullish';
+  else if (btmmHODLOD && btmmHODLOD.retestingHOD) direction = 'bearish';
+  else if (btmmHODLOD && btmmHODLOD.retestingLOD) direction = 'bullish';
+
+  const tdiAgrees = !!tdi && (
+    (direction === 'bullish' && tdi.fast > tdi.slow && tdi.fast < 70) ||
+    (direction === 'bearish' && tdi.fast < tdi.slow && tdi.fast > 30)
+  );
+
+  const hodLodFade = !!(btmmHODLOD && btmmHODLOD.valid && (
+    (direction === 'bearish' && btmmHODLOD.retestingHOD) ||
+    (direction === 'bullish' && btmmHODLOD.retestingLOD)
+  ));
+
+  const gates = [
+    { name: '22:00 or 02:00 GMT Window', pass: inWindow },
+    { name: 'Asian Range ≥ 15 pips',     pass: asianRangeOK },
+    { name: 'Stop Hunt Detected',        pass: stopHuntActive },
+    { name: 'HOD/LOD Retest Fade',       pass: hodLodFade },
+    { name: 'TDI Not At Extreme',        pass: tdiAgrees }
+  ];
+
+  let entry = 0, sl = 0, tp1 = 0, tp2 = 0;
+  if (direction !== 'neutral' && asianRangeOK) {
+    entry = currentPrice;
+    const huntExtreme = direction === 'bearish'
+      ? (btmmStopHunt && btmmStopHunt.hod ? btmmStopHunt.hod : btmmAsianRange.high)
+      : (btmmStopHunt && btmmStopHunt.lod ? btmmStopHunt.lod : btmmAsianRange.low);
+    if (direction === 'bullish') {
+      sl = huntExtreme - 5 * pip;
+      tp1 = (btmmAsianRange.high + btmmAsianRange.low) / 2;
+      tp2 = btmmAsianRange.high;
+    } else {
+      sl = huntExtreme + 5 * pip;
+      tp1 = (btmmAsianRange.high + btmmAsianRange.low) / 2;
+      tp2 = btmmAsianRange.low;
+    }
+  }
+
+  return _gateResult(gates, direction, currentPrice, entry, sl, tp1, tp2);
+}
+
+// 50/50 Bounce — mid-day reversal off the 50 EMA in the lull between London close and NY open.
+function detectFiftyFiftyBounce(pair, ctx) {
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+  const { btmmLevelCount, btmmTDILeg, btmmH1MTF, currentPrice, e50, nearEMA50Setup,
+          mainCandles } = ctx;
+
+  // Direction: H1 MTF if valid, else TDI 1st leg direction
+  let direction = 'neutral';
+  if (btmmH1MTF && btmmH1MTF.valid && btmmH1MTF.trend !== 'neutral') direction = btmmH1MTF.trend;
+  else if (btmmTDILeg && btmmTDILeg.leg === 1) direction = btmmTDILeg.direction;
+
+  const dist50Pips = e50 ? Math.abs(currentPrice - e50) / pip : 999;
+  const closeTo50 = dist50Pips <= 8;
+  const freshCross = !!(btmmLevelCount && btmmLevelCount.level === 'I');
+  const tdiFirstLeg = !!(btmmTDILeg && btmmTDILeg.leg === 1 && btmmTDILeg.confidence !== 'low'
+                         && btmmTDILeg.direction === direction);
+  const h1Aligned = !!(btmmH1MTF && btmmH1MTF.valid && btmmH1MTF.trend === direction);
+
+  // Lull window: London close (16:00 GMT) to NY open (12:00 GMT next day) — broadly the slow zone
+  let gmtHour;
+  const lastDt = mainCandles && mainCandles.length ? mainCandles[mainCandles.length - 1].datetime : null;
+  if (lastDt && lastDt.length >= 13) gmtHour = parseInt(lastDt.slice(11, 13), 10);
+  else gmtHour = new Date().getUTCHours();
+  const inLull = (gmtHour >= 11 && gmtHour < 14) || (gmtHour >= 16 && gmtHour < 22);
+
+  const gates = [
+    { name: 'Price ≤ 8 pips from EMA(50)', pass: closeTo50 },
+    { name: '13/50 Cross Level I (fresh)', pass: freshCross },
+    { name: 'TDI 1st Leg Building',        pass: tdiFirstLeg },
+    { name: 'H1 MTF Aligned',              pass: h1Aligned },
+    { name: 'Mid-Day Lull Window',         pass: inLull }
+  ];
+
+  let entry = 0, sl = 0, tp1 = 0, tp2 = 0;
+  if (direction !== 'neutral' && e50) {
+    entry = currentPrice;
+    if (direction === 'bullish') {
+      sl = e50 - 12 * pip;
+      tp1 = currentPrice + 25 * pip;
+      tp2 = currentPrice + 50 * pip;
+    } else {
+      sl = e50 + 12 * pip;
+      tp1 = currentPrice - 25 * pip;
+      tp2 = currentPrice - 50 * pip;
+    }
+  }
+
+  return _gateResult(gates, direction, currentPrice, entry, sl, tp1, tp2);
+}
+
+// Three-Drive — refinement of Shark Fin: three pushes into TDI extreme with diverging price.
+// Reversal entry on 4th push failure.
+function detectThreeDrivePattern(pair, ctx) {
+  const pip = (pair && pair.pip) ? pair.pip : 0.0001;
+  const { btmmSharkFin, btmmTDIDivergence, btmmMWPattern, currentPrice, btmmAsianRange } = ctx;
+
+  // Direction: opposite of MW pattern bias (reversal of trend)
+  let direction = 'neutral';
+  if (btmmMWPattern && btmmMWPattern.formed) direction = btmmMWPattern.direction;
+  else if (btmmSharkFin && btmmSharkFin.active && btmmSharkFin.direction)
+    direction = btmmSharkFin.direction === 'bearish' ? 'bullish' : 'bearish';
+
+  const sharkActive = !!(btmmSharkFin && btmmSharkFin.active);
+  const divActive = !!(btmmTDIDivergence && btmmTDIDivergence.active);
+  const mwAligned = !!(btmmMWPattern && btmmMWPattern.formed && btmmMWPattern.direction === direction);
+
+  const gates = [
+    { name: 'Shark Fin Active',            pass: sharkActive },
+    { name: 'TDI Divergence Confirmed',    pass: divActive },
+    { name: 'M/W Pattern Aligned',         pass: mwAligned }
+  ];
+
+  let entry = 0, sl = 0, tp1 = 0, tp2 = 0;
+  if (direction !== 'neutral') {
+    entry = currentPrice;
+    if (direction === 'bullish') {
+      sl = currentPrice - 20 * pip;
+      tp1 = currentPrice + 40 * pip;
+      tp2 = currentPrice + 80 * pip;
+    } else {
+      sl = currentPrice + 20 * pip;
+      tp1 = currentPrice - 40 * pip;
+      tp2 = currentPrice - 80 * pip;
+    }
+  }
+
+  return _gateResult(gates, direction, currentPrice, entry, sl, tp1, tp2);
+}
+
 function calcFibs(candles) {
   if (!candles || candles.length < 20) return { levels: [], nearest: null };
   const recent = candles.slice(-50);
@@ -1804,327 +2471,565 @@ function calcLaguerreRSI(closes, gamma = 0.5) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// WYCKOFF METHOD — Full Implementation
-// Covers: Trading Range ID, Phase Classification (A-E), Full Event Sequence,
-//         Volume (Effort vs Result), SOS/SOW Confirmation, Spring/Upthrust,
-//         SC/BC, AR, ST, LPS/LPSY, Markup/Markdown detection
-// Reference: Richard Wyckoff (1931), Hank Pruden "The Three Skills of Top Trading"
+// WYCKOFF METHOD — Canonical Event-State-Machine Implementation
+// Schematic 1 (Accumulation): PS → SC → AR → ST → ST → Spring → Test → SOS(JAC) → LPS(BUEC) → Markup
+// Schematic 2 (Distribution): PSY → BC → AR → ST → ST → UTAD → Test → SOW → LPSY → Markdown
+// Anchoring: Range = SC/BC + AR (NOT lookback max/min — that's what's wrong with naive impls)
+// Volume: MT5 tick_volume is acceptable Wyckoff proxy for forex
+// Reference: Richard Wyckoff (1931), Hank Pruden "The Three Skills of Top Trading",
+//            Roman Bogomazov "Trading in the Shadow of the Smart Money"
 // ══════════════════════════════════════════════════════════════════════════════
-function detectWyckoff(candles) {
-  if (!candles || candles.length < 20) {
+
+// Classify a bar's volume profile vs window baselines
+function classifyVolume(bar, avgVol, avgSpread) {
+  const v = bar.volume || 0;
+  const s = bar.high - bar.low;
+  return {
+    climactic:    v > avgVol * 2.0 && s > avgSpread * 1.5,    // SC / BC bar
+    high:         v > avgVol * 1.3,
+    normal:       v >= avgVol * 0.75 && v <= avgVol * 1.3,
+    low:          v < avgVol * 0.75,
+    dry:          v < avgVol * 0.5,                            // Phase B absorption / Spring Type 3
+    divergent:    s > avgSpread * 1.4 && v < avgVol * 0.8,    // Wide bar, no volume = no effort (3rd Law)
+    wideBar:      s > avgSpread * 1.5,
+    narrowBar:    s < avgSpread * 0.6,
+    spread: s, volume: v,
+  };
+}
+
+// Find SC + AR (or BC + AR) sequence — anchors the true trading range.
+// Returns { type: 'accum'|'dist', scIdx/bcIdx, arIdx, rangeHigh, rangeLow, scBar/bcBar, arBar }
+function findTradingRange(window, avgVol, avgSpread) {
+  if (window.length < 12) return null;
+  const winLow  = Math.min(...window.map(c => c.low));
+  const winHigh = Math.max(...window.map(c => c.high));
+  const winSize = winHigh - winLow;
+  if (winSize === 0) return null;
+
+  let bestSC = null, bestBC = null;
+  for (let i = 0; i < window.length - 4; i++) {
+    const c = window[i];
+    const isDown = c.close < c.open;
+    const isUp   = c.close > c.open;
+    const inLowerThird = (c.high - winLow) / winSize < 0.45;
+    const inUpperThird = (winHigh - c.low) / winSize < 0.45;
+    const v = c.volume || 0;
+    const spread = c.high - c.low;
+    const aboveAvgVol = v > avgVol * 1.2;
+    const wideBar     = spread > avgSpread * 1.3;
+    if (isDown && aboveAvgVol && wideBar && inLowerThird) {
+      if (!bestSC || v > bestSC.volume) bestSC = { ...c, idx: i };
+    }
+    if (isUp && aboveAvgVol && wideBar && inUpperThird) {
+      if (!bestBC || v > bestBC.volume) bestBC = { ...c, idx: i };
+    }
+  }
+
+  // Prefer the more recent candidate (the active trading range)
+  const useSC = bestSC && (!bestBC || bestSC.idx > bestBC.idx);
+  const useBC = bestBC && (!bestSC || bestBC.idx > bestSC.idx);
+
+  if (useSC) {
+    const afterSC = window.slice(bestSC.idx + 1, Math.min(bestSC.idx + 13, window.length));
+    if (afterSC.length < 2) return null;
+    let arBar = afterSC[0], arOffset = 0;
+    afterSC.forEach((c, idx) => { if (c.high > arBar.high) { arBar = c; arOffset = idx; } });
     return {
-      phase: 'Unknown', phaseDetail: 'Need 20+ candles', event: 'none',
-      label: 'Insufficient Data', direction: 'neutral', strength: 0,
-      sosConfirmed: false, volumeConfirms: false,
-      rangeHigh: 0, rangeLow: 0, rangeSize: 0, currentPos: 0.5, hasVolume: false
+      type: 'accum',
+      scIdx: bestSC.idx,
+      arIdx: bestSC.idx + 1 + arOffset,
+      rangeLow:  bestSC.low,
+      rangeHigh: arBar.high,
+      scBar: bestSC,
+      arBar: arBar,
+    };
+  }
+  if (useBC) {
+    const afterBC = window.slice(bestBC.idx + 1, Math.min(bestBC.idx + 13, window.length));
+    if (afterBC.length < 2) return null;
+    let arBar = afterBC[0], arOffset = 0;
+    afterBC.forEach((c, idx) => { if (c.low < arBar.low) { arBar = c; arOffset = idx; } });
+    return {
+      type: 'dist',
+      bcIdx: bestBC.idx,
+      arIdx: bestBC.idx + 1 + arOffset,
+      rangeHigh: bestBC.high,
+      rangeLow:  arBar.low,
+      bcBar: bestBC,
+      arBar: arBar,
+    };
+  }
+  return null;
+}
+
+// Detect Spring with Type 1/2/3 classification (Bogomazov spec)
+function detectSpring(bar, rangeLow, avgVol, avgSpread) {
+  if (!(bar.low < rangeLow && bar.close > rangeLow)) return null;
+  const s = bar.high - bar.low;
+  if (s <= 0) return null;
+  const recovery = (bar.close - bar.low) / s;
+  const vol = classifyVolume(bar, avgVol, avgSpread);
+  let type;
+  if (vol.climactic && recovery < 0.5)       type = 1;   // heavy vol, weak recovery — failed shakeout
+  else if (vol.high && recovery < 0.7)        type = 1;
+  else if (vol.dry && recovery > 0.7)         type = 3;   // no supply, full recovery — A+ Spring
+  else                                        type = 2;   // typical Spring
+  return { type, recovery, volumeOk: type >= 2 };
+}
+
+// Mirror: UTAD with Type 1/2/3
+function detectUTAD(bar, rangeHigh, avgVol, avgSpread) {
+  if (!(bar.high > rangeHigh && bar.close < rangeHigh)) return null;
+  const s = bar.high - bar.low;
+  if (s <= 0) return null;
+  const rejection = (bar.high - bar.close) / s;
+  const vol = classifyVolume(bar, avgVol, avgSpread);
+  let type;
+  if (vol.climactic && rejection < 0.5)      type = 1;
+  else if (vol.high && rejection < 0.7)       type = 1;
+  else if (vol.dry && rejection > 0.7)        type = 3;
+  else                                        type = 2;
+  return { type, rejection, volumeOk: type >= 2 };
+}
+
+// Phase B "creek" = median of reaction highs (accumulation)
+function findCreek(bars) {
+  const highs = [];
+  for (let i = 1; i < bars.length - 1; i++) {
+    if (bars[i].high > bars[i-1].high && bars[i].high > bars[i+1].high) highs.push(bars[i].high);
+  }
+  if (highs.length < 2) return null;
+  const sorted = [...highs].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+// Phase B "ice" = median of reaction lows (distribution)
+function findIce(bars) {
+  const lows = [];
+  for (let i = 1; i < bars.length - 1; i++) {
+    if (bars[i].low < bars[i-1].low && bars[i].low < bars[i+1].low) lows.push(bars[i].low);
+  }
+  if (lows.length < 2) return null;
+  const sorted = [...lows].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+// JAC = "Jump Across the Creek" — SOS event clearing the creek with conviction
+function detectJAC(bar, creek, avgVol, avgSpread) {
+  if (!creek) return false;
+  const vol = classifyVolume(bar, avgVol, avgSpread);
+  return bar.close > creek && vol.high && (bar.high - bar.low) > avgSpread * 1.2;
+}
+
+// SOW = breaking the "Ice" with conviction
+function detectSOW(bar, ice, avgVol, avgSpread) {
+  if (!ice) return false;
+  const vol = classifyVolume(bar, avgVol, avgSpread);
+  return bar.close < ice && vol.high && (bar.high - bar.low) > avgSpread * 1.2;
+}
+
+// BUEC = "Back-Up to Edge of the Creek" — light-vol pullback after SOS to the broken creek
+function detectBUEC(prev, current, creek, avgVol, avgSpread) {
+  if (!creek) return false;
+  const vol = classifyVolume(prev, avgVol, avgSpread);
+  return prev.low <= creek * 1.001 && prev.low >= creek * 0.998
+      && current.close > creek && vol.low;
+}
+
+// LPSY = light-vol rally to the broken ice after SOW
+function detectLPSY(prev, current, ice, avgVol, avgSpread) {
+  if (!ice) return false;
+  const vol = classifyVolume(prev, avgVol, avgSpread);
+  return prev.high >= ice * 0.999 && prev.high <= ice * 1.002
+      && current.close < ice && vol.low;
+}
+
+// Count wick touches of a precise price level (proper Wyckoff test count)
+function countWickTouches(bars, level, side) {
+  const tol = Math.abs(level) * 0.0005;
+  let count = 0;
+  for (const b of bars) {
+    if (side === 'low'  && Math.abs(b.low  - level) < tol) count++;
+    if (side === 'high' && Math.abs(b.high - level) < tol) count++;
+  }
+  return count;
+}
+
+function detectWyckoff(candles) {
+  const emptyReturn = {
+    phase: 'Unknown', phaseDetail: 'Need 30+ candles for Wyckoff analysis',
+    subPhase: '', event: 'none', label: 'Insufficient Data',
+    direction: 'neutral', strength: 0,
+    sosConfirmed: false, volumeConfirms: false, hasVolume: false,
+    rangeHigh: 0, rangeLow: 0, rangeSize: 0, currentPos: 0.5,
+    atSupport: 0, atResistance: 0,
+    arBound: null, hasSC: false, hasBC: false,
+    creek: null, ice: null, events: [], springType: null, utadType: null,
+  };
+  if (!candles || candles.length < 30) return emptyReturn;
+
+  // ── Window + baselines ──────────────────────────────────────────────────
+  const lb = Math.min(60, candles.length - 1);
+  const window  = candles.slice(-lb - 1, -1);  // exclude forming bar
+  const current = candles[candles.length - 1];
+  const hasVolume = window.some(c => (c.volume || 0) > 0);
+  const avgVol = hasVolume
+    ? window.reduce((s, c) => s + (c.volume || 0), 0) / window.length
+    : 1;
+  const avgSpread = window.reduce((s, c) => s + (c.high - c.low), 0) / window.length;
+
+  // ── Find anchoring SC/BC + AR ───────────────────────────────────────────
+  const range = findTradingRange(window, avgVol, avgSpread);
+
+  // No range → trending or insufficient
+  if (!range) {
+    const winHigh = Math.max(...window.map(c => c.high));
+    const winLow  = Math.min(...window.map(c => c.low));
+    const half = Math.floor(window.length / 2);
+    const earlyAvg = window.slice(0, half).reduce((s, c) => s + c.close, 0) / half;
+    const lateAvg  = window.slice(half).reduce((s, c) => s + c.close, 0) / (window.length - half);
+    let phase, direction, label;
+    if (current.close > winHigh && lateAvg > earlyAvg * 1.005) {
+      phase = 'Markup'; direction = 'bullish'; label = '🚀 Markup — No Range Anchor';
+    } else if (current.close < winLow && lateAvg < earlyAvg * 0.995) {
+      phase = 'Markdown'; direction = 'bearish'; label = '📉 Markdown — No Range Anchor';
+    } else {
+      phase = 'Trending'; direction = lateAvg > earlyAvg ? 'bullish' : 'bearish';
+      label = '↗ Trending — No climactic event in window';
+    }
+    return {
+      ...emptyReturn, phase, direction, label,
+      phaseDetail: 'No SC/BC found — price is trending or no setup',
+      hasVolume,
+      rangeHigh: winHigh, rangeLow: winLow, rangeSize: winHigh - winLow,
+      currentPos: (current.close - winLow) / (winHigh - winLow || 1),
     };
   }
 
-  // ── 1. TRADING RANGE (50-candle lookback — proper Wyckoff range analysis) ──
-  const lb      = Math.min(60, candles.length - 1);
-  const window  = candles.slice(-lb - 1, -1);          // exclude current forming candle
-  const current = candles[candles.length - 1];
-  const prev    = candles[candles.length - 2];
-  const prev2   = candles.length > 2 ? candles[candles.length - 3] : prev;
+  // ── Walk forward through window collecting canonical event sequence ─────
+  const events = [];
+  let lastSpring = null, lastUTAD = null, lastSOS = null, lastSOW = null;
+  let creek = null, ice = null;
+  let creekAtSOS = null, iceAtSOW = null;  // frozen at SOS/SOW — used for BUEC/LPSY detection
 
-  const rangeHigh   = Math.max(...window.map(c => c.high));
-  const rangeLow    = Math.min(...window.map(c => c.low));
-  const rangeSize   = rangeHigh - rangeLow;
-  if (rangeSize === 0) return {
-    phase: 'Ranging', phaseDetail: 'Flat range — no data yet', event: 'none',
-    label: 'Flat Range', direction: 'neutral', strength: 0,
-    sosConfirmed: false, volumeConfirms: false,
-    rangeHigh, rangeLow, rangeSize: 0, currentPos: 0.5, hasVolume: false
-  };
+  // Seed SC/BC and AR as first events
+  if (range.type === 'accum') {
+    events.push({ idx: range.scIdx, type: 'SC', meta: { bar: range.scBar } });
+    events.push({ idx: range.arIdx, type: 'AR', meta: { bar: range.arBar } });
+  } else {
+    events.push({ idx: range.bcIdx, type: 'BC', meta: { bar: range.bcBar } });
+    events.push({ idx: range.arIdx, type: 'AR', meta: { bar: range.arBar } });
+  }
 
-  const rangeMid    = (rangeHigh + rangeLow) / 2;
-  const currentPos  = Math.max(0, Math.min(1, (current.close - rangeLow) / rangeSize)); // 0=bottom 1=top
+  const tol = (range.rangeHigh - range.rangeLow) * 0.05;  // 5% of range = "near boundary"
 
-  // ── 2. VOLUME BASELINE (Effort vs Result — Wyckoff's 3rd Law) ─────────────
-  const hasVolume  = window.some(c => (c.volume || 0) > 0);
-  const avgVolume  = hasVolume ? window.reduce((s, c) => s + (c.volume || 0), 0) / window.length : 1;
-  const hiVol  = c => hasVolume ? (c.volume || 0) > avgVolume * 1.3 : false;
-  const loVol  = c => hasVolume ? (c.volume || 0) < avgVolume * 0.75 : false;
-  const avgSpread  = window.reduce((s, c) => s + (c.high - c.low), 0) / window.length;
-  const wideBar    = c => (c.high - c.low) > avgSpread * 1.5;
-  const narrowBar  = c => (c.high - c.low) < avgSpread * 0.6;
+  for (let i = range.arIdx + 1; i < window.length; i++) {
+    const b  = window[i];
+    const pb = window[i - 1];
+    const vc = classifyVolume(b, avgVol, avgSpread);
 
-  // ── 3. PHASE CLASSIFICATION WITH A-E SUB-PHASES ──────────────────────────
-  // Count boundary touches (within 10% of range from edge)
-  const atSupport    = window.filter(c => c.low  <= rangeLow  + rangeSize * 0.1).length;
-  const atResistance = window.filter(c => c.high >= rangeHigh - rangeSize * 0.1).length;
+    if (range.type === 'accum') {
+      // ── ST: retest of SC low on lighter volume ─────────────────────────
+      if (Math.abs(b.low - range.rangeLow) < tol
+          && (vc.low || (b.volume || 0) < (range.scBar.volume || 1) * 0.7)) {
+        if (!events.some(e => e.type === 'ST' && Math.abs(e.idx - i) < 3)) {
+          events.push({ idx: i, type: 'ST', meta: {} });
+        }
+      }
 
-  // Net price drift and momentum over the window
-  const half      = Math.floor(window.length / 2);
-  const earlyAvg  = window.slice(0, half).reduce((s, c) => s + c.close, 0) / half;
-  const lateAvg   = window.slice(half).reduce((s, c) => s + c.close, 0) / (window.length - half);
-  const earlyVol  = hasVolume ? window.slice(0, half).reduce((s, c) => s + (c.volume || 0), 0) / half : 0;
-  const lateVol   = hasVolume ? window.slice(half).reduce((s, c) => s + (c.volume || 0), 0) / (window.length - half) : 0;
-  const volumeExpanding = hasVolume && lateVol > earlyVol * 1.1;
-  const volumeContracting = hasVolume && lateVol < earlyVol * 0.85;
+      // ── Spring: requires Phase B established (≥1 prior ST) ─────────────
+      const stCount = events.filter(e => e.type === 'ST').length;
+      if (stCount >= 1 && b.low < range.rangeLow && b.close > range.rangeLow) {
+        const sp = detectSpring(b, range.rangeLow, avgVol, avgSpread);
+        if (sp) { events.push({ idx: i, type: 'Spring', meta: sp }); lastSpring = i; }
+      }
 
-  // ── Automatic Reaction/Rally (AR) detection ──────────────────────────────
-  // AR = the first strong rally/decline immediately after SC/BC
-  // Identify SC/BC candle: widest bar with highest volume near range extremes
-  let arHigh = rangeHigh, arLow = rangeLow;
-  let hasSC = false, hasBC = false;
-  for (let i = 1; i < window.length - 1; i++) {
-    const c = window[i];
-    if (wideBar(c) && hiVol(c) && c.close < c.open && (c.low - rangeLow) / rangeSize < 0.2) {
-      hasSC = true;
-      // AR high = the highest close in 3-8 candles after SC
-      const afterSC = window.slice(i + 1, Math.min(i + 9, window.length));
-      if (afterSC.length > 0) arHigh = Math.max(...afterSC.map(c2 => c2.high));
-    }
-    if (wideBar(c) && hiVol(c) && c.close > c.open && (rangeHigh - c.high) / rangeSize < 0.2) {
-      hasBC = true;
-      // AR low = the lowest close in 3-8 candles after BC
-      const afterBC = window.slice(i + 1, Math.min(i + 9, window.length));
-      if (afterBC.length > 0) arLow = Math.min(...afterBC.map(c2 => c2.low));
+      // ── Test of Spring: subsequent low-vol retest of Spring low ───────
+      if (lastSpring !== null && i > lastSpring + 1) {
+        const sb = window[lastSpring];
+        if (Math.abs(b.low - sb.low) < tol
+            && vc.low
+            && (b.volume || 0) < (sb.volume || 1) * 0.7) {
+          events.push({ idx: i, type: 'TestOfSpring', meta: { springIdx: lastSpring } });
+        }
+      }
+
+      // ── Creek: median Phase B reaction highs ──────────────────────────
+      creek = findCreek(window.slice(range.arIdx + 1, i + 1));
+
+      // ── JAC (SOS): clear creek with conviction, only after Spring/Test ─
+      if (creek && lastSOS === null
+          && (lastSpring !== null || events.some(e => e.type === 'TestOfSpring'))
+          && detectJAC(b, creek, avgVol, avgSpread)) {
+        events.push({ idx: i, type: 'SOS', meta: { jac: true, creek } });
+        lastSOS = i;
+        creekAtSOS = creek;  // freeze creek level at moment of SOS — BUEC checks this fixed level
+      }
+
+      // ── BUEC (LPS): pullback to creek on light volume (use frozen creek) ─
+      if (lastSOS !== null && i > lastSOS && creekAtSOS
+          && detectBUEC(pb, b, creekAtSOS, avgVol, avgSpread)) {
+        events.push({ idx: i, type: 'LPS', meta: { buec: true, creek: creekAtSOS } });
+      }
+
+      // ── Sustained Markup: 3 consecutive closes above rangeHigh ─────────
+      if (lastSOS !== null && i >= 2) {
+        const last3 = window.slice(i - 2, i + 1);
+        if (last3.every(c => c.close > range.rangeHigh)
+            && !events.some(e => e.type === 'Markup')) {
+          events.push({ idx: i, type: 'Markup', meta: {} });
+        }
+      }
+    } else {
+      // ── Distribution mirror ───────────────────────────────────────────
+      if (Math.abs(b.high - range.rangeHigh) < tol
+          && (vc.low || (b.volume || 0) < (range.bcBar.volume || 1) * 0.7)) {
+        if (!events.some(e => e.type === 'ST' && Math.abs(e.idx - i) < 3)) {
+          events.push({ idx: i, type: 'ST', meta: {} });
+        }
+      }
+
+      const stCount = events.filter(e => e.type === 'ST').length;
+      if (stCount >= 1 && b.high > range.rangeHigh && b.close < range.rangeHigh) {
+        const ut = detectUTAD(b, range.rangeHigh, avgVol, avgSpread);
+        if (ut) { events.push({ idx: i, type: 'UTAD', meta: ut }); lastUTAD = i; }
+      }
+
+      if (lastUTAD !== null && i > lastUTAD + 1) {
+        const ub = window[lastUTAD];
+        if (Math.abs(b.high - ub.high) < tol
+            && vc.low
+            && (b.volume || 0) < (ub.volume || 1) * 0.7) {
+          events.push({ idx: i, type: 'TestOfUTAD', meta: { utadIdx: lastUTAD } });
+        }
+      }
+
+      ice = findIce(window.slice(range.arIdx + 1, i + 1));
+
+      if (ice && lastSOW === null
+          && (lastUTAD !== null || events.some(e => e.type === 'TestOfUTAD'))
+          && detectSOW(b, ice, avgVol, avgSpread)) {
+        events.push({ idx: i, type: 'SOW', meta: { ice } });
+        lastSOW = i;
+        iceAtSOW = ice;  // freeze ice level at moment of SOW — LPSY checks this fixed level
+      }
+
+      if (lastSOW !== null && i > lastSOW && iceAtSOW
+          && detectLPSY(pb, b, iceAtSOW, avgVol, avgSpread)) {
+        events.push({ idx: i, type: 'LPSY', meta: { ice: iceAtSOW } });
+      }
+
+      if (lastSOW !== null && i >= 2) {
+        const last3 = window.slice(i - 2, i + 1);
+        if (last3.every(c => c.close < range.rangeLow)
+            && !events.some(e => e.type === 'Markdown')) {
+          events.push({ idx: i, type: 'Markdown', meta: {} });
+        }
+      }
     }
   }
-  // In Accumulation: AR high defines top of trading range
-  // In Distribution: AR low defines bottom of trading range
-  const arBound = hasSC ? arHigh : (hasBC ? arLow : null);
 
-  // ── Phase A-E Sub-Classification ─────────────────────────────────────────
-  // Wyckoff Accumulation Phases:
-  //   A — Stopping the downtrend (PS, SC, AR, ST)
-  //   B — Building the cause (repeated support tests, volume declining)
-  //   C — Test (Spring — the shakeout)
-  //   D — Intent revealed (SOS, LPS, rising lows)
-  //   E — Markup (trend in motion)
-  // Wyckoff Distribution Phases:
-  //   A — Stopping the uptrend (PSY, BC, AR, ST)
-  //   B — Building the cause (repeated resistance tests, volume declining)
-  //   C — Test (Upthrust / UTAD)
-  //   D — Intent revealed (SOW, LPSY, lower highs)
-  //   E — Markdown (trend in motion)
+  // ── Apply the current (forming) bar to detect a fresh event ─────────────
+  {
+    const b = current;
+    const vc = classifyVolume(b, avgVol, avgSpread);
+    if (range.type === 'accum') {
+      const stCount = events.filter(e => e.type === 'ST').length;
+      if (stCount >= 1 && b.low < range.rangeLow && b.close > range.rangeLow) {
+        const sp = detectSpring(b, range.rangeLow, avgVol, avgSpread);
+        if (sp) { events.push({ idx: window.length, type: 'Spring', meta: sp }); lastSpring = window.length; }
+      }
+      if (creek && lastSOS === null
+          && (lastSpring !== null || events.some(e => e.type === 'TestOfSpring'))
+          && detectJAC(b, creek, avgVol, avgSpread)) {
+        events.push({ idx: window.length, type: 'SOS', meta: { jac: true, creek } });
+        lastSOS = window.length;
+        creekAtSOS = creek;
+      }
+    } else {
+      const stCount = events.filter(e => e.type === 'ST').length;
+      if (stCount >= 1 && b.high > range.rangeHigh && b.close < range.rangeHigh) {
+        const ut = detectUTAD(b, range.rangeHigh, avgVol, avgSpread);
+        if (ut) { events.push({ idx: window.length, type: 'UTAD', meta: ut }); lastUTAD = window.length; }
+      }
+      if (ice && lastSOW === null
+          && (lastUTAD !== null || events.some(e => e.type === 'TestOfUTAD'))
+          && detectSOW(b, ice, avgVol, avgSpread)) {
+        events.push({ idx: window.length, type: 'SOW', meta: { ice } });
+        lastSOW = window.length;
+        iceAtSOW = ice;
+      }
+    }
+    // Effort-vs-Result divergence on current bar
+    if (vc.divergent) {
+      events.push({ idx: window.length, type: 'EvR_Divergence', meta: { side: b.close > b.open ? 'bull' : 'bear' } });
+    }
+  }
 
-  let phase, phaseDetail, subPhase = '';
+  // ── Derive phase from event sequence (events define phase, not the other way) ──
+  const lastEvent = events.length > 0 ? events[events.length - 1] : null;
+  let phase, subPhase = '', phaseDetail = '', direction = 'neutral';
 
-  if (current.close > rangeHigh) {
-    phase = 'Markup';
-    subPhase = 'E';
-    phaseDetail = 'Phase E — Breakout above range, Accumulation complete. Markup underway.';
-
-  } else if (current.close < rangeLow) {
-    phase = 'Markdown';
-    subPhase = 'E';
-    phaseDetail = 'Phase E — Breakdown below range, Distribution complete. Markdown underway.';
-
-  } else if (atSupport >= 2 && currentPos < 0.45) {
-    if (currentPos < 0.2 && atSupport >= 3 && volumeContracting) {
-      // Phase C Accumulation: Spring zone — low volume tests of support
-      phase = 'Accumulation'; subPhase = 'C';
-      phaseDetail = `Phase C — Spring zone. ${atSupport} support tests, volume contracting ✓. Watch for Spring/Shakeout.`;
-    } else if (currentPos > 0.25 && lateAvg > earlyAvg && volumeExpanding) {
-      // Phase D Accumulation: SOS emerging, rising lows
+  if (range.type === 'accum') {
+    if (events.some(e => e.type === 'Markup')) {
+      phase = 'Markup'; subPhase = 'E';
+      phaseDetail = `Phase E — Markup confirmed (3+ closes above ${range.rangeHigh.toFixed(5)}).`;
+      direction = 'bullish';
+    } else if (events.some(e => e.type === 'SOS' || e.type === 'LPS')) {
       phase = 'Accumulation'; subPhase = 'D';
-      phaseDetail = `Phase D — Intent revealed. Price rising above midpoint, volume expanding. Look for LPS entry.`;
-    } else if (hasSC && atSupport >= 2 && volumeContracting) {
-      // Phase B Accumulation: repeated support tests after SC, volume drying up
+      const isLPS = lastEvent?.type === 'LPS';
+      phaseDetail = `Phase D — ${isLPS ? 'LPS / BUEC pullback to creek' : 'SOS / Jump Across the Creek'}. Long-side conviction confirmed.`;
+      direction = 'bullish';
+    } else if (events.some(e => e.type === 'Spring' || e.type === 'TestOfSpring')) {
+      phase = 'Accumulation'; subPhase = 'C';
+      const sp = events.find(e => e.type === 'Spring');
+      const hasTest = events.some(e => e.type === 'TestOfSpring');
+      phaseDetail = `Phase C — Spring Type ${sp?.meta?.type ?? '?'}${hasTest ? ' + Test confirmed' : ''}. Watch for SOS confirmation.`;
+      direction = 'bullish';
+    } else if (events.filter(e => e.type === 'ST').length >= 1) {
       phase = 'Accumulation'; subPhase = 'B';
-      phaseDetail = `Phase B — Building cause. SC detected, ${atSupport} support tests, volume declining ✓.`;
-    } else if (hasSC) {
-      // Phase A Accumulation: SC/AR identified, range being established
+      phaseDetail = `Phase B — ${events.filter(e => e.type === 'ST').length} secondary test(s) of SC low. Cause building.`;
+      direction = 'neutral';
+    } else {
       phase = 'Accumulation'; subPhase = 'A';
-      phaseDetail = `Phase A — Selling Climax detected. AR high: ${arBound ? arBound.toFixed(5) : 'est.'}. Range forming.`;
-    } else {
-      phase = 'Accumulation'; subPhase = 'B';
-      phaseDetail = `Phase B — ${atSupport} support tests. Smart money absorbing supply at lows.`;
+      phaseDetail = `Phase A — SC at ${range.rangeLow.toFixed(5)}, AR at ${range.rangeHigh.toFixed(5)}. Range established.`;
+      direction = 'neutral';
     }
-
-  } else if (atResistance >= 2 && currentPos > 0.55) {
-    if (currentPos > 0.8 && atResistance >= 3 && volumeContracting) {
-      // Phase C Distribution: UTAD zone
-      phase = 'Distribution'; subPhase = 'C';
-      phaseDetail = `Phase C — UTAD zone. ${atResistance} resistance tests, volume contracting. Watch for Upthrust/UTAD.`;
-    } else if (currentPos < 0.75 && lateAvg < earlyAvg && volumeExpanding) {
-      // Phase D Distribution: SOW emerging, lower highs
+  } else {
+    if (events.some(e => e.type === 'Markdown')) {
+      phase = 'Markdown'; subPhase = 'E';
+      phaseDetail = `Phase E — Markdown confirmed (3+ closes below ${range.rangeLow.toFixed(5)}).`;
+      direction = 'bearish';
+    } else if (events.some(e => e.type === 'SOW' || e.type === 'LPSY')) {
       phase = 'Distribution'; subPhase = 'D';
-      phaseDetail = `Phase D — Intent revealed. Price falling below midpoint, volume expanding. Look for LPSY entry.`;
-    } else if (hasBC && atResistance >= 2 && volumeContracting) {
-      // Phase B Distribution
+      const isLPSY = lastEvent?.type === 'LPSY';
+      phaseDetail = `Phase D — ${isLPSY ? 'LPSY rally to broken ice (dead-cat bounce)' : 'SOW broke the Ice'}. Short-side conviction confirmed.`;
+      direction = 'bearish';
+    } else if (events.some(e => e.type === 'UTAD' || e.type === 'TestOfUTAD')) {
+      phase = 'Distribution'; subPhase = 'C';
+      const ut = events.find(e => e.type === 'UTAD');
+      const hasTest = events.some(e => e.type === 'TestOfUTAD');
+      phaseDetail = `Phase C — UTAD Type ${ut?.meta?.type ?? '?'}${hasTest ? ' + Test confirmed' : ''}. Watch for SOW confirmation.`;
+      direction = 'bearish';
+    } else if (events.filter(e => e.type === 'ST').length >= 1) {
       phase = 'Distribution'; subPhase = 'B';
-      phaseDetail = `Phase B — Building cause. BC detected, ${atResistance} resistance tests, volume declining ✓.`;
-    } else if (hasBC) {
-      // Phase A Distribution
+      phaseDetail = `Phase B — ${events.filter(e => e.type === 'ST').length} secondary test(s) of BC high. Cause building.`;
+      direction = 'neutral';
+    } else {
       phase = 'Distribution'; subPhase = 'A';
-      phaseDetail = `Phase A — Buying Climax detected. AR low: ${arBound ? arBound.toFixed(5) : 'est.'}. Range forming.`;
-    } else {
-      phase = 'Distribution'; subPhase = 'B';
-      phaseDetail = `Phase B — ${atResistance} resistance tests. Smart money distributing at highs.`;
-    }
-
-  } else if (currentPos <= 0.3) {
-    phase = 'Possible Accumulation'; subPhase = 'A/B';
-    phaseDetail = 'Near range lows — watching for SC / Spring setup (Phase A or B)';
-  } else if (currentPos >= 0.7) {
-    phase = 'Possible Distribution'; subPhase = 'A/B';
-    phaseDetail = 'Near range highs — watching for BC / Upthrust / UTAD setup (Phase A or B)';
-  } else {
-    phase = 'Ranging'; subPhase = '';
-    phaseDetail = 'Mid-range — insufficient evidence for phase classification';
-  }
-
-  // ── 4. FULL EVENT SEQUENCE DETECTION ─────────────────────────────────────
-  let event = 'none', label = 'None', direction = 'neutral', strength = 0;
-  let sosConfirmed = false, volumeConfirms = false;
-
-  // ── SPRING (Wyckoff Accumulation — most reliable bullish signal) ──────────
-  if (prev.low < rangeLow && prev.close > rangeLow) {
-    const recovery = (prev.close - prev.low) / Math.max(prev.high - prev.low, rangeSize * 0.01);
-    const lowVolSpring = loVol(prev) || !hasVolume;  // low vol = no real selling pressure ✓
-    strength = Math.min(1, recovery * 0.75 + (lowVolSpring ? 0.25 : 0));
-    event = 'spring'; direction = 'bullish'; volumeConfirms = lowVolSpring;
-    // SOS follows Spring: current bar closes strongly above prev close
-    const sosNow = current.close > prev.close + avgSpread * 0.5 && current.close > current.open;
-    if (sosNow) {
-      sosConfirmed = true;
-      label = lowVolSpring ? '🌱 Spring + SOS — A-Grade Bullish Setup' : '🌱 Spring + SOS (High-Vol, confirm bias)';
-    } else {
-      label = lowVolSpring ? '🌱 Wyckoff Spring (Low-Vol ✓) — Watch for SOS' : '🌱 Wyckoff Spring (High-Vol ⚠) — Lower Confidence';
+      phaseDetail = `Phase A — BC at ${range.rangeHigh.toFixed(5)}, AR at ${range.rangeLow.toFixed(5)}. Range established.`;
+      direction = 'neutral';
     }
   }
 
-  // ── UPTHRUST / UTAD distinction ───────────────────────────────────────────
-  // Upthrust (UT): Phase B false break — less significant, part of building the cause
-  // UTAD (Upthrust After Distribution): Phase C — the definitive shakeout of bulls,
-  //        highest-confidence short signal. Occurs AFTER distribution is established.
-  else if (prev.high > rangeHigh && prev.close < rangeHigh) {
-    const rejection = (prev.high - prev.close) / Math.max(prev.high - prev.low, rangeSize * 0.01);
-    const lowVolUT = loVol(prev) || !hasVolume;
-    strength = Math.min(1, rejection * 0.75 + (lowVolUT ? 0.25 : 0));
-    direction = 'bearish'; volumeConfirms = lowVolUT;
-    const sowNow = current.close < prev.close - avgSpread * 0.5 && current.close < current.open;
-    // UTAD = happens in Phase C Distribution (established range with multiple resistance tests)
-    const isUTAD = subPhase === 'C' && atResistance >= 2;
-    if (isUTAD) {
-      event = 'utad';
-      strength = Math.min(1, strength + 0.15); // UTAD gets a strength bonus — highest confidence
-      if (sowNow) {
-        sosConfirmed = true;
-        label = lowVolUT ? '🔻 UTAD + SOW — Highest-Confidence Short (Phase C)' : '🔻 UTAD + SOW — Phase C Short Signal';
-      } else {
-        label = lowVolUT ? '🔻 UTAD (Low-Vol ✓) — Phase C, Watch for SOW' : '🔻 UTAD — Phase C, Needs SOW Confirmation';
-      }
-    } else {
-      event = 'upthrust';
-      if (sowNow) {
-        sosConfirmed = true;
-        label = lowVolUT ? '🔻 Upthrust + SOW — A-Grade Bearish Setup' : '🔻 Upthrust + SOW (High-Vol, confirm bias)';
-      } else {
-        label = lowVolUT ? '🔻 Wyckoff Upthrust (Low-Vol ✓) — Watch for SOW' : '🔻 Wyckoff Upthrust (High-Vol ⚠) — Lower Confidence';
-      }
+  // ── Build event label + strength from latest meaningful event ───────────
+  let event = 'none', label = `Phase ${subPhase} — ${phase}`, strength = 0;
+  let sosConfirmed = events.some(e => e.type === 'SOS' || e.type === 'SOW');
+  let volumeConfirms = false;
+
+  if (lastEvent) {
+    event = lastEvent.type.toLowerCase();
+    volumeConfirms = !!lastEvent.meta?.volumeOk
+      || lastEvent.type === 'SC' || lastEvent.type === 'BC'
+      || lastEvent.type === 'SOS' || lastEvent.type === 'SOW';
+
+    switch (lastEvent.type) {
+      case 'Spring':
+        strength = lastEvent.meta.type === 3 ? 0.95
+                 : lastEvent.meta.type === 2 ? 0.70 : 0.40;
+        label = `🌱 Spring Type ${lastEvent.meta.type} — ${
+          lastEvent.meta.type === 3 ? 'A+ (Dry Vol, Full Recovery)' :
+          lastEvent.meta.type === 2 ? 'Typical Spring — Watch for SOS' :
+          'Heavy Vol, Lower Confidence'
+        }`;
+        break;
+      case 'UTAD':
+        strength = lastEvent.meta.type === 3 ? 0.95
+                 : lastEvent.meta.type === 2 ? 0.70 : 0.40;
+        label = `🔻 UTAD Type ${lastEvent.meta.type} — ${
+          lastEvent.meta.type === 3 ? 'A+ (Dry Vol, Sharp Rejection)' :
+          lastEvent.meta.type === 2 ? 'Typical UTAD — Watch for SOW' :
+          'Heavy Vol, Lower Confidence'
+        }`;
+        break;
+      case 'TestOfSpring':
+        strength = 0.65;
+        label = '✅ Test of Spring confirmed — Supply exhausted';
+        break;
+      case 'TestOfUTAD':
+        strength = 0.65;
+        label = '✅ Test of UTAD confirmed — Demand exhausted';
+        break;
+      case 'SOS':
+        strength = 0.80;
+        label = '📈 SOS (Jump Across the Creek) — Phase D underway';
+        break;
+      case 'SOW':
+        strength = 0.80;
+        label = '📉 SOW (Broke the Ice) — Phase D underway';
+        break;
+      case 'LPS':
+        strength = 0.75;
+        label = '🔁 LPS (BUEC) — Pullback-to-Buy at broken creek';
+        break;
+      case 'LPSY':
+        strength = 0.75;
+        label = '🔁 LPSY — Dead-Cat Bounce, Short opportunity';
+        break;
+      case 'Markup':
+        strength = 0.85;
+        label = '🚀 Markup Confirmed — Sustained trend';
+        break;
+      case 'Markdown':
+        strength = 0.85;
+        label = '📉 Markdown Confirmed — Sustained trend';
+        break;
+      case 'ST':
+        strength = 0.30;
+        label = `🔄 Secondary Test (ST) — lighter vol than ${range.type === 'accum' ? 'SC' : 'BC'}`;
+        break;
+      case 'SC':
+        strength = 0.55;
+        label = '⚡ Selling Climax — Range bottom established';
+        break;
+      case 'BC':
+        strength = 0.55;
+        label = '⚡ Buying Climax — Range top established';
+        break;
+      case 'AR':
+        strength = 0.40;
+        label = `📍 Automatic ${range.type === 'accum' ? 'Rally' : 'Reaction'} — Range ${range.type === 'accum' ? 'top' : 'bottom'} defined`;
+        break;
+      case 'EvR_Divergence':
+        strength = 0.45;
+        label = `⚠ Effort vs Result Divergence — Wide bar, no volume (${lastEvent.meta.side === 'bull' ? 'bullish' : 'bearish'} exhaustion warning)`;
+        break;
+      default:
+        strength = 0;
+        label = `Phase ${subPhase} — ${phase}`;
     }
   }
 
-  // ── SELLING CLIMAX (SC) + Automatic Rally (AR) ────────────────────────────
-  // SC = panic selling, wide bar down, climactic volume, at range lows
-  // AR = the first rally off SC — its high marks the top of the trading range
-  else if (wideBar(prev) && hiVol(prev) && prev.close < prev.open && currentPos < 0.3) {
-    event = 'sc'; direction = 'bullish'; strength = 0.55; volumeConfirms = true;
-    const arStarting = current.close > prev.close && current.close > current.open;
-    if (arStarting) {
-      sosConfirmed = true;
-      label = '⚡ SC + Automatic Rally (AR) beginning — Range top forming';
-    } else {
-      label = '⚡ Selling Climax (SC) — Expect Automatic Rally. Range bottom established.';
-    }
-  }
-
-  // ── BUYING CLIMAX (BC) + Automatic Reaction (AR) ─────────────────────────
-  // BC = euphoric buying, wide bar up, climactic volume, at range highs
-  // AR = the first decline off BC — its low marks the bottom of the trading range
-  else if (wideBar(prev) && hiVol(prev) && prev.close > prev.open && currentPos > 0.7) {
-    event = 'bc'; direction = 'bearish'; strength = 0.55; volumeConfirms = true;
-    const arStarting = current.close < prev.close && current.close < current.open;
-    if (arStarting) {
-      sosConfirmed = true;
-      label = '⚡ BC + Automatic Reaction (AR) beginning — Range bottom forming';
-    } else {
-      label = '⚡ Buying Climax (BC) — Expect Automatic Reaction. Range top established.';
-    }
-  }
-
-  // ── SIGN OF STRENGTH (SOS) — Strong bullish push through range midpoint ────
-  else if (['Accumulation', 'Possible Accumulation'].includes(phase)) {
-    const bullCount = window.slice(-6).filter(c => c.close > c.open).length;
-    const breaksMid = prev.close > rangeMid && prev2.close < rangeMid;
-    if (breaksMid && bullCount >= 3) {
-      event = 'sos'; direction = 'bullish'; strength = 0.65;
-      const volOk = hiVol(prev);
-      volumeConfirms = volOk;
-      sosConfirmed   = volOk;
-      label = `📈 Sign of Strength (SOS)${volOk ? ' + Volume Expansion ✓' : ' — Needs Volume Confirmation'}`;
-    }
-    // Secondary Test (ST): retest of Spring/SC area on decreasing volume
-    else if (currentPos < 0.2 && atSupport >= 1) {
-      event = 'st'; direction = 'bullish'; strength = 0.3;
-      volumeConfirms = loVol(prev);
-      label = `🔄 Secondary Test (ST)${loVol(prev) ? ' — Decreasing Vol ✓' : ''}`;
-    }
-    // Last Point of Support (LPS): pullback after SOS on low volume
-    else if (currentPos > 0.4 && prev.close < prev2.close && loVol(prev)) {
-      event = 'lps'; direction = 'bullish'; strength = 0.5;
-      volumeConfirms = true;
-      label = '🔁 Last Point of Support (LPS) — Pullback-to-Buy';
-    }
-  }
-
-  // ── SIGN OF WEAKNESS (SOW) — Strong bearish push through range midpoint ────
-  else if (['Distribution', 'Possible Distribution'].includes(phase)) {
-    const bearCount = window.slice(-6).filter(c => c.close < c.open).length;
-    const breaksMid = prev.close < rangeMid && prev2.close > rangeMid;
-    if (breaksMid && bearCount >= 3) {
-      event = 'sow'; direction = 'bearish'; strength = 0.65;
-      const volOk = hiVol(prev);
-      volumeConfirms = volOk;
-      sosConfirmed   = volOk;
-      label = `📉 Sign of Weakness (SOW)${volOk ? ' + Volume Expansion ✓' : ' — Needs Volume Confirmation'}`;
-    }
-    // Secondary Test at top
-    else if (currentPos > 0.8 && atResistance >= 1) {
-      event = 'st'; direction = 'bearish'; strength = 0.3;
-      volumeConfirms = loVol(prev);
-      label = `🔄 Secondary Test (ST)${loVol(prev) ? ' — Decreasing Vol ✓' : ''}`;
-    }
-    // LPSY: weak rally on low volume after SOW
-    else if (currentPos < 0.6 && prev.close > prev2.close && loVol(prev)) {
-      event = 'lpsy'; direction = 'bearish'; strength = 0.5;
-      volumeConfirms = true;
-      label = '🔁 LPSY — Dead-Cat Bounce, Short Opportunity';
-    }
-  }
-
-  // ── POST-RANGE MARKUP / MARKDOWN ──────────────────────────────────────────
-  else if (phase === 'Markup') {
-    if (prev.close < prev2.close && loVol(prev)) {
-      event = 'lps'; direction = 'bullish'; strength = 0.5; volumeConfirms = true;
-      label = '🔁 LPS in Markup — Pullback Entry in Uptrend';
-    } else {
-      event = 'markup'; direction = 'bullish'; strength = 0.7;
-      label = '🚀 Markup Phase — Trend in Progress';
-    }
-  } else if (phase === 'Markdown') {
-    if (prev.close > prev2.close && loVol(prev)) {
-      event = 'lpsy'; direction = 'bearish'; strength = 0.5; volumeConfirms = true;
-      label = '🔁 LPSY in Markdown — Dead-Cat Bounce';
-    } else {
-      event = 'markdown'; direction = 'bearish'; strength = 0.7;
-      label = '📉 Markdown Phase — Trend in Progress';
-    }
-  } else {
-    event = 'range'; direction = 'neutral'; strength = 0;
-    label = '↔ In Range — No Clear Wyckoff Event';
-  }
+  // ── Final return ────────────────────────────────────────────────────────
+  const rangeSize = range.rangeHigh - range.rangeLow;
+  const currentPos = Math.max(0, Math.min(1, (current.close - range.rangeLow) / (rangeSize || 1)));
+  const atSupport    = countWickTouches(window, range.rangeLow,  'low');
+  const atResistance = countWickTouches(window, range.rangeHigh, 'high');
+  const springType = events.find(e => e.type === 'Spring')?.meta?.type ?? null;
+  const utadType   = events.find(e => e.type === 'UTAD')?.meta?.type   ?? null;
 
   return {
-    phase, phaseDetail, subPhase, event, label, direction, strength,
+    phase, subPhase, phaseDetail,
+    event, label, direction, strength,
     sosConfirmed, volumeConfirms, hasVolume,
-    rangeHigh, rangeLow, rangeSize, currentPos,
-    atSupport, atResistance, arBound, hasSC, hasBC
+    rangeHigh: range.rangeHigh, rangeLow: range.rangeLow, rangeSize,
+    currentPos, atSupport, atResistance,
+    arBound: range.type === 'accum' ? range.rangeHigh : range.rangeLow,
+    hasSC: range.type === 'accum',
+    hasBC: range.type === 'dist',
+    creek, ice,
+    events,
+    springType, utadType,
   };
 }
 
@@ -2238,7 +3143,14 @@ function detectLastCross(ema5, ema13) {
   return { candlesAgo: 99, direction: ema5[ema5.length-1] > ema13[ema13.length-1] ? 'bullish' : 'bearish' };
 }
 
-function analyzePair(pair, candles, isRealData) {
+function isNewsBlocked(pair, blockedCurrencies) {
+  if (!blockedCurrencies || !blockedCurrencies.size) return false;
+  const [base, quote] = pair.symbol.split('/');
+  return blockedCurrencies.has(base) || blockedCurrencies.has(quote);
+}
+
+function analyzePair(pair, candles, isRealData, blockedCurrencies) {
+  blockedCurrencies = blockedCurrencies || newsBlockedCurrencies || new Set();
   const volatility = pair.base * 0.0008;
   const seed = pair.symbol.split('').reduce((a, c) => a + c.charCodeAt(0), 0) * 137;
   let mainCandles, intradayCandles;
@@ -2258,7 +3170,7 @@ function analyzePair(pair, candles, isRealData) {
   const ema200 = calcEMA(closes, 200);
   const ema800 = calcEMA(closes, 800);
   const ema200Warm = closes.length >= 300;   // EMA(200) converged at ~300 bars (seed influence < 1%)
-  const ema800Warm = closes.length >= 800;   // EMA(800) directionally useful at 800 bars on free plan
+  const ema800Warm = closes.length >= 2400;  // EMA(800) converged at ~2400 bars (seed influence < 1%)
 
   const rsi = calcRSI(closes);
   const macd = calcMACD(closes);
@@ -2281,9 +3193,9 @@ function analyzePair(pair, candles, isRealData) {
 
   // BTMM Pattern Detection
   const btmmAsianRange = detectAsianRange(mainCandles, pair);
-  const btmmStopHunt = detectStopHunt(mainCandles, btmmAsianRange);
+  const btmmStopHunt = detectStopHunt(mainCandles, btmmAsianRange, pair);
   const btmmMWPattern = detectMWPattern(mainCandles);
-  const btmmLevelCount = detectLevelCount(mainCandles, ema50, ema200);
+  const btmmLevelCount = detectLevelCount(mainCandles, ema13, ema50, ema200);
   const btmmSharkFin = detectSharkFin(closes, tdi);
   const btmmEMA200Bounce = detectEMA200Bounce(mainCandles, ema200, ema50, pair);
   const btmmWeeklyCycle = detectWeeklyCycle(mainCandles);
@@ -2298,6 +3210,10 @@ function analyzePair(pair, candles, isRealData) {
   const btmmWeeklyFibs = calcWeeklyFibs(mainCandles);
   const btmmH1MTF = resampleToH1(mainCandles);
   const btmmTDILeg = detectTDILeg(tdi);
+
+  // Named BTMM Setup Detectors — populated below after EMA values + activeZone are known.
+  // (declared here so the return object can reference them; assigned after derived values exist)
+  let btmmSetups = null, activeSetup = null;
 
   const todayCandles = mainCandles.filter(c => c.datetime && c.datetime.split(' ')[0] === mainCandles[mainCandles.length - 1].datetime.split(' ')[0]);
   const todayRange = todayCandles.length > 0 ? Math.max(...todayCandles.map(c => c.high)) - Math.min(...todayCandles.map(c => c.low)) : 0;
@@ -2355,8 +3271,8 @@ function analyzePair(pair, candles, isRealData) {
   else if (tdi.fast < tdi.slow && tdi.fast < 50) tdiScore = -1.0;
   else if (tdi.fast < tdi.slow) tdiScore = -0.5;
   // OB/OS: reduce strength in extended territory but NEVER flip direction
-  if (tdi.fast < 33) tdiScore = Math.max(tdiScore, -0.3);  // OS: cap bearish strength, don't force bullish
-  if (tdi.fast > 67) tdiScore = Math.min(tdiScore, 0.3);   // OB: cap bullish strength, don't force bearish
+  if (tdi.fast < 32) tdiScore = Math.max(tdiScore, -0.3);  // OS: cap bearish strength, don't force bullish
+  if (tdi.fast > 68) tdiScore = Math.min(tdiScore, 0.3);   // OB: cap bullish strength, don't force bearish
 
   let adrScore = 0;
   if (adrConsumed < 50) adrScore = 0.5;
@@ -2382,20 +3298,41 @@ function analyzePair(pair, candles, isRealData) {
   const setupBullish = e5 > e13;
   const dist50Pips = Math.abs(currentPrice - e50) / pair.pip;
   const nearEMA50Setup = dist50Pips >= 6 && dist50Pips <= 8;
+
+  // ── Named BTMM Setup Detection (Safety Trade / 22 Trade / 50/50 Bounce / Three-Drive)
+  const setupCtx = {
+    activeZone, btmmAsianRange, btmmStopHunt, btmmMWPattern, btmmLevelCount,
+    btmmSharkFin, btmmEMA200Bounce, btmmTDIDivergence, btmmHODLOD,
+    btmmNameableCandle, btmmH1MTF, btmmTDILeg,
+    tdi, currentPrice, e50, e200, nearEMA50Setup, mainCandles
+  };
+  btmmSetups = {
+    safety:     detectSafetyTrade(pair, setupCtx),
+    trade22:    detect22Trade(pair, setupCtx),
+    bounce5050: detectFiftyFiftyBounce(pair, setupCtx),
+    threeDrive: detectThreeDrivePattern(pair, setupCtx)
+  };
+  activeSetup = Object.keys(btmmSetups)
+    .map(k => ({ key: k, ...btmmSetups[k] }))
+    .filter(s => s.active)
+    .sort((a, b) => b.gatesPassed - a.gatesPassed)[0] || null;
   const btmmChecklist = [
     { name: `Price ${setupBullish ? 'Above' : 'Below'} 800 EMA${!ema800Warm ? ' ⚠' : ''}`, pass: setupBullish ? priceAbove800 : !priceAbove800 },
     { name: `5/13 Cross Fresh (${lastCross.candlesAgo}c ago)`, pass: lastCross.candlesAgo <= 20 },
     { name: 'EMA Stack ≥ 3/4 Aligned', pass: setupBullish ? emaStackScore >= 0.5 : emaStackScore <= -0.5 },
     { name: `TDI Confirms (Fast ${setupBullish ? '>' : '<'} Slow)`, pass: setupBullish ? tdi.fast > tdi.slow : tdi.fast < tdi.slow },
     { name: 'Kill Zone Active', pass: !!activeZone },
-    { name: 'ADR < 80% Consumed', pass: adrConsumed < 80 },
+    { name: 'ADR < 75% Consumed', pass: adrConsumed < 75 },
     { name: 'AMD Distribution Phase', pass: amd.phase === 'Distribution' },
     { name: `Near PF Level (< 25 pips)`, pass: setupBullish ? pfLevels.pflDistance / pair.pip < 25 : pfLevels.pfcDistance / pair.pip < 25 },
     // Additional BTMM Setup 6/8 check
     { name: `Setup 6/8 (Price 6-8pips from EMA 50)`, pass: nearEMA50Setup },
     { name: 'HOD/LOD Retest', pass: !!(btmmHODLOD && (btmmHODLOD.retestingHOD || btmmHODLOD.retestingLOD)) },
     { name: 'TDI 2nd Leg Confirmed', pass: !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence !== 'low') },
+    { name: 'Named Setup Active', pass: !!activeSetup },
+    { name: 'No High-Impact News Block', pass: !isNewsBlocked(pair, blockedCurrencies) },
   ];
+  const newsBlocked = isNewsBlocked(pair, blockedCurrencies);
   const checklistScore = btmmChecklist.filter(c => c.pass).length;
 
   // BTMM Pattern Bonus Scoring (normalized 0-10 scale)
@@ -2428,6 +3365,10 @@ function analyzePair(pair, candles, isRealData) {
     const h1AlignsWith15m = (btmmH1MTF.trend === 'bullish' && emaScore > 0) || (btmmH1MTF.trend === 'bearish' && emaScore < 0);
     if (h1AlignsWith15m) patternBonus += 3; // H1 MTF confirmation — strong confluence
   }
+  // Named setup bonus — high-confidence setups deserve their own weight
+  if (activeSetup && activeSetup.confidence === 'high')   patternBonus += 4;
+  else if (activeSetup && activeSetup.confidence === 'medium') patternBonus += 2;
+  else if (activeSetup) patternBonus += 1;
 
   // Core score (0-100 from indicators) + Pattern bonus signed by trend direction
   // Bonus is always directional: bearish setups add negative bonus, bullish setups add positive.
@@ -2495,23 +3436,41 @@ function analyzePair(pair, candles, isRealData) {
   const lrsiRising = lrsiCurrent > lrsiPrev;
   const lrsiZone = lrsiCurrent > 0.8 ? 'Overbought' : lrsiCurrent < 0.2 ? 'Oversold' : lrsiCurrent > 0.5 ? 'Bullish' : 'Bearish';
 
-  // ── Wyckoff Score (0-1 → signed) ────────────────────────────────────────
+  // ── Wyckoff Score (canonical, event-aware) ───────────────────────────────
   // Phase direction sets the base bias (30%)
-  const phaseDir = ['Accumulation', 'Possible Accumulation', 'Markup'].includes(wyckoff.phase) ? 1
-                 : ['Distribution', 'Possible Distribution', 'Markdown'].includes(wyckoff.phase) ? -1 : 0;
+  const phaseDir = ['Accumulation', 'Markup'].includes(wyckoff.phase) ? 1
+                 : ['Distribution', 'Markdown'].includes(wyckoff.phase) ? -1 : 0;
   let wyckoffScore = phaseDir * 0.3;
 
-  // Event score (40%) — Spring/SOS/Markup/LPS = bullish, Upthrust/UTAD/SOW/Markdown/LPSY = bearish
+  // Event weight — Type 3 Spring/UTAD (no supply/demand) get highest scores,
+  // SOS/SOW/Markup/Markdown second, Type 1 (heavy vol failed shakeouts) lowest.
   const eventDir = wyckoff.direction === 'bullish' ? 1 : wyckoff.direction === 'bearish' ? -1 : 0;
-  // UTAD and Spring get the highest weights — they are the definitive Phase C signals
-  const eventWeight = ['spring', 'utad'].includes(wyckoff.event) ? 0.45
-                    : ['upthrust', 'sos', 'sow'].includes(wyckoff.event) ? 0.4 : 0.25;
+  let eventWeight;
+  if (wyckoff.event === 'spring' && wyckoff.springType === 3)      eventWeight = 0.55;
+  else if (wyckoff.event === 'spring' && wyckoff.springType === 2) eventWeight = 0.45;
+  else if (wyckoff.event === 'spring' && wyckoff.springType === 1) eventWeight = 0.25;
+  else if (wyckoff.event === 'utad' && wyckoff.utadType === 3)     eventWeight = 0.55;
+  else if (wyckoff.event === 'utad' && wyckoff.utadType === 2)     eventWeight = 0.45;
+  else if (wyckoff.event === 'utad' && wyckoff.utadType === 1)     eventWeight = 0.25;
+  else if (wyckoff.event === 'testofspring' || wyckoff.event === 'testofutad') eventWeight = 0.40;
+  else if (wyckoff.event === 'sos'    || wyckoff.event === 'sow')      eventWeight = 0.50;
+  else if (wyckoff.event === 'lps'    || wyckoff.event === 'lpsy')     eventWeight = 0.40;  // BUEC re-entry
+  else if (wyckoff.event === 'markup' || wyckoff.event === 'markdown') eventWeight = 0.50;
+  else if (wyckoff.event === 'sc'     || wyckoff.event === 'bc')       eventWeight = 0.30;
+  else if (wyckoff.event === 'st')                                     eventWeight = 0.15;
+  else if (wyckoff.event === 'evr_divergence')                         eventWeight = 0.20;  // exhaustion warning
+  else                                                                  eventWeight = 0.10;
   wyckoffScore += eventDir * wyckoff.strength * eventWeight;
 
-  // SOS/SOW confirmation bonus (20%)
+  // Effort-vs-Result exhaustion warning (3rd Law) — subtract from prevailing direction
+  if (wyckoff.event === 'evr_divergence' && phaseDir !== 0) {
+    wyckoffScore += -phaseDir * 0.15;  // counter-trend warning
+  }
+
+  // SOS/SOW confirmation bonus (20%) — only counts when sequence is in place
   if (wyckoff.sosConfirmed) wyckoffScore += eventDir * 0.2;
 
-  // Volume confirmation (10%) — only counted when real volume data exists
+  // Volume confirmation (10%) — only when real volume data exists
   if (wyckoff.volumeConfirms && wyckoff.hasVolume) wyckoffScore += eventDir * 0.1;
 
   wyckoffScore = Math.max(-1, Math.min(1, wyckoffScore));
@@ -2569,8 +3528,48 @@ function analyzePair(pair, candles, isRealData) {
     btmmAsianRange, btmmStopHunt, btmmMWPattern, btmmLevelCount,
     btmmSharkFin, btmmEMA200Bounce,
     btmmWeeklyCycle, btmm3DayCycle, btmmStraightaway, btmmNYCReversal,
-    btmmTDIDivergence, btmmHalfBatman, btmmPivots, btmmHODLOD, btmmNameableCandle, btmmWeeklyFibs, btmmH1MTF, btmmTDILeg
+    btmmTDIDivergence, btmmHalfBatman, btmmPivots, btmmHODLOD, btmmNameableCandle, btmmWeeklyFibs, btmmH1MTF, btmmTDILeg,
+    btmmSetups, activeSetup, newsBlocked
   };
+}
+
+let newsEvents = [];
+let newsBlockedCurrencies = new Set();
+
+async function fetchNewsData() {
+  try {
+    const resp = await fetch(`${API_CONFIG.baseUrl}/news?minutes=120`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    newsEvents = data.events || [];
+    // Block currencies with high-impact events in next 30 min
+    newsBlockedCurrencies = new Set();
+    const now = Date.now() / 1000;
+    for (const ev of newsEvents) {
+      if (ev.impact === 'high' && ev.ts >= now - 300 && ev.ts <= now + 1800) {
+        newsBlockedCurrencies.add(ev.currency);
+      }
+    }
+    renderNewsTicker();
+  } catch (_) {}
+}
+
+function renderNewsTicker() {
+  const ticker = document.getElementById('newsTicker');
+  const inner = document.getElementById('newsTickerInner');
+  if (!newsEvents.length) { ticker.classList.add('hidden'); return; }
+  const now = Date.now() / 1000;
+  const IMPACT_ICON = { high: '🔴', medium: '🟡', low: '⚪' };
+  const items = newsEvents
+    .filter(e => e.ts >= now - 900 && e.ts <= now + 7200)
+    .map(e => {
+      const minAway = Math.round((e.ts - now) / 60);
+      const when = minAway < 0 ? `${Math.abs(minAway)}m ago` : `in ${minAway}m`;
+      return `<span class="news-item ${e.impact}">${IMPACT_ICON[e.impact] || '⚪'} ${e.currency} ${e.title} (${when})</span>`;
+    });
+  if (!items.length) { ticker.classList.add('hidden'); return; }
+  inner.innerHTML = items.join('');
+  ticker.classList.remove('hidden');
 }
 
 async function fetchAllData() {
@@ -2581,18 +3580,21 @@ async function fetchAllData() {
   let successCount = 0;
   staleSymbols = new Set();
 
+  // Fetch news once per cycle (non-blocking)
+  fetchNewsData();
+
   // Fetch priority pairs (11 majors) for live data - like v6/v7/v8
   for (const pair of FOREX_PAIRS) {
     const isPriority = PRIORITY_PAIRS.includes(pair.symbol);
     let candles = null, isRealData = false;
-    
+
     if (isPriority) {
       document.getElementById('loadingText').textContent = `Fetching ${pair.symbol}...`;
       candles = await fetchRealData(pair.symbol);
       if (candles && candles.length >= 20) { isRealData = true; successCount++; }
     }
-    
-    pairData[pair.symbol] = analyzePair(pair, candles, isRealData);
+
+    pairData[pair.symbol] = analyzePair(pair, candles, isRealData, newsBlockedCurrencies);
   }
 
   apiConnected = successCount > 0;
@@ -2625,6 +3627,23 @@ function updateApiStatus() {
   const totalLimit = API_KEYS.reduce((s, k) => s + (k.limit || 800), 0);
   const activeKeys = API_KEYS.filter(k => k.active).length;
   rateLimitEl.textContent = `${activeKeys}/${API_KEYS.length} keys · ${totalUsed}/${totalLimit}`;
+
+  // MT5 terminal indicator (primary data source)
+  const mt5El = document.getElementById('mt5Status');
+  const mt5TextEl = document.getElementById('mt5StatusText');
+  if (mt5El && mt5TextEl) {
+    if (MT5_STATUS && MT5_STATUS.available) {
+      const mode = MT5_STATUS.trade_mode || 'live';
+      mt5El.className = 'api-status connected';
+      mt5El.title = `MT5 ${mode} · login ${MT5_STATUS.login} · ${MT5_STATUS.server}`;
+      mt5TextEl.textContent = `MT5 ${mode}`;
+    } else {
+      const reason = MT5_STATUS?.reason || 'terminal not running';
+      mt5El.className = 'api-status error';
+      mt5El.title = `MT5 unavailable: ${reason}`;
+      mt5TextEl.textContent = 'MT5 ✕';
+    }
+  }
 }
 
 function updateLastUpdated() {
@@ -2644,6 +3663,10 @@ function getFilteredSortedPairs() {
     });
   }
   if (currentTypeFilter !== 'all') pairs = pairs.filter(p => p.type === currentTypeFilter);
+  // Confidence filter — in BTMM mode, hide low/medium confidence trades
+  if (currentConfidenceFilter === 'high' && currentMode === 'indicator') {
+    pairs = pairs.filter(p => p.confidence === 'High');
+  }
   if (searchTerm) pairs = pairs.filter(p => p.symbol.toLowerCase().includes(searchTerm.toLowerCase()));
   switch (currentSort) {
     case 'score-desc':
@@ -2682,10 +3705,14 @@ function renderStats() {
   const worstPair = pairs.reduce((a, b) => a[scoreKey] < b[scoreKey] ? a : b);
   const activeZone = getActiveBTMMKillZone();
   const pairsWithSpring = pairs.filter(p => p.wyckoff && p.wyckoff.event === 'spring').length;
-  const pairsWithUpthrust = pairs.filter(p => p.wyckoff && p.wyckoff.event === 'upthrust').length;
+  const pairsWithUpthrust = pairs.filter(p => p.wyckoff && (p.wyckoff.event === 'utad' || p.wyckoff.event === 'upthrust')).length;
   const livePairs = pairs.filter(p => p.isRealData).length;
   const avgADR = (pairs.reduce((s, p) => s + p.adr.adr, 0) / pairs.length);
   const avgADRConsumed = (pairs.reduce((s, p) => s + p.adrConsumed, 0) / pairs.length).toFixed(0);
+
+  const highConfCount = pairs.filter(p => p.confidence === 'High').length;
+  const medConfCount = pairs.filter(p => p.confidence === 'Medium').length;
+  const lowConfCount = pairs.filter(p => p.confidence === 'Low').length;
 
   let statsHTML = `
     <div class="stat-card"><div class="stat-label">Strong Buy</div><div class="stat-value green">${strongBuy}</div></div>
@@ -2697,6 +3724,9 @@ function renderStats() {
     <div class="stat-card"><div class="stat-label">Best Pair</div><div class="stat-value green">${bestPair.symbol} <span style="font-size:.7rem">(${bestPair[scoreKey].toFixed(0)})</span></div></div>
     <div class="stat-card"><div class="stat-label">Worst Pair</div><div class="stat-value red">${worstPair.symbol} <span style="font-size:.7rem">(${worstPair[scoreKey].toFixed(0)})</span></div></div>
   `;
+  if (currentMode === 'indicator') {
+    statsHTML += `<div class="stat-card"><div class="stat-label">🎯 High Conf</div><div class="stat-value green">${highConfCount}</div></div>`;
+  }
   if (currentMode === 'wyckoff' || currentMode === 'combined') {
     statsHTML += `
       <div class="stat-card"><div class="stat-label">🌱 Springs Detected</div><div class="stat-value green">${pairsWithSpring}</div></div>
@@ -2761,8 +3791,8 @@ function renderTable() {
     if (currentMode === 'indicator') {
       const tdiCross = pair.tdi.fast > pair.tdi.slow ? '↑' : '↓';
       let tdiBadge = `<span class="tdi-badge normal">${tdiCross}</span>`;
-      if (pair.tdi.fast > 67) tdiBadge = `<span class="tdi-badge ob">OB ${tdiCross}</span>`;
-      else if (pair.tdi.fast < 33) tdiBadge = `<span class="tdi-badge os">OS ${tdiCross}</span>`;
+      if (pair.tdi.fast > 68) tdiBadge = `<span class="tdi-badge ob">OB ${tdiCross}</span>`;
+      else if (pair.tdi.fast < 32) tdiBadge = `<span class="tdi-badge os">OS ${tdiCross}</span>`;
 
       const dist800Class = pair.dist800Pips > 50 ? 'stretched' : 'normal';
       const dist800Display = pair.dist800Pips.toFixed(1);
@@ -2795,11 +3825,11 @@ function renderTable() {
       </td>
       <td><div class="price-cell mono">${pair.currentPrice.toFixed(pair.decimals)}</div><span class="data-source ${pair.isRealData ? 'live' : 'simulated'}">${pair.isRealData ? 'LIVE' : 'SIM'}</span></td>
       <td class="change-cell mono ${changeClass}">${changeSign}${pair.changePercent.toFixed(2)}%</td>
-      <td><span class="signal-badge ${pair[signalClassKey]}">${pair[signalKey]}</span><span class="grade-badge ${grade.cls}">${grade.grade}</span></td>
+      <td><span class="signal-badge ${pair[signalClassKey]}">${pair[signalKey]}</span><span class="grade-badge ${grade.cls}">${grade.grade}</span>${pair.newsBlocked ? `<span class="news-block-badge" title="High-impact news in next 30min">🚫 News</span>` : ''}${pair.activeSetup && pair.btmmSignal !== 'WAIT' && !pair.newsBlocked ? `<br><span class="setup-badge ${pair.activeSetup.direction}" title="${pair.activeSetup.gatesPassed}/${pair.activeSetup.gatesTotal} gates passed">🎯 ${SETUP_NAMES[pair.activeSetup.key]} ${pair.activeSetup.gatesPassed}/${pair.activeSetup.gatesTotal}</span>` : ''}<br><button class="btn-log-trade" onclick="openLogTradeModal('${pair.symbol}')">🪙 Log Trade</button></td>
       <td><div style="display:flex;align-items:center;gap:8px"><div class="score-bar"><div class="score-fill" style="width:${Math.min(scoreWidth, 100)}%;background:${scoreColor}"></div></div><span class="score-value" style="color:${scoreColor}">${pair[scoreKey] >= 0 ? '+' : ''}${pair[scoreKey].toFixed(0)}</span></div></td>
       <td>${indicatorsHTML}</td>
       <td>${currentMode === 'indicator' && pair.checklistScore !== undefined
-        ? `<span class="confidence ${pair.checklistScore >= 6 ? 'high' : pair.checklistScore >= 4 ? 'medium' : 'low'}">${pair.checklistScore}/11</span>`
+        ? `<span class="confidence ${pair.checklistScore >= 8 ? 'high' : pair.checklistScore >= 6 ? 'medium' : 'low'}">${pair.checklistScore}/13</span>`
         : `<span class="confidence ${confidenceClass}">${pair.confidence}</span>`}</td>
       ${extraCells}
     `;
@@ -2835,8 +3865,8 @@ function openModal(symbol) {
   let btmmHTML = '';
   if (currentMode === 'indicator' || currentMode === 'combined') {
     let tdiBadge = '<span class="tdi-badge normal">Normal</span>';
-    if (pair.tdi.fast > 67) tdiBadge = '<span class="tdi-badge ob">Overbought (OB)</span>';
-    else if (pair.tdi.fast < 33) tdiBadge = '<span class="tdi-badge os">Oversold (OS)</span>';
+    if (pair.tdi.fast > 68) tdiBadge = '<span class="tdi-badge ob">Overbought (OB)</span>';
+    else if (pair.tdi.fast < 32) tdiBadge = '<span class="tdi-badge os">Oversold (OS)</span>';
 
     btmmHTML = `
       <div class="detail-card"><h4>BTMM Analysis</h4>
@@ -2921,6 +3951,36 @@ function openModal(symbol) {
       </div>
       <div class="detail-row"><span class="detail-label">Support Tests</span><span class="detail-value mono">${pair.wyckoff.atSupport} touches</span></div>
       <div class="detail-row"><span class="detail-label">Resistance Tests</span><span class="detail-value mono">${pair.wyckoff.atResistance} touches</span></div>
+      ${pair.wyckoff.springType ? `
+      <div class="detail-row"><span class="detail-label">Spring Type</span>
+        <span class="detail-value mono" style="color:${pair.wyckoff.springType === 3 ? 'var(--green)' : pair.wyckoff.springType === 2 ? 'var(--yellow)' : 'var(--orange)'}">
+          Type ${pair.wyckoff.springType}${pair.wyckoff.springType === 3 ? ' — A+ (no supply)' : pair.wyckoff.springType === 2 ? ' — Typical' : ' — Heavy vol, lower confidence'}
+        </span>
+      </div>` : ''}
+      ${pair.wyckoff.utadType ? `
+      <div class="detail-row"><span class="detail-label">UTAD Type</span>
+        <span class="detail-value mono" style="color:${pair.wyckoff.utadType === 3 ? 'var(--red)' : pair.wyckoff.utadType === 2 ? 'var(--yellow)' : 'var(--orange)'}">
+          Type ${pair.wyckoff.utadType}${pair.wyckoff.utadType === 3 ? ' — A+ (no demand)' : pair.wyckoff.utadType === 2 ? ' — Typical' : ' — Heavy vol, lower confidence'}
+        </span>
+      </div>` : ''}
+      ${pair.wyckoff.creek ? `
+      <div class="detail-row"><span class="detail-label">Creek (Phase B resistance)</span><span class="detail-value mono" style="color:var(--blue)">${pair.wyckoff.creek.toFixed(pair.decimals)}</span></div>` : ''}
+      ${pair.wyckoff.ice ? `
+      <div class="detail-row"><span class="detail-label">Ice (Phase B support)</span><span class="detail-value mono" style="color:var(--blue)">${pair.wyckoff.ice.toFixed(pair.decimals)}</span></div>` : ''}
+      ${pair.wyckoff.events && pair.wyckoff.events.length > 0 ? `
+      <div class="detail-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <span class="detail-label">Event Sequence</span>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">
+          ${pair.wyckoff.events.slice(-10).map(e => {
+            const isBull = ['SC','ST','Spring','TestOfSpring','SOS','LPS','Markup'].includes(e.type);
+            const isBear = ['BC','UTAD','TestOfUTAD','SOW','LPSY','Markdown'].includes(e.type);
+            const color = isBull ? 'var(--green)' : isBear ? 'var(--red)' : 'var(--text-muted)';
+            const bg    = isBull ? 'var(--green-bg)' : isBear ? 'var(--red-bg)' : 'var(--bg-elevated)';
+            const meta  = e.type === 'Spring' ? ` T${e.meta?.type}` : e.type === 'UTAD' ? ` T${e.meta?.type}` : '';
+            return `<span style="font-size:.65rem;color:${color};background:${bg};padding:2px 6px;border-radius:3px;font-weight:600">${e.type}${meta}</span>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
     </div>
     <div class="detail-card"><h4>Momentum Confirmation (Laguerre RSI)</h4>
       <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:8px;padding:4px 8px;background:var(--bg-surface);border-radius:4px;border-left:2px solid var(--orange)">
@@ -3006,7 +4066,30 @@ function openModal(symbol) {
       ` : '<div class="signal-item"><span class="detail-label" style="color:var(--text-muted)">Insufficient data</span></div>'}
     </div>
     <div class="signal-breakdown" style="margin-top:16px">
-      <h3>BTMM Setup Checklist — <span style="color:${pair.checklistScore >= 7 ? 'var(--green)' : pair.checklistScore >= 5 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore}/11</span> <span style="font-size:.75rem;font-weight:400;color:${pair.checklistScore >= 7 ? 'var(--green)' : pair.checklistScore >= 5 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore >= 7 ? '— High Probability Setup' : pair.checklistScore >= 5 ? '— Consider Setup' : '— Wait for More Confluence'}</span></h3>
+      <h3>Active BTMM Setups ${pair.activeSetup && pair.btmmSignal !== 'WAIT' ? `— <span class="setup-badge ${pair.activeSetup.direction}">🎯 ${SETUP_NAMES[pair.activeSetup.key]} · ${pair.activeSetup.gatesPassed}/${pair.activeSetup.gatesTotal} · ${pair.activeSetup.confidence}</span>` : '— <span style="font-size:.75rem;font-weight:400;color:var(--text-muted)">No active setup</span>'}</h3>
+      <div class="setup-gates">
+        ${['safety','trade22','bounce5050','threeDrive'].map(k => {
+          const s = pair.btmmSetups && pair.btmmSetups[k];
+          if (!s) return '';
+          const dirCls = s.direction === 'bullish' ? 'bullish' : s.direction === 'bearish' ? 'bearish' : 'neutral';
+          return `<div class="setup-card">
+            <div class="setup-head">
+              <span class="setup-name">${SETUP_NAMES[k]}</span>
+              <span class="signal-badge ${s.active ? dirCls : 'neutral'}">${s.active ? `🎯 ${s.gatesPassed}/${s.gatesTotal} · ${s.confidence}` : `${s.gatesPassed}/${s.gatesTotal}`}</span>
+            </div>
+            ${s.gates.map(g => `<div class="gate-row"><span class="dot ${g.pass ? 'pass' : 'fail'}"></span>${g.name}</div>`).join('')}
+            ${s.active && s.entry > 0 ? `<div class="setup-targets">
+              <div><span class="lbl">Entry</span><span class="val">${s.entry.toFixed(pair.digits || 5)}</span></div>
+              <div><span class="lbl">SL</span><span class="val" style="color:var(--red)">${s.sl.toFixed(pair.digits || 5)}</span></div>
+              <div><span class="lbl">TP1</span><span class="val" style="color:var(--green)">${s.tp1.toFixed(pair.digits || 5)}</span></div>
+              <div><span class="lbl">TP2</span><span class="val" style="color:var(--green)">${s.tp2.toFixed(pair.digits || 5)}</span></div>
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="signal-breakdown" style="margin-top:16px">
+      <h3>BTMM Setup Checklist — <span style="color:${pair.checklistScore >= 9 ? 'var(--green)' : pair.checklistScore >= 7 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore}/13</span> <span style="font-size:.75rem;font-weight:400;color:${pair.checklistScore >= 9 ? 'var(--green)' : pair.checklistScore >= 7 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore >= 9 ? '— High Probability Setup' : pair.checklistScore >= 7 ? '— Consider Setup' : '— Wait for More Confluence'}</span></h3>
       ${pair.btmmChecklist.map(c => `
         <div class="signal-item">
           <div class="signal-item-left">
@@ -3093,20 +4176,25 @@ function drawCandleChart(pair, candleCount = 120, aggregateFactor = 1) {
   }
 
   // ── Draw EMAs with proper alignment ────────────────────────────────────────
-  // Right-align EMAs to candles so latest value aligns with rightmost candle.
+  // Right-align: pair.emaXXX has N_full (e.g. 3200) values, one per bar oldest→newest.
+  // `candles` here is the last `candleCount` bars (e.g. 120).
+  // We must take the LAST candles.length values from the full EMA array so that
+  // emaArr[-1] (latest) aligns with the rightmost candle on screen.
+  // The previous approach (startIdx=0, iterate full array) drew EMA values from
+  // bars 0–119 (33 days ago) on today's candles — causing a major visual mismatch
+  // vs TradingView.
   const drawEMA = (emaArr, color) => {
     if (!emaArr || emaArr.length === 0) return;
-    const emaLen = emaArr.length;
-    const startIdx = Math.max(0, candles.length - emaLen);
+    // Slice the last N values — these correspond to the visible candles.
+    const slice = emaArr.slice(-candles.length);
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     let started = false;
-    for (let i = 0; i < emaLen; i++) {
-      const val = emaArr[i];
+    for (let i = 0; i < slice.length; i++) {
+      const val = slice[i];
       if (val === undefined || val === null) continue;
-      const candleIdx = startIdx + i;
-      const x = padding.left + candleIdx * candleW + candleW / 2;
+      const x = padding.left + i * candleW + candleW / 2;
       if (!started) { ctx.moveTo(x, toY(val)); started = true; }
       else ctx.lineTo(x, toY(val));
     }
@@ -3205,14 +4293,7 @@ function updateRiskCalc() {
 document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
 
-document.querySelectorAll('.mode-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    currentMode = tab.dataset.mode;
-    render();
-  });
-});
+// Old tab handler removed — unified handler is at bottom of file (search "Wire all tabs")
 
 document.getElementById('filterGroup').addEventListener('click', (e) => {
   if (e.target.classList.contains('filter-btn')) {
@@ -3230,6 +4311,15 @@ document.querySelectorAll('[data-type]').forEach(btn => {
     currentTypeFilter = btn.dataset.type;
     render();
   });
+});
+
+document.getElementById('confidenceGroup').addEventListener('click', (e) => {
+  if (e.target.classList.contains('filter-btn')) {
+    document.querySelectorAll('#confidenceGroup .filter-btn').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    currentConfidenceFilter = e.target.dataset.confidence;
+    render();
+  }
 });
 
 document.getElementById('sortSelect').addEventListener('change', (e) => { currentSort = e.target.value; render(); });
@@ -3333,6 +4423,768 @@ document.addEventListener('keydown', (e) => {
 });
 
 fetchAllData().then(() => { render(); updateRiskCalc(); startRefreshTimer(); startSBTimer(); });
+
+// ── Trade Journal (Phase D) ──────────────────────────────────────────────────
+const SERVICE_BASE = typeof API_CONFIG !== 'undefined' ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+
+function openLogTradeModal(symbol) {
+  const pair = pairData[symbol];
+  document.getElementById('ltPair').value = symbol;
+  document.getElementById('ltDirection').value = pair?.activeSetup?.direction === 'bearish' ? 'bearish' : 'bullish';
+  document.getElementById('ltSetup').value = pair?.activeSetup?.key || 'manual';
+  document.getElementById('ltScore').value = pair?.btmmCompositeScore?.toFixed(1) || '';
+  document.getElementById('ltEntry').value = pair?.currentPrice?.toFixed(pair?.decimals ?? 5) || '';
+  document.getElementById('ltSL').value = pair?.activeSetup?.sl?.toFixed(pair?.decimals ?? 5) || '';
+  document.getElementById('ltTP1').value = pair?.activeSetup?.tp1?.toFixed(pair?.decimals ?? 5) || '';
+  document.getElementById('ltTP2').value = pair?.activeSetup?.tp2?.toFixed(pair?.decimals ?? 5) || '';
+  document.getElementById('ltNotes').value = '';
+  document.getElementById('logTradeModal').classList.add('active');
+}
+
+function closeLogTradeModal() {
+  document.getElementById('logTradeModal').classList.remove('active');
+}
+
+async function submitLogTrade() {
+  const symbol = document.getElementById('ltPair').value;
+  const pair = pairData[symbol];
+  const body = {
+    pair: symbol,
+    direction: document.getElementById('ltDirection').value,
+    setup: document.getElementById('ltSetup').value,
+    signal: pair?.btmmSignal || null,
+    signal_score: parseFloat(document.getElementById('ltScore').value) || null,
+    entry: parseFloat(document.getElementById('ltEntry').value),
+    sl: parseFloat(document.getElementById('ltSL').value),
+    tp1: parseFloat(document.getElementById('ltTP1').value),
+    tp2: parseFloat(document.getElementById('ltTP2').value) || null,
+    gates: pair?.activeSetup?.gates || null,
+    notes: document.getElementById('ltNotes').value || null,
+  };
+  if (!body.entry || !body.sl || !body.tp1) { alert('Entry, SL and TP1 are required.'); return; }
+  try {
+    const resp = await fetch(`${SERVICE_BASE}/journal/trade`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (!resp.ok) { const e = await resp.json(); alert('Error: ' + (e.error || resp.status)); return; }
+    closeLogTradeModal();
+    showToast(`Trade logged: ${symbol} ${body.direction === 'bullish' ? '↑ Long' : '↓ Short'}`);
+  } catch (e) { alert('Service unreachable. Is port 3002 running?'); }
+}
+
+function openCloseTradeModal(id) {
+  document.getElementById('ctTradeId').value = id;
+  document.getElementById('ctExit').value = '';
+  document.getElementById('ctPLPips').value = '';
+  document.getElementById('ctResult').value = 'win';
+  document.getElementById('closeTradeModal').style.display = 'flex';
+}
+
+async function submitCloseTrade() {
+  const id = parseInt(document.getElementById('ctTradeId').value);
+  const body = {
+    exit_price: parseFloat(document.getElementById('ctExit').value),
+    result: document.getElementById('ctResult').value,
+    pl_pips: parseFloat(document.getElementById('ctPLPips').value) || null,
+  };
+  if (!body.exit_price) { alert('Exit price is required.'); return; }
+  try {
+    const resp = await fetch(`${SERVICE_BASE}/journal/trade/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (!resp.ok) { const e = await resp.json(); alert('Error: ' + (e.error || resp.status)); return; }
+    document.getElementById('closeTradeModal').style.display = 'none';
+    loadJournal();
+    showToast(`Trade #${id} closed as ${body.result.toUpperCase()}`);
+  } catch (e) { alert('Service unreachable.'); }
+}
+
+async function loadJournal() {
+  const setup = document.getElementById('journalSetupFilter')?.value || '';
+  try {
+    const [tradesResp, statsResp] = await Promise.all([
+      fetch(`${SERVICE_BASE}/journal/trades?limit=100${setup ? '&setup=' + setup : ''}`),
+      fetch(`${SERVICE_BASE}/journal/stats${setup ? '?setup=' + setup : ''}`)
+    ]);
+    const tradesData = tradesResp.ok ? await tradesResp.json() : { trades: [] };
+    const stats = statsResp.ok ? await statsResp.json() : {};
+    renderJournalStats(stats);
+    renderJournalTable(tradesData.trades || []);
+  } catch (e) {
+    document.getElementById('journalTableBody').innerHTML =
+      '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Service offline — start port 3002 to load journal.</td></tr>';
+  }
+}
+
+function renderJournalStats(s) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('jTotalTrades', s.trades ?? '—');
+  set('jWinRate', s.win_rate != null ? s.win_rate + '%' : '—');
+  set('jAvgPL', s.avg_pl_pips != null ? (s.avg_pl_pips >= 0 ? '+' : '') + s.avg_pl_pips : '—');
+  set('jExpectancy', s.expectancy != null ? (s.expectancy >= 0 ? '+' : '') + s.expectancy : '—');
+  set('jAvgWin', s.avg_win_pips != null ? '+' + s.avg_win_pips : '—');
+  set('jAvgLoss', s.avg_loss_pips != null ? '-' + s.avg_loss_pips : '—');
+  const wrEl = document.getElementById('jWinRate');
+  if (wrEl && s.win_rate != null) wrEl.style.color = s.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
+}
+
+function renderJournalTable(trades) {
+  const tbody = document.getElementById('journalTableBody');
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">No trades yet — log your first trade from a pair card.</td></tr>';
+    return;
+  }
+  const SETUP_LABELS = { safety: 'Safety', trade22: '22 Trade', bounce5050: '50/50', threeDrive: '3-Drive', manual: 'Manual' };
+  tbody.innerHTML = trades.map((t, i) => {
+    const dt = new Date(t.ts_open * 1000).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' });
+    const pl = t.pl_pips != null ? `<span style="color:${t.pl_pips >= 0 ? 'var(--green)' : 'var(--red)'}">` +
+      (t.pl_pips >= 0 ? '+' : '') + t.pl_pips + '</span>' : '—';
+    const actionBtn = t.result === 'open'
+      ? `<button class="btn-close-trade" onclick="openCloseTradeModal(${t.id})">Close</button>`
+      : '';
+    return `<tr>
+      <td style="color:var(--text-muted)">${trades.length - i}</td>
+      <td style="font-weight:700">${t.pair}</td>
+      <td style="color:${t.direction === 'bullish' ? 'var(--green)' : 'var(--red)'}">${t.direction === 'bullish' ? '↑ Long' : '↓ Short'}</td>
+      <td><span style="font-size:.7rem;color:var(--text-secondary)">${SETUP_LABELS[t.setup] || t.setup || '—'}</span></td>
+      <td class="mono">${t.entry?.toFixed(5) ?? '—'}</td>
+      <td class="mono" style="color:var(--red)">${t.sl?.toFixed(5) ?? '—'}</td>
+      <td class="mono" style="color:var(--green)">${t.tp1?.toFixed(5) ?? '—'}</td>
+      <td class="mono">${t.exit_price?.toFixed(5) ?? '—'}</td>
+      <td class="mono">${pl}</td>
+      <td><span class="jtag ${t.result}">${t.result.toUpperCase()}</span></td>
+      <td style="color:var(--text-muted);font-size:.7rem">${dt}</td>
+      <td>${actionBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function showToast(msg) {
+  let toast = document.getElementById('toastMsg');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toastMsg';
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--bg-elevated);border:1px solid var(--border-light);color:var(--text-primary);padding:10px 16px;border-radius:8px;font-size:.8rem;z-index:3000;opacity:0;transition:opacity .3s';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+document.getElementById('journalSetupFilter')?.addEventListener('change', loadJournal);
+
+// ── Backtest (Phase F) ───────────────────────────────────────────────────────
+let btChartInstance = null;
+
+async function runBacktest() {
+  const pair     = document.getElementById('btPair').value;
+  const setup    = document.getElementById('btSetup').value;
+  const days     = parseInt(document.getElementById('btDays').value);
+  const minGates = parseInt(document.getElementById('btMinGates').value);
+  const status   = document.getElementById('btStatus');
+
+  const now      = Math.floor(Date.now() / 1000);
+  const start    = now - days * 86400;
+
+  status.textContent = 'Running…';
+  status.style.color = 'var(--yellow)';
+
+  try {
+    const resp = await fetch(`${SERVICE_BASE}/backtest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pair, start, end: now, setups: [setup], min_gates: minGates }),
+    });
+    const data = await resp.json();
+    if (data.error) { status.textContent = 'Error: ' + data.error; status.style.color = 'var(--red)'; return; }
+
+    status.textContent = `Done — ${data.stats.trades} trades found`;
+    status.style.color = 'var(--green)';
+    renderBtStats(data.stats);
+    renderBtChart(data.equity_curve);
+    renderBtTrades(data.trades);
+  } catch (e) {
+    status.textContent = 'Service offline'; status.style.color = 'var(--red)';
+  }
+}
+
+function renderBtStats(s) {
+  document.getElementById('btStats').style.display = 'grid';
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('btTrades',    s.trades);
+  set('btWinRate',   s.win_rate + '%');
+  set('btTotalPips', (s.total_pips >= 0 ? '+' : '') + s.total_pips);
+  set('btExpectancy',(s.expectancy >= 0 ? '+' : '') + s.expectancy);
+  set('btAvgWin',    '+' + s.avg_win_pips + 'p');
+  set('btAvgLoss',   '-' + s.avg_loss_pips + 'p');
+  set('btMaxDD',     '-' + s.max_drawdown + 'p');
+  const wr = document.getElementById('btWinRate');
+  if (wr) wr.style.color = s.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
+  const tp = document.getElementById('btTotalPips');
+  if (tp) tp.style.color = s.total_pips >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function renderBtChart(curve) {
+  document.getElementById('btChartWrap').style.display = 'block';
+  if (!curve || !curve.length) return;
+  const labels = curve.map(p => new Date(p.ts * 1000).toLocaleDateString('en-ZA', { day:'2-digit', month:'short' }));
+  const data   = curve.map(p => p.equity);
+  const ctx    = document.getElementById('btChart').getContext('2d');
+  if (btChartInstance) btChartInstance.destroy();
+  btChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data, fill: true,
+        borderColor: data[data.length-1] >= 0 ? '#00E676' : '#FF1744',
+        backgroundColor: data[data.length-1] >= 0 ? 'rgba(0,230,118,.08)' : 'rgba(255,23,68,.08)',
+        borderWidth: 2, pointRadius: 3, tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true, plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.05)' } },
+      }
+    }
+  });
+}
+
+function renderBtTrades(trades) {
+  document.getElementById('btTradesWrap').style.display = 'block';
+  const tbody = document.getElementById('btTradesList');
+  if (!trades.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:16px">No trades matched the criteria.</td></tr>'; return; }
+  tbody.innerHTML = trades.map((t, i) => {
+    const dt = new Date(t.ts_open * 1000).toLocaleString('en-ZA', { dateStyle:'short', timeStyle:'short' });
+    const pipCol = t.pips == null ? '—' : `<span style="color:${t.pips>=0?'var(--green)':'var(--red)'}">${t.pips>=0?'+':''}${t.pips}</span>`;
+    const res = t.result === 'win' ? '<span class="jtag win">WIN</span>' : t.result === 'loss' ? '<span class="jtag loss">LOSS</span>' : t.result === 'be' ? '<span class="jtag be">BE</span>' : '<span class="jtag open">OPEN</span>';
+    return `<tr>
+      <td style="color:var(--text-muted)">${i+1}</td>
+      <td style="color:${t.direction==='bullish'?'var(--green)':'var(--red)'}">${t.direction==='bullish'?'↑ Long':'↓ Short'}</td>
+      <td class="mono">${t.entry?.toFixed(5)??'—'}</td>
+      <td class="mono" style="color:var(--red)">${t.sl?.toFixed(5)??'—'}</td>
+      <td class="mono" style="color:var(--green)">${t.tp1?.toFixed(5)??'—'}</td>
+      <td class="mono">${t.exit?.toFixed(5)??'—'}</td>
+      <td class="mono">${pipCol}</td>
+      <td>${res}</td>
+      <td style="color:var(--text-muted)">${t.gates??'—'}/7</td>
+      <td style="color:var(--text-muted);font-size:.7rem">${dt}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Unified tab handler (manages ALL mode switching) ────────────────────────
+document.querySelectorAll('.mode-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;
+    const isOverlay = mode === 'journal' || mode === 'backtest';
+    const isScanner = mode === 'crt' || mode === 'snr' || mode === 'snr-m15';
+
+    document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Keep currentMode in sync for BTMM render() calls
+    currentMode = mode;
+
+    // Hide/show overlay views
+    document.getElementById('journalView').style.display  = mode === 'journal'  ? 'block' : 'none';
+    document.getElementById('backtestView').style.display = mode === 'backtest' ? 'block' : 'none';
+
+    // Hide/show BTMM-specific UI (stats bar, filters, risk calc, sim banner)
+    ['statsBar','controlsBar','riskCalc','simBanner'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (isOverlay || isScanner) ? 'none' : '';
+    });
+
+    // Scanner containers: show the active one, hide all others
+    const btmmContainer   = document.getElementById('btmmTableContainer');
+    const crtContainer    = document.getElementById('crtContainer');
+    const snrContainer    = document.getElementById('snrContainer');
+    const snrM15Container = document.getElementById('snrM15Container');
+    if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
+    if (crtContainer)     crtContainer.style.display     = (mode === 'crt')       ? 'block' : 'none';
+    if (snrContainer)     snrContainer.style.display     = (mode === 'snr')       ? 'block' : 'none';
+    if (snrM15Container)  snrM15Container.style.display  = (mode === 'snr-m15')   ? 'block' : 'none';
+
+    // Load content for the active mode
+    if (mode === 'indicator') render();           // BTMM dashboard
+    if (mode === 'journal')   loadJournal();
+    if (mode === 'crt')       loadCrt();
+    if (mode === 'snr')       loadSnr();
+    if (mode === 'snr-m15')   loadSnrM15();
+  });
+});
+
+// ── 1AM CRT loader ──────────────────────────────────────────────────────────
+async function loadCrt() {
+  const tbody   = document.getElementById('crtTableBody');
+  const summary = document.getElementById('crtSummary');
+  const btn     = document.getElementById('crtRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Fetching M15 + daily candles, building NY-aligned H4 buckets…';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const resp = await fetch(`${baseUrl}/crt`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    renderCrtTable(data);
+  } catch (err) {
+    console.error('CRT load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load 1AM CRT scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _crtFmtPrice(p, sym) {
+  if (p === undefined || p === null) return '—';
+  if (!sym) return p.toFixed(5);
+  if (sym === 'XAU/USD') return p.toFixed(2);  // gold ~2050.00
+  if (sym === 'XAG/USD') return p.toFixed(3);  // silver ~24.500
+  if (sym.includes('JPY')) return p.toFixed(3);
+  return p.toFixed(5);
+}
+
+function _crtSetupCell(p) {
+  if (p.setup === 'BUY')  return '<span style="color:var(--green);font-weight:700">↑ BUY</span>';
+  if (p.setup === 'SELL') return '<span style="color:var(--red);font-weight:700">↓ SELL</span>';
+  return '<span style="color:var(--text-muted)">—</span>';
+}
+
+function _crtGradeCell(g) {
+  const colorMap = {A:'var(--green)', B:'var(--cyan)', C:'var(--yellow)', 'NO-TRADE':'var(--text-muted)', 'NO-DATA':'var(--text-muted)'};
+  const c = colorMap[g] || 'var(--text-muted)';
+  const weight = (g === 'A' || g === 'B') ? 700 : 500;
+  return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
+}
+
+function _crtSmtCell(s) {
+  if (s === 'BULLISH-DIVERGENCE') return '<span style="color:var(--green);font-weight:600">↑ BULL</span>';
+  if (s === 'BEARISH-DIVERGENCE') return '<span style="color:var(--red);font-weight:600">↓ BEAR</span>';
+  if (s === 'BULLISH-DIVERGENCE-PARTNER') return '<span style="color:var(--cyan)" title="Partner pair shows the bullish divergence">↑ partner</span>';
+  if (s === 'BEARISH-DIVERGENCE-PARTNER') return '<span style="color:var(--cyan)" title="Partner pair shows the bearish divergence">↓ partner</span>';
+  return '<span style="color:var(--text-muted)">—</span>';
+}
+
+function _crtKeyTimeCell(p) {
+  const colorByStatus = {
+    'ACTIVE': 'var(--green)', 'WAITING': 'var(--yellow)',
+    'PRE-1AM': 'var(--text-muted)', 'LATE': 'var(--yellow)', 'MISSED': 'var(--text-muted)'
+  };
+  const c = colorByStatus[p.key_time_status] || 'var(--text-muted)';
+  return `<span style="color:${c};font-weight:600">${p.key_time_status}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${p.key_time_window_sast || ''}</span>`;
+}
+
+function _renderCrtAnchorsLine() {
+  // NY hours 17 (CBDR), 21 (Asia), 1 (CRT), 2–4 (Key time) converted to SAST.
+  const cbdr = nyHourToSAST(17), asia = nyHourToSAST(21), crt = nyHourToSAST(1);
+  const kt0  = nyHourToSAST(2),  kt1  = nyHourToSAST(4);
+  const fmt = (h) => `${pad2(h)}:00`;
+  const line = `5PM CBDR → <b>${fmt(cbdr)} SAST</b> · 9PM Asia → <b>${fmt(asia)} SAST</b> · 1AM CRT → <b>${fmt(crt)} SAST</b> · Key time → <b>${fmt(kt0)}–${fmt(kt1)} SAST</b>`;
+  const el = document.getElementById('crtAnchorsLine');
+  if (el) el.innerHTML = line;
+}
+
+function renderCrtTable(data) {
+  const tbody   = document.getElementById('crtTableBody');
+  const summary = document.getElementById('crtSummary');
+  _renderCrtAnchorsLine();
+
+  const rows = (data.pairs || []).map(p => {
+    const sym = p.symbol;
+    const crtRange = (p.crt_high != null && p.crt_low != null)
+      ? `${_crtFmtPrice(p.crt_high, sym)}<br><span style="color:var(--text-muted)">${_crtFmtPrice(p.crt_low, sym)}</span>`
+      : '—';
+    const c1 = p.candle_1am;
+    const candle1amCell = c1
+      ? `<span style="color:${c1.direction === 'bullish' ? 'var(--green)' : c1.direction === 'bearish' ? 'var(--red)' : 'var(--text-muted)'}">${_crtFmtPrice(c1.open, sym)} → ${_crtFmtPrice(c1.close, sym)}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${c1.type || ''}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const dolColor = p.dol_bias === 'BULLISH' ? 'var(--green)' : p.dol_bias === 'BEARISH' ? 'var(--red)' : 'var(--text-muted)';
+    const profileColor = p.profile_type === 'TYPE_1' || p.profile_type === 'TYPE_2' ? 'var(--green)' : 'var(--text-muted)';
+    const entryCell = p.entry_zone
+      ? `<span style="font-size:.78rem">${p.entry_zone.side === 'above_open' ? 'Sell ≥' : 'Buy ≤'} ${_crtFmtPrice(p.entry_zone.level, sym)}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : '';
+    const staleBadge = (p.session_is_live === false)
+      ? ` <span style="font-size:.6rem;background:var(--yellow);color:#0a0a0a;padding:1px 4px;border-radius:3px;vertical-align:middle" title="Analysis from ${p.session_1am_sast} session (no live 1AM data yet)">HISTORICAL</span>`
+      : '';
+    // Provisional: 1AM H4 bucket still accumulating M15 candles — pattern may change
+    const provBadge = p.provisional
+      ? ` <span style="font-size:.6rem;background:rgba(251,191,36,.2);border:1px solid rgba(251,191,36,.5);color:var(--yellow);padding:1px 4px;border-radius:3px;vertical-align:middle" title="1AM H4 candle forming — ${p.m15_count || '?'}/16 M15 candles closed. OHLC pattern may change.">⚠ FORMING</span>`
+      : '';
+    const ohlcCell = `<span style="font-weight:600">${p.ohlc_pattern || '—'}</span>${provBadge}`;
+    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
+      <td><b>${sym}</b>${staleBadge}</td>
+      <td><span style="color:${dolColor};font-weight:600">${p.dol_bias || '—'}</span></td>
+      <td style="font-size:.78rem">${crtRange}</td>
+      <td>${candle1amCell}</td>
+      <td><span style="color:${profileColor};font-weight:600">${p.profile_type || '—'}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${p.profile_label || ''}</span></td>
+      <td>${ohlcCell}</td>
+      <td>${_crtSmtCell(p.smt)}</td>
+      <td>${_crtSetupCell(p)}</td>
+      <td>${entryCell}</td>
+      <td>${_crtKeyTimeCell(p)}</td>
+      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/10)</span></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="11" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  const sastAnchors = data.anchors_sast || {};
+  summary.innerHTML = `
+    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
+    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
+    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
+    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span>
+    &nbsp;|&nbsp;
+    Session anchors (SAST): CBDR ${sastAnchors.cbdr || '—'} · Asia ${sastAnchors.asia || '—'} · 1AM ${sastAnchors.crt_1am || '—'}
+    ${stale}
+  `;
+}
+
+const crtBtn = document.getElementById('crtRefreshBtn');
+if (crtBtn) crtBtn.addEventListener('click', loadCrt);
+_renderCrtAnchorsLine();
+
+// ── Malaysian SNR Emperor loader ────────────────────────────────────────────
+async function loadSnr() {
+  const tbody   = document.getElementById('snrTableBody');
+  const summary = document.getElementById('snrSummary');
+  const btn     = document.getElementById('snrRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Running Malaysian SNR Emperor analysis…';
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const ctl = new AbortController();
+    const tmr = setTimeout(() => ctl.abort(), 90000);
+    const resp = await fetch(`${baseUrl}/snr`, { signal: ctl.signal });
+    clearTimeout(tmr);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    renderSnrTable(data);
+  } catch (err) {
+    console.error('SNR load failed', err);
+    const msg = err.name === 'AbortError' ? 'Request timed out (90s). MT5 may be busy — try Refresh Scanner.' : err.message;
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load SNR scanner: ${msg}</span>`;
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _snrFmtPrice(p, sym) {
+  if (p === undefined || p === null) return '—';
+  if (sym === 'DE30') return p.toFixed(1);          // DAX index
+  if (p > 5000) return p.toFixed(1);                 // Other indices
+  if (sym === 'XAU/USD') return p.toFixed(2);
+  if (sym === 'XAG/USD') return p.toFixed(3);
+  if (sym && sym.includes('JPY')) return p.toFixed(3);
+  return p.toFixed(5);
+}
+
+function renderSnrTable(data) {
+  const tbody   = document.getElementById('snrTableBody');
+  const summary = document.getElementById('snrSummary');
+
+  const rows = (data.pairs || []).map(p => {
+    const sym = p.symbol;
+    const storyline = p.storyline || {};
+    const entry = p.entry_tier || {};
+    const engulfing = p.engulfing_patterns || [];
+    const roadblocks = p.roadblocks || [];
+    const tl_conf = p.tl_confluence || {};
+
+    const priceCell = `<span class="mono">${_snrFmtPrice(p.current_price, sym)}</span>`;
+    const supCell = p.nearest_support != null
+      ? `<span style="color:var(--green);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_support, sym)}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const resCell = p.nearest_resistance != null
+      ? `<span style="color:var(--red);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_resistance, sym)}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+
+    // Levels cell: fresh/unfresh + MISS + SNR types
+    const missCount = p.miss_validated || 0;
+    const types = p.snr_types || {};
+    const typeParts = [];
+    if (types.classic_a || types.classic_v) typeParts.push(`${(types.classic_a||0)+(types.classic_v||0)} cls`);
+    if (types.rbs || types.sbr) typeParts.push(`${(types.rbs||0)+(types.sbr||0)} rbs/sbr`);
+    if (types.gap_bullish || types.gap_bearish) typeParts.push(`${(types.gap_bullish||0)+(types.gap_bearish||0)} gap`);
+    if (types.qmr) typeParts.push(`${types.qmr} qm`);
+    let levelsCell = `<span style="color:var(--green)">${p.fresh_levels_count || 0}</span>/<span style="color:var(--text-muted)">${p.unfresh_levels_count || 0}</span>`;
+    if (missCount > 0) levelsCell += ` <span style="color:var(--cyan);font-size:.65rem" title="MISS-validated levels">${missCount}M</span>`;
+    if (typeParts.length) levelsCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${typeParts.join(' · ')}</span>`;
+
+    // Storyline cell
+    let storylineCell = '<span style="color:var(--text-muted)">—</span>';
+    if (storyline.active) {
+      const dir = storyline.direction === 'bullish' ? '↑' : '↓';
+      const col = storyline.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
+      const confBadge = storyline.confirmed
+        ? ' <span style="font-size:.6rem;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.5);color:var(--green);padding:1px 3px;border-radius:3px">BO✓</span>'
+        : ' <span style="font-size:.6rem;color:var(--yellow)">⏳</span>';
+      const snrType = storyline.from_snr_type ? ` <span style="font-size:.6rem;color:var(--text-secondary)">${storyline.from_snr_type}</span>` : '';
+      storylineCell = `<span style="color:${col};font-weight:600">${dir} ${storyline.direction}</span>${confBadge}${snrType}`
+        + `<br><span style="font-size:.7rem;color:var(--text-muted)">${_snrFmtPrice(storyline.from_level, sym)} → ${_snrFmtPrice(storyline.to_level, sym)}</span>`;
+    }
+
+    // Setup cell (Entry tier with Emperor setup number)
+    let setupCell = '<span style="color:var(--text-muted)">—</span>';
+    if (entry.tier && entry.tier !== 'no_setup') {
+      const tierColors = {low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--red)'};
+      const setupNames = {1: 'S1 (50/50)', 2: 'S2 (Med)', 3: 'S3 (Low)', 4: 'S4 (Cont)'};
+      const setupLabel = setupNames[entry.setup_num] || entry.tier.toUpperCase();
+      const confBadge = entry.confidence === 'high' ? ' 🎯' : entry.confidence === 'medium' ? ' 🔶' : '';
+      setupCell = `<span style="color:${tierColors[entry.tier] || 'var(--text-muted)'};font-weight:600">${setupLabel}${confBadge}</span>`
+        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${entry.entry_price ? _snrFmtPrice(entry.entry_price, sym) : ''}</span>`;
+    }
+
+    // Engulfing cell with PEZ/FEZ
+    let engCell = '<span style="color:var(--text-muted)">—</span>';
+    if (engulfing.length) {
+      const parts = engulfing.slice(-3).map(e => {
+        const col = e.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
+        const zoneBadge = e.zone_status === 'PEZ' ? ' <span style="font-size:.55rem;color:var(--green)">PEZ</span>'
+          : e.zone_status === 'FEZ' ? ' <span style="font-size:.55rem;color:var(--yellow)">FEZ</span>' : '';
+        return `<span style="color:${col};font-size:.75rem">${e.type}${zoneBadge}</span>`;
+      });
+      engCell = parts.join('<br>');
+      if (p.pez_count || p.fez_count) {
+        engCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${p.pez_count||0} PEZ · ${p.fez_count||0} FEZ</span>`;
+      }
+    }
+
+    // Trendline / X-Factor cell
+    let tlCell = '<span style="color:var(--text-muted)">—</span>';
+    if (tl_conf.active) {
+      tlCell = `<span style="color:var(--cyan);font-weight:600;font-size:.78rem">X-Factor ✨</span>`
+        + `<br><span style="font-size:.65rem;color:var(--text-secondary)">${tl_conf.tl_type||'TL'} + ${tl_conf.snr_type||'SNR'}</span>`;
+    } else {
+      const tls = p.trendlines || [];
+      const nearTl = tls.find(t => t.near_price);
+      if (nearTl) {
+        const col = nearTl.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
+        tlCell = `<span style="color:${col};font-size:.78rem">${nearTl.type} ${nearTl.direction === 'bullish' ? '↑' : '↓'}</span>`
+          + `<br><span style="font-size:.65rem;color:var(--text-muted)">@ ${_snrFmtPrice(nearTl.projected, sym)}</span>`;
+      }
+    }
+
+    // Roadblocks cell
+    const rbCell = roadblocks.length
+      ? `<span style="color:var(--yellow);font-size:.78rem">${roadblocks.length} block${roadblocks.length>1?'s':''}</span>`
+        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${roadblocks.slice(0,2).map(r => _snrFmtPrice(r.price, sym)).join(', ')}</span>`
+      : '<span style="color:var(--green);font-size:.78rem">Clear ✅</span>';
+
+    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : p.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
+    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
+      <td><b>${sym}</b></td>
+      <td>${priceCell}</td>
+      <td>${supCell}</td>
+      <td>${resCell}</td>
+      <td>${levelsCell}</td>
+      <td>${storylineCell}</td>
+      <td>${setupCell}</td>
+      <td>${engCell}</td>
+      <td>${tlCell}</td>
+      <td>${rbCell}</td>
+      <td>${_crtSetupCell(p)}</td>
+      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/15)</span></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="12" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  summary.innerHTML = `
+    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
+    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
+    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
+    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span> ·
+    <span style="font-weight:600">${data.active_storylines || 0} storylines</span>
+    ${stale}
+  `;
+}
+
+const snrBtn = document.getElementById('snrRefreshBtn');
+if (snrBtn) snrBtn.addEventListener('click', loadSnr);
+
+// ── M15 SNR Fast Scanner loader ────────────────────────────────────────────
+async function loadSnrM15() {
+  const tbody   = document.getElementById('snrM15TableBody');
+  const summary = document.getElementById('snrM15Summary');
+  const btn     = document.getElementById('snrM15RefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Running M15 SNR Fast Scanner (H1 levels + M15 breakout)…';
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const ctl = new AbortController();
+    const tmr = setTimeout(() => ctl.abort(), 90000);
+    const resp = await fetch(`${baseUrl}/snr-m15`, { signal: ctl.signal });
+    clearTimeout(tmr);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    renderSnrM15Table(data);
+  } catch (err) {
+    console.error('SNR-M15 load failed', err);
+    const msg = err.name === 'AbortError' ? 'Request timed out (90s). MT5 may be busy — try Refresh Scanner.' : err.message;
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load M15 SNR scanner: ${msg}</span>`;
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderSnrM15Table(data) {
+  const tbody   = document.getElementById('snrM15TableBody');
+  const summary = document.getElementById('snrM15Summary');
+
+  const rows = (data.pairs || []).map(p => {
+    const sym = p.symbol;
+    const storyline = p.storyline || {};
+    const entry = p.entry_tier || {};
+    const engulfing = p.engulfing_patterns || [];
+    const roadblocks = p.roadblocks || [];
+    const tl_conf = p.tl_confluence || {};
+
+    const priceCell = `<span class="mono">${_snrFmtPrice(p.current_price, sym)}</span>`;
+    const supCell = p.nearest_support != null
+      ? `<span style="color:var(--green);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_support, sym)}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const resCell = p.nearest_resistance != null
+      ? `<span style="color:var(--red);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_resistance, sym)}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+
+    const missCount = p.miss_validated || 0;
+    const types = p.snr_types || {};
+    const typeParts = [];
+    if (types.classic_a || types.classic_v) typeParts.push(`${(types.classic_a||0)+(types.classic_v||0)} cls`);
+    if (types.rbs || types.sbr) typeParts.push(`${(types.rbs||0)+(types.sbr||0)} rbs/sbr`);
+    if (types.gap_bullish || types.gap_bearish) typeParts.push(`${(types.gap_bullish||0)+(types.gap_bearish||0)} gap`);
+    if (types.qmr) typeParts.push(`${types.qmr} qm`);
+    let levelsCell = `<span style="color:var(--green)">${p.fresh_levels_count || 0}</span>/<span style="color:var(--text-muted)">${p.unfresh_levels_count || 0}</span>`;
+    if (missCount > 0) levelsCell += ` <span style="color:var(--cyan);font-size:.65rem" title="MISS-validated levels">${missCount}M</span>`;
+    if (typeParts.length) levelsCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${typeParts.join(' · ')}</span>`;
+
+    let storylineCell = '<span style="color:var(--text-muted)">—</span>';
+    if (storyline.active) {
+      const dir = storyline.direction === 'bullish' ? '↑' : '↓';
+      const col = storyline.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
+      const confBadge = storyline.confirmed
+        ? ' <span style="font-size:.6rem;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.5);color:var(--green);padding:1px 3px;border-radius:3px">BO✓</span>'
+        : ' <span style="font-size:.6rem;color:var(--yellow)">⏳</span>';
+      const snrType = storyline.from_snr_type ? ` <span style="font-size:.6rem;color:var(--text-secondary)">${storyline.from_snr_type}</span>` : '';
+      storylineCell = `<span style="color:${col};font-weight:600">${dir} ${storyline.direction}</span>${confBadge}${snrType}`
+        + `<br><span style="font-size:.7rem;color:var(--text-muted)">${_snrFmtPrice(storyline.from_level, sym)} → ${_snrFmtPrice(storyline.to_level, sym)}</span>`;
+    }
+
+    let setupCell = '<span style="color:var(--text-muted)">—</span>';
+    if (entry.tier && entry.tier !== 'no_setup') {
+      const tierColors = {low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--red)'};
+      const setupNames = {1: 'S1 (50/50)', 2: 'S2 (Med)', 3: 'S3 (Low)', 4: 'S4 (Cont)'};
+      const setupLabel = setupNames[entry.setup_num] || entry.tier.toUpperCase();
+      const confBadge = entry.confidence === 'high' ? ' 🎯' : entry.confidence === 'medium' ? ' 🔶' : '';
+      setupCell = `<span style="color:${tierColors[entry.tier] || 'var(--text-muted)'};font-weight:600">${setupLabel}${confBadge}</span>`
+        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${entry.entry_price ? _snrFmtPrice(entry.entry_price, sym) : ''}</span>`;
+    }
+
+    let engCell = '<span style="color:var(--text-muted)">—</span>';
+    if (engulfing.length) {
+      const parts = engulfing.slice(-3).map(e => {
+        const col = e.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
+        const zoneBadge = e.zone_status === 'PEZ' ? ' <span style="font-size:.55rem;color:var(--green)">PEZ</span>'
+          : e.zone_status === 'FEZ' ? ' <span style="font-size:.55rem;color:var(--yellow)">FEZ</span>' : '';
+        return `<span style="color:${col};font-size:.75rem">${e.type}${zoneBadge}</span>`;
+      });
+      engCell = parts.join('<br>');
+      if (p.pez_count || p.fez_count) {
+        engCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${p.pez_count||0} PEZ · ${p.fez_count||0} FEZ</span>`;
+      }
+    }
+
+    let tlCell = '<span style="color:var(--text-muted)">—</span>';
+    if (tl_conf.active) {
+      tlCell = `<span style="color:var(--cyan);font-weight:600;font-size:.78rem">X-Factor ✨</span>`
+        + `<br><span style="font-size:.65rem;color:var(--text-secondary)">${tl_conf.tl_type||'TL'} + ${tl_conf.snr_type||'SNR'}</span>`;
+    } else {
+      const tls = p.trendlines || [];
+      const nearTl = tls.find(t => t.near_price);
+      if (nearTl) {
+        const col = nearTl.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
+        tlCell = `<span style="color:${col};font-size:.78rem">${nearTl.type} ${nearTl.direction === 'bullish' ? '↑' : '↓'}</span>`
+          + `<br><span style="font-size:.65rem;color:var(--text-muted)">@ ${_snrFmtPrice(nearTl.projected, sym)}</span>`;
+      }
+    }
+
+    const rbCell = roadblocks.length
+      ? `<span style="color:var(--yellow);font-size:.78rem">${roadblocks.length} block${roadblocks.length>1?'s':''}</span>`
+        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${roadblocks.slice(0,2).map(r => _snrFmtPrice(r.price, sym)).join(', ')}</span>`
+      : '<span style="color:var(--green);font-size:.78rem">Clear ✅</span>';
+
+    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : p.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
+    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
+      <td><b>${sym}</b></td>
+      <td>${priceCell}</td>
+      <td>${supCell}</td>
+      <td>${resCell}</td>
+      <td>${levelsCell}</td>
+      <td>${storylineCell}</td>
+      <td>${setupCell}</td>
+      <td>${engCell}</td>
+      <td>${tlCell}</td>
+      <td>${rbCell}</td>
+      <td>${_crtSetupCell(p)}</td>
+      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/15)</span></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="12" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  summary.innerHTML = `
+    <span style="color:var(--orange);font-weight:600">⚡ M15 Fast Scanner</span> ·
+    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
+    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
+    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
+    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span> ·
+    <span style="font-weight:600">${data.active_storylines || 0} storylines</span>
+    ${stale}
+  `;
+}
+
+const snrM15Btn = document.getElementById('snrM15RefreshBtn');
+if (snrM15Btn) snrM15Btn.addEventListener('click', loadSnrM15);
+
+// ── WebSocket subscription (Phase B) ────────────────────────────────────────
+// The service emits 'refresh-complete' after each :02/:17/:32/:47 UTC refresh.
+// Dashboard auto-reloads candles without the user clicking refresh.
+(function setupWebSocket() {
+  if (typeof io === 'undefined') { console.warn('socket.io-client not loaded; auto-refresh disabled'); return; }
+  const wsDot = document.getElementById('wsDot');
+  const setDot = (state, label) => { if (!wsDot) return; wsDot.classList.remove('connected','disconnected'); wsDot.classList.add(state); wsDot.title = `WebSocket: ${label}`; };
+  const wsUrl = (API_CONFIG && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  let socket;
+  try {
+    socket = io(wsUrl, { reconnectionDelay: 2000, reconnectionDelayMax: 30000, timeout: 5000, transports: ['websocket','polling'] });
+  } catch (e) { console.warn('WebSocket init failed:', e); return; }
+  socket.on('connect', () => { setDot('connected','connected'); console.info('WebSocket connected:', socket.id); });
+  socket.on('disconnect', (reason) => { setDot('disconnected', reason || 'disconnected'); });
+  socket.on('connect_error', () => { setDot('disconnected','connect error'); });
+  socket.on('refresh-complete', (data) => {
+    console.info('Service refresh complete; reloading dashboard data', data);
+    fetchAllData().then(() => { render(); refreshCountdown = API_CONFIG.refreshInterval / 1000; });
+  });
+})();
 </script>
 </body>
 </html>
