@@ -23,6 +23,12 @@ index_v6.html
 index_v7.html
 index_v8.html
 
+# Runtime state (regenerated at runtime — not source)
+service/alerts_state.json
+
+# OneDrive/FUSE sync artifacts
+*.fuse_hidden*
+
 # Misc
 *.log
 .DS_Store
