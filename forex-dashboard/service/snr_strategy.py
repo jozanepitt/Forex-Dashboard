@@ -1364,7 +1364,10 @@ def analyze_pair(
         return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-DATA",
                 "reason": "insufficient daily candles", "score": 0}
 
-    current_price = daily_candles[-1]["close"]
+    # Use the freshest available intraday close as the live price; the daily close
+    # is yesterday's settlement and would stale-out entry/roadblock/R:R calculations.
+    _price_src = next((c for c in (m15_candles, h1_candles, h4_candles, daily_candles) if c), None)
+    current_price = _price_src[-1]["close"]
     pip = _pip_size(current_price)
 
     # 1. Mark SNR levels from daily close-to-open junctions

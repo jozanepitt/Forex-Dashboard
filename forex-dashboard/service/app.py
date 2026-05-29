@@ -142,18 +142,18 @@ def crt():
         return jsonify(_CRT_CACHE["payload"])
 
     universe = crt_strategy.CRT_UNIVERSE
-    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("15min", "1day")]
+    jobs: list[tuple[str, str]] = [(sym, "15min") for sym in universe]
 
     def _fetch(job):
         sym, iv = job
-        bars, stale = fetcher.get_candles(sym, iv, limit=(400 if iv == "15min" else 60))
-        return sym, iv, bars, stale
+        bars, stale = fetcher.get_candles(sym, iv, limit=400)
+        return sym, bars, stale
 
-    candles_by_pair: dict[str, dict] = {sym: {"m15": [], "1d": []} for sym in universe}
+    candles_by_pair: dict[str, dict] = {sym: {"m15": []} for sym in universe}
     stale_set: set[str] = set()
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for sym, iv, bars, stale in pool.map(_fetch, jobs):
-            candles_by_pair[sym]["m15" if iv == "15min" else "1d"] = bars
+        for sym, bars, stale in pool.map(_fetch, jobs):
+            candles_by_pair[sym]["m15"] = bars
             if stale:
                 stale_set.add(sym)
 

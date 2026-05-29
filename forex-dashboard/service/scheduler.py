@@ -30,6 +30,7 @@ def refresh_all():
         try:
             fetcher.get_candles(sym, DEFAULT_INTERVAL)  # M15
             fetcher.get_candles(sym, "1h", limit=200)   # H1 — needed by M15 SNR scanner (~8 days)
+            fetcher.get_candles(sym, "1day", limit=60)  # daily — needed by SNR-H4 scanner
             updated += 1
         except Exception as e:
             log.error("refresh_all: %s failed: %s", sym, e)
@@ -118,7 +119,6 @@ def _run_crt_alerts():
     for sym in crt_strategy.CRT_UNIVERSE:
         candles_by_pair[sym] = {
             "m15": cache.read_candles(sym, "15min", limit=400),
-            "1d":  cache.read_candles(sym, "1day",  limit=60),
         }
     result = crt_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):

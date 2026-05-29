@@ -215,9 +215,11 @@ def detect_smt(
     self_swept_low = self_1am["low"] < self_asia["low"]
     partner_swept_low = partner_1am["low"] < partner_asia["low"]
     if self_swept_high != partner_swept_high:
-        return "BEARISH-DIVERGENCE" if self_swept_high else "BULLISH-DIVERGENCE-PARTNER"
+        # A high sweep signals a bearish reversal regardless of which pair swept.
+        return "BEARISH-DIVERGENCE" if self_swept_high else "BEARISH-DIVERGENCE-PARTNER"
     elif self_swept_low != partner_swept_low:
-        return "BULLISH-DIVERGENCE" if self_swept_low else "BEARISH-DIVERGENCE-PARTNER"
+        # A low sweep signals a bullish reversal regardless of which pair swept.
+        return "BULLISH-DIVERGENCE" if self_swept_low else "BULLISH-DIVERGENCE-PARTNER"
     return "NONE"
 
 

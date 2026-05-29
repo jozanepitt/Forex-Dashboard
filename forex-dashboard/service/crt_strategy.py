@@ -108,7 +108,6 @@ def latest_populated_session(
 
 def analyze_pair(
     symbol: str,
-    daily_candles: list[dict],
     m15_candles: list[dict],
     smt_partner_buckets: Optional[dict] = None,
     now_ny: Optional[datetime] = None,
@@ -319,7 +318,7 @@ def analyze_pair(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
-    """Run analyze_pair for every pair. `candles_by_pair[sym]` = {'1d', 'm15'}."""
+    """Run analyze_pair for every pair. `candles_by_pair[sym]` = {'m15': [...]}."""
     now_ny = datetime.now(NY)
 
     smt_partners = {"EUR/USD": "GBP/USD", "GBP/USD": "EUR/USD"}
@@ -350,7 +349,6 @@ def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
         pairs_out.append(
             analyze_pair(
                 symbol=sym,
-                daily_candles=bundles.get("1d", []),
                 m15_candles=bundles.get("m15", []),
                 smt_partner_buckets=partner_bk,
                 now_ny=now_ny,

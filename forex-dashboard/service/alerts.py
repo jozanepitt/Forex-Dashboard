@@ -456,7 +456,7 @@ def alert_snr_setup(pair: str, row: dict):
     """Fire when Malaysian SNR Emperor signals a tradeable setup.
 
     QUALITY GATE — only sends alerts that are actually tradeable:
-    - Grade A or B (score ≥ 6/15)
+    - Grade A or B (score ≥ 7/15)
     - Active storyline with confirmed H4 breakout
     - Entry tier = Low or Medium risk (NOT high risk / 50-50)
     - Setup confidence = high or medium
