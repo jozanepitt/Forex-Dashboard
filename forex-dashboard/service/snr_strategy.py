@@ -984,12 +984,14 @@ def _classify_entry_tier(
             conf = "medium"
         else:
             conf = "low"
+        # Entry at pullback zone: nearest fresh level > from_level (origin).
+        # NEVER use to_level — that's the profit target, not the entry.
         return {
             "tier": "low",
             "setup_num": 3,
             "label": "Low Risk — 1TF BO + pullback confirmed",
             "confidence": conf,
-            "entry_price": target_level or storyline.get("to_level"),
+            "entry_price": target_level or storyline.get("from_level"),
         }
 
     # ── Setup 4: Low Risk — Continuation (H4 fresh aligned with direction) ──
@@ -1019,12 +1021,14 @@ def _classify_entry_tier(
 
     # ── Setup 2B: Medium Risk — 2 TF lower BO without pullback ───────
     if confirmed and h4_breakout and not h4_pullback:
+        # Entry at from_level: await pullback to the origin zone.
+        # to_level is the profit target, not the entry.
         return {
             "tier": "medium",
             "setup_num": 2,
-            "label": "Medium Risk — H4 BO confirmed, await pullback",
+            "label": "Medium Risk — BO confirmed, await pullback",
             "confidence": "medium",
-            "entry_price": target_level or storyline.get("to_level"),
+            "entry_price": target_level or storyline.get("from_level"),
         }
 
     # ── Setup 2A: Medium Risk — Rejection + fresh level refinement ────
@@ -1049,12 +1053,14 @@ def _classify_entry_tier(
 
     # ── Storyline active but no clear entry trigger ───────────────────
     if confirmed:
+        # Entry at from_level: the level where price rejected and storyline began.
+        # to_level is the profit target (TP1), never the entry.
         return {
             "tier": "medium",
             "setup_num": 2,
             "label": "Medium Risk — BO confirmed, target in sight",
             "confidence": "medium",
-            "entry_price": storyline.get("to_level"),
+            "entry_price": storyline.get("from_level"),
         }
 
     return {
