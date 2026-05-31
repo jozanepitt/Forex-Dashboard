@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+import instruments
 from config import PRIORITY_PAIRS
 
 # ── Reuse all core functions from the H4 scanner ────────────────────────────
@@ -73,13 +74,15 @@ def _build_trade_plan_m15(
     all_levels: list[dict],
     h1_candles: list[dict],
     current_price: float,
+    symbol: Optional[str] = None,
 ) -> dict:
     """Build trade plan for M15 setups — tighter stops than H4.
 
     Key differences from H4 trade plan:
     - ATR calculated from H1 candles (not daily) for tighter SL
-    - SL buffer is smaller (H1-scale, not D1-scale)
-    - Minimum SL = 5 pips (vs 10 for H4)
+    - SL buffer + ATR cap are M15-scale (per asset class, from instruments)
+    - Minimum SL = the instrument's per-asset floor (so e.g. Nasdaq isn't
+      given a noise-tight stop)
     """
     empty = {"entry": None, "sl": None, "tp1": None, "tp2": None,
              "rr1": None, "rr2": None, "sl_pips": None,
@@ -88,10 +91,12 @@ def _build_trade_plan_m15(
     if setup not in ("BUY", "SELL") or not entry_price:
         return empty
 
-    pip = _pip_size(entry_price)
+    pip = _pip_size(entry_price, symbol)
+    slp = instruments.sl_params(symbol, "m15")
+    min_sl = instruments.min_sl_distance(symbol, entry_price)
     atr = _calc_atr(h1_candles)  # H1 ATR = much tighter than daily
     if atr == 0:
-        atr = pip * 25  # fallback: 25 pips for M15 context
+        atr = min_sl * 4  # fallback when ATR unavailable (M15 scale)
 
     is_buy = setup == "BUY"
     entry = entry_price
@@ -105,20 +110,20 @@ def _build_trade_plan_m15(
         elif not is_buy and lvl["type"] == "resistance" and lvl["price"] > entry:
             sl_candidates.append(lvl["price"])
 
+    buffer = atr * slp["buffer"]  # M15-scale structure buffer (per asset class)
     if sl_candidates:
         if is_buy:
             nearest_below = max(sl_candidates)
-            sl = nearest_below - atr * 0.10  # tighter buffer for M15
+            sl = nearest_below - buffer
         else:
             nearest_above = min(sl_candidates)
-            sl = nearest_above + atr * 0.10
+            sl = nearest_above + buffer
     else:
-        sl = entry - atr * 0.4 if is_buy else entry + atr * 0.4
+        sl = entry - atr * slp["atr_fallback"] if is_buy else entry + atr * slp["atr_fallback"]
 
-    # Clamp SL: minimum 5 pips (M15 tighter), maximum 0.6× ATR
+    # Clamp SL: per-asset minimum floor, maximum = per-asset M15 ATR cap
     sl_dist = abs(entry - sl)
-    min_sl = pip * 5
-    max_sl = atr * 0.6
+    max_sl = max(atr * slp["atr_cap"], min_sl)  # cap must never fall below the floor
     if sl_dist < min_sl:
         sl = entry - min_sl if is_buy else entry + min_sl
     elif sl_dist > max_sl:
@@ -213,14 +218,14 @@ def analyze_pair(
     # Use the most recent candle for current price (M15 is more recent than H1)
     current_price = (m15_candles[-1]["close"] if m15_candles
                      else h1_candles[-1]["close"])
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
 
     # 1. Mark SNR levels from H1 close-to-open junctions
     #    (same function — it just sees "candles" and marks A-shape/V-shape)
-    levels = _mark_levels(h1_candles, lookback=120)  # ~5 days of H1
+    levels = _mark_levels(h1_candles, lookback=120, symbol=symbol)  # ~5 days of H1
 
     # 2. Detect QM patterns from M15
-    qm_levels = _detect_qm_levels(m15_candles or [], current_price)
+    qm_levels = _detect_qm_levels(m15_candles or [], current_price, symbol=symbol)
     all_levels = levels + qm_levels
     all_levels = _deduplicate_levels(all_levels, LEVEL_TOLERANCE_PIPS * pip)
 
@@ -232,17 +237,17 @@ def analyze_pair(
     #    rejection_lookback=30 → ~7.5h on M15 (vs ~2.5 days on H4 with 15)
     #    bo_lookback=20 → ~5h on M15 (vs ~1.7 days on H4 with 10)
     storyline = _detect_storyline(all_levels, m15_candles or [], current_price,
-                                  rejection_lookback=30, bo_lookback=20)
+                                  rejection_lookback=30, bo_lookback=20, symbol=symbol)
 
     # 4. Detect engulfing patterns on M15
     engulfing = _detect_engulfing(m15_candles or h1_candles[-20:])
 
     # 4b. Multi-TF engulfing: drop to M5 (if available) or use M15 itself
-    mtf_eg = _multi_tf_engulfing(engulfing, m5_candles, all_levels, current_price)
+    mtf_eg = _multi_tf_engulfing(engulfing, m5_candles, all_levels, current_price, symbol=symbol)
 
     # 5. Detect trendlines on M15
-    trendlines = _detect_trendlines(m15_candles or [], current_price)
-    tl_confluence = _trendline_snr_confluence(trendlines, all_levels, current_price)
+    trendlines = _detect_trendlines(m15_candles or [], current_price, symbol=symbol)
+    tl_confluence = _trendline_snr_confluence(trendlines, all_levels, current_price, symbol=symbol)
 
     # 6. Roadblocks
     direction = (storyline.get("direction")
@@ -254,13 +259,13 @@ def analyze_pair(
     # 7. Entry tier classification
     entry = _classify_entry_tier(
         storyline, engulfing, all_levels, current_price,
-        m15_candles or [], tl_confluence,
+        m15_candles or [], tl_confluence, symbol=symbol,
     )
 
     # 8. SOP scoring
     score, notes = _sop_score(
         all_levels, storyline, engulfing, entry, roadblocks,
-        tl_confluence, qm_levels, current_price, mtf_eg,
+        tl_confluence, qm_levels, current_price, mtf_eg, symbol=symbol,
     )
 
     # ── Setup determination ───────────────────────────────────────────
@@ -317,6 +322,7 @@ def analyze_pair(
         all_levels=all_levels,
         h1_candles=h1_candles,
         current_price=current_price,
+        symbol=symbol,
     )
 
     return {

@@ -5,6 +5,8 @@ All functions take a list of bar dicts: {open, high, low, close, ts_utc}.
 from __future__ import annotations
 from typing import Optional
 
+import instruments
+
 
 # ── EMA ───────────────────────────────────────────────────────────────────────
 
@@ -200,7 +202,7 @@ def detect_stop_hunt(bars: list[dict], lookback: int = 20) -> dict:
 
 # ── Asian range ───────────────────────────────────────────────────────────────
 
-def detect_asian_range(bars: list[dict]) -> dict:
+def detect_asian_range(bars: list[dict], symbol: Optional[str] = None) -> dict:
     """Asian session = 00:00–07:00 GMT. Use last occurrence."""
     from datetime import datetime, timezone
     asian = []
@@ -215,10 +217,19 @@ def detect_asian_range(bars: list[dict]) -> dict:
         return {"valid": False}
     hi = max(b["high"] for b in asian)
     lo = min(b["low"]  for b in asian)
-    pip_mult  = 100 if hi > 10 else 10000   # JPY: 0.01 per pip; others: 0.0001
-    rng_pips  = (hi - lo) * pip_mult
+    pip       = instruments.pip_size(symbol, hi)
+    rng_pips  = (hi - lo) / pip
+    # "Tight consolidation" threshold scales per asset class: 50 pips for FX/JPY,
+    # but indices/metals/crypto need a wider band (a 50-point Nasdaq range is
+    # unrealistically tight). Floor at the instrument's min-SL ×2.
+    cls = instruments.asset_class(symbol)
+    if cls in ("fx", "jpy"):
+        tight_max = 50
+    else:
+        floor_pips = (instruments.spec(symbol) or {}).get("min_sl_pips", 50)
+        tight_max = max(50, floor_pips * 2)
     return {
-        "valid":   rng_pips < 50,
+        "valid":   rng_pips < tight_max,
         "high":    hi,
         "low":     lo,
         "mid":     (hi + lo) / 2,
@@ -415,7 +426,8 @@ def detect_straightaway(bars: list[dict], lookback: int = 6, min_run: int = 3) -
 
 # ── HOD / LOD proximity ───────────────────────────────────────────────────────
 
-def detect_hod_lod(bars: list[dict], threshold_pips: int = 15) -> dict:
+def detect_hod_lod(bars: list[dict], threshold_pips: int = 15,
+                   symbol: Optional[str] = None) -> dict:
     """
     Detect proximity to the High of Day or Low of Day.
     HOD/LOD breaks in Distribution phase are BTMM continuation signals.
@@ -428,7 +440,7 @@ def detect_hod_lod(bars: list[dict], threshold_pips: int = 15) -> dict:
     hod = max(b["high"] for b in day)
     lod = min(b["low"]  for b in day)
     cur = bars[-1]["close"]
-    pip = 0.01 if cur > 10 else 0.0001
+    pip = instruments.pip_size(symbol, cur)
     thr = threshold_pips * pip
 
     return {
@@ -443,7 +455,7 @@ def detect_hod_lod(bars: list[dict], threshold_pips: int = 15) -> dict:
 
 # ── Half Batman ───────────────────────────────────────────────────────────────
 
-def detect_half_batman(bars: list[dict], asian: dict) -> dict:
+def detect_half_batman(bars: list[dict], asian: dict, symbol: Optional[str] = None) -> dict:
     """
     Half Batman: price breaks Asian range, extends 0.5× the range beyond the
     Asian boundary, then retraces back to the boundary — BTMM continuation.
@@ -454,7 +466,7 @@ def detect_half_batman(bars: list[dict], asian: dict) -> dict:
 
     rng    = asian["high"] - asian["low"]
     cur    = bars[-1]["close"]
-    pip    = 0.01 if cur > 10 else 0.0001
+    pip    = instruments.pip_size(symbol, cur)
     tol    = 5 * pip
 
     half_h = asian["high"] + 0.5 * rng
@@ -571,7 +583,7 @@ def detect_3push_stop_hunt(bars: list[dict], lookback: int = 30) -> dict:
 
 # ── Full pair analysis ────────────────────────────────────────────────────────
 
-def analyze(bars: list[dict]) -> dict:
+def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     """
     Run all 13 BTMM indicators on a bar slice.
     Returns composite score (−100 to +100), 13-item checklist, A+ setup detection,
@@ -588,7 +600,7 @@ def analyze(bars: list[dict]) -> dict:
     amd    = detect_amd(bars)
     kz     = active_kill_zone(bars[-1]["ts_utc"])
     hunt   = detect_stop_hunt(bars)
-    asian  = detect_asian_range(bars)
+    asian  = detect_asian_range(bars, symbol)
     tdi_leg = detect_tdi_leg(tdi)
 
     # New detectors
@@ -596,8 +608,8 @@ def analyze(bars: list[dict]) -> dict:
     mw        = detect_mw_pattern(bars)
     shark     = detect_shark_fin(tdi)
     straight  = detect_straightaway(bars)
-    hod_lod   = detect_hod_lod(bars)
-    half_bat  = detect_half_batman(bars, asian)
+    hod_lod   = detect_hod_lod(bars, symbol=symbol)
+    half_bat  = detect_half_batman(bars, asian, symbol)
     tdi_div   = detect_tdi_divergence(bars)
     push_hunt = detect_3push_stop_hunt(bars)
 
@@ -669,7 +681,7 @@ def analyze(bars: list[dict]) -> dict:
         signal = "Neutral"
 
     # ── Trade plan (SL/TP from Asian range or fallback) ───────────────────────
-    pip       = 0.0001 if closes[-1] < 10 else 0.01
+    pip       = instruments.pip_size(symbol, closes[-1])
     direction = "bullish" if setup_bullish else "bearish"
 
     # For Half Batman setups the canonical entry is at the Asian boundary (return
@@ -696,9 +708,13 @@ def analyze(bars: list[dict]) -> dict:
             tp1 = asian["low"]  - 0.5 * asian_rng
             tp2 = asian["low"]  - asian_rng
     else:
-        sl  = entry - 20 * pip if setup_bullish else entry + 20 * pip
-        tp1 = entry + 30 * pip if setup_bullish else entry - 30 * pip
-        tp2 = entry + 60 * pip if setup_bullish else entry - 60 * pip
+        # No valid Asian range → size the stop from volatility (ADR), floored at
+        # the instrument's per-asset minimum so indices/metals/crypto don't get a
+        # forex-sized (e.g. 20-pip) stop. Targets at 1:1.5 / 1:3 R:R.
+        risk = max(instruments.min_sl_distance(symbol, entry), adr * 0.15)
+        sl  = entry - risk       if setup_bullish else entry + risk
+        tp1 = entry + risk * 1.5 if setup_bullish else entry - risk * 1.5
+        tp2 = entry + risk * 3.0 if setup_bullish else entry - risk * 3.0
 
     # Safety clamp: SL must always be on the correct side of entry regardless of
     # how the Asian range and current price interact (guards against future regressions).

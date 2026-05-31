@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+import instruments
 from config import DISCORD_WEBHOOK_URL
 
 log = logging.getLogger("alerts")
@@ -104,26 +105,22 @@ def _now_sast_str() -> str:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _pip_size(price: float) -> float:
-    """Return pip size based on instrument price range."""
-    if price > 5000:   # Indices: DAX (~25000), US30 (~40000)
-        return 1.0
-    if price > 500:
-        return 0.10    # Gold (XAU/USD)
-    return 0.01 if price > 10 else 0.0001
+def _pip_size(price: float, symbol: Optional[str] = None) -> float:
+    """Pip/point size — resolves by symbol via the instrument spec table
+    (authoritative), falling back to price magnitude only for unknown symbols."""
+    return instruments.pip_size(symbol, price)
 
 
-def _fmt_price(price: float) -> str:
-    """Format price: 1 decimal for indices, 3 for JPY, 5 for majors."""
-    if price > 5000:
-        return f"{price:.1f}"   # DAX, US30 etc.
-    return f"{price:.3f}" if price > 10 else f"{price:.5f}"
+def _fmt_price(price: float, symbol: Optional[str] = None) -> str:
+    """Format price using the instrument's display precision."""
+    return instruments.fmt_price(symbol, price)
 
 
 def _level_fields(entry: float, sl: float, tp1: float,
-                  tp2: Optional[float], direction: str) -> list[dict]:
+                  tp2: Optional[float], direction: str,
+                  symbol: Optional[str] = None) -> list[dict]:
     """Build Discord field blocks for entry/SL/TP1/TP2/RR."""
-    pip  = _pip_size(entry)
+    pip  = _pip_size(entry, symbol)
     mult = -1 if direction in ("sell", "bearish") else 1
 
     sl_pips  = round(abs(entry - sl)  / pip)
@@ -132,14 +129,14 @@ def _level_fields(entry: float, sl: float, tp1: float,
 
     fields = [
         {"name": "Direction",  "value": "**BUY**  ↑" if mult == 1 else "**SELL** ↓", "inline": True},
-        {"name": "Entry",      "value": f"`{_fmt_price(entry)}`",                      "inline": True},
-        {"name": "Stop Loss",  "value": f"`{_fmt_price(sl)}`  (−{sl_pips} pips)",      "inline": True},
-        {"name": "TP1",        "value": f"`{_fmt_price(tp1)}`  (+{tp1_pips} pips)",    "inline": True},
+        {"name": "Entry",      "value": f"`{_fmt_price(entry, symbol)}`",               "inline": True},
+        {"name": "Stop Loss",  "value": f"`{_fmt_price(sl, symbol)}`  (−{sl_pips} pips)", "inline": True},
+        {"name": "TP1",        "value": f"`{_fmt_price(tp1, symbol)}`  (+{tp1_pips} pips)", "inline": True},
         {"name": "Risk:Reward","value": f"**1 : {rr:.2f}**",                           "inline": True},
     ]
     if tp2 is not None:
         tp2_pips = round(abs(tp2 - entry) / pip)
-        fields.insert(4, {"name": "TP2", "value": f"`{_fmt_price(tp2)}`  (+{tp2_pips} pips)", "inline": True})
+        fields.insert(4, {"name": "TP2", "value": f"`{_fmt_price(tp2, symbol)}`  (+{tp2_pips} pips)", "inline": True})
 
     return fields
 
@@ -190,9 +187,9 @@ def alert_strong_signal(pair: str, direction: str, score: float,
         elif direction == "sell" and tp1 >= price - 2 * pip:
             tp1 = price - sl_dist
             tp2 = price - sl_dist * 2
-        if not _check_rr(price, sl, tp1, direction):
+        if not _check_rr(price, sl, tp1, direction, symbol=pair):
             return  # suppress garbage trade plans
-        fields += _level_fields(price, sl, tp1, tp2, direction)
+        fields += _level_fields(price, sl, tp1, tp2, direction, symbol=pair)
 
     embed = {
         "title":  f"{arrow} {pair} — {signal}",
@@ -206,12 +203,12 @@ def alert_strong_signal(pair: str, direction: str, score: float,
 
 
 def _check_rr(entry: float, sl: float, tp1: float, direction: str,
-              min_rr: float = 0.8) -> bool:
+              min_rr: float = 0.8, symbol: Optional[str] = None) -> bool:
     """Sanity-check the trade plan. Returns True if R:R is acceptable.
 
     Rejects garbage plans where TP1 is on the wrong side of entry or R:R < min_rr.
     """
-    pip = _pip_size(entry)
+    pip = _pip_size(entry, symbol)
     sl_dist  = abs(entry - sl)
     tp1_dist = abs(tp1 - entry)
     if sl_dist < pip:
@@ -241,14 +238,14 @@ def alert_aplus_setup(pair: str, score: float, checklist: int,
     rule = "aplus_setup"
     if _is_throttled(pair, rule):
         return
-    if not _check_rr(entry, sl, tp1, direction):
+    if not _check_rr(entry, sl, tp1, direction, symbol=pair):
         log.warning("A+ alert BLOCKED for %s: bad R:R — trade plan invalid", pair)
         return
     colour = 0xFFD700   # gold
     arrow  = "📈⭐" if direction in ("buy", "bullish") else "📉⭐"
     label  = "BUY" if direction in ("buy", "bullish") else "SELL"
 
-    fields = _level_fields(entry, sl, tp1, tp2, direction)
+    fields = _level_fields(entry, sl, tp1, tp2, direction, symbol=pair)
     fields += [
         {"name": "Tier",      "value": "🏆 **A+ Setup**",              "inline": True},
         {"name": "Score",     "value": f"**{score:+.0f} / 100**",      "inline": True},
@@ -281,13 +278,13 @@ def alert_active_setup(pair: str, setup_key: str, gates_passed: int,
     rule = f"setup_{setup_key}"
     if _is_throttled(pair, rule):
         return
-    if not _check_rr(entry, sl, tp1, direction):
+    if not _check_rr(entry, sl, tp1, direction, symbol=pair):
         log.warning("Setup alert BLOCKED for %s (%s): bad R:R", pair, setup_key)
         return
     name   = _SETUP_NAMES.get(setup_key, setup_key)
     colour = _COLOURS["strong_buy"] if direction == "bullish" else _COLOURS["strong_sell"]
 
-    fields = _level_fields(entry, sl, tp1, tp2, direction)
+    fields = _level_fields(entry, sl, tp1, tp2, direction, symbol=pair)
     fields += [
         {"name": "Setup",      "value": f"**{name}**",                                  "inline": True},
         {"name": "Gates",      "value": f"**{gates_passed}/{gates_total}**",             "inline": True},
@@ -499,7 +496,7 @@ def alert_snr_setup(pair: str, row: dict):
     plan_tp1_chk = plan.get("tp1")
     if plan_entry_chk and plan_sl_chk and plan_tp1_chk:
         direction_rr = "buy" if setup == "BUY" else "sell"
-        if not _check_rr(plan_entry_chk, plan_sl_chk, plan_tp1_chk, direction_rr, min_rr=0.8):
+        if not _check_rr(plan_entry_chk, plan_sl_chk, plan_tp1_chk, direction_rr, min_rr=0.8, symbol=pair):
             log.warning("SNR alert BLOCKED for %s: bad R:R — trade plan invalid", pair)
             return
 
@@ -648,7 +645,7 @@ def alert_snr_m15_setup(pair: str, row: dict):
     plan_tp1 = plan.get("tp1")
     if plan_entry and plan_sl and plan_tp1:
         direction_rr = "buy" if setup == "BUY" else "sell"
-        if not _check_rr(plan_entry, plan_sl, plan_tp1, direction_rr, min_rr=0.8):
+        if not _check_rr(plan_entry, plan_sl, plan_tp1, direction_rr, min_rr=0.8, symbol=pair):
             log.warning("SNR-M15 alert BLOCKED for %s: bad R:R — trade plan invalid", pair)
             return
 

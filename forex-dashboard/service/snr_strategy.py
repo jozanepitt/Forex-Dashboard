@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+import instruments
 from config import PRIORITY_PAIRS
 
 log = logging.getLogger("snr_strategy")
@@ -38,15 +39,12 @@ MAX_LEVEL_USES = 2
 LEVEL_TOLERANCE_PIPS = 5
 
 
-def _pip_size(price: float) -> float:
-    """Return pip size based on instrument price range."""
-    if price > 5000:  # Indices: DAX (~25000), US30 (~40000)
-        return 1.0
-    if price > 500:   # Gold (~2500 but < 5000 handled above)
-        return 0.10
-    if price > 10:    # JPY, Silver
-        return 0.01
-    return 0.0001
+def _pip_size(price: float, symbol: Optional[str] = None) -> float:
+    """Pip/point size for an instrument. Resolves by symbol via the instrument
+    spec table (authoritative); falls back to price magnitude only when the
+    symbol is unknown. Threading `symbol` avoids the price-threshold bug where
+    e.g. Gold crossing 5000 would flip its pip 0.10 -> 1.0."""
+    return instruments.pip_size(symbol, price)
 
 
 def _is_bullish(candle: dict) -> bool:
@@ -69,7 +67,8 @@ def _candle_range(candle: dict) -> float:
 # 1. Level Marking — Close-to-Open Junction (Malaysian Emperor Method)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _mark_levels(daily_candles: list[dict], lookback: int = 60) -> list[dict]:
+def _mark_levels(daily_candles: list[dict], lookback: int = 60,
+                 symbol: Optional[str] = None) -> list[dict]:
     """Mark SNR levels using the Malaysian close-to-open junction method.
 
     Resistance ("A-shape"): Bullish candle close → Bearish candle open.
@@ -89,7 +88,7 @@ def _mark_levels(daily_candles: list[dict], lookback: int = 60) -> list[dict]:
     if len(candles) < 5:
         return []
 
-    pip = _pip_size(candles[-1]["close"])
+    pip = _pip_size(candles[-1]["close"], symbol)
     tolerance = LEVEL_TOLERANCE_PIPS * pip
     levels: list[dict] = []
 
@@ -246,7 +245,8 @@ def _deduplicate_levels(levels: list[dict], tolerance: float) -> list[dict]:
 # 2. QM Pattern Detection (from Institutional PDF)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _detect_qm_levels(h4_candles: list[dict], current_price: float) -> list[dict]:
+def _detect_qm_levels(h4_candles: list[dict], current_price: float,
+                      symbol: Optional[str] = None) -> list[dict]:
     """Detect Quasimodo Reversal (QMR) and Continuation (QMC) patterns on H4.
 
     QMR: Head-and-shoulders structure where the "shoulder" level is the entry.
@@ -257,7 +257,7 @@ def _detect_qm_levels(h4_candles: list[dict], current_price: float) -> list[dict
     if len(h4_candles) < 10:
         return []
 
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     tolerance = LEVEL_TOLERANCE_PIPS * pip
     qm_levels: list[dict] = []
 
@@ -353,7 +353,8 @@ def _find_swings(candles: list[dict], left: int = 2, right: int = 2,
 def _detect_storyline(levels: list[dict], h4_candles: list[dict],
                       current_price: float,
                       rejection_lookback: int = 15,
-                      bo_lookback: int = 10) -> dict:
+                      bo_lookback: int = 10,
+                      symbol: Optional[str] = None) -> dict:
     """Detect storyline using the Emperor's 4 engagement rules.
 
     Rule 1: Same-TF levels — price travels from one level to another on same TF.
@@ -370,7 +371,7 @@ def _detect_storyline(levels: list[dict], h4_candles: list[dict],
         return {"active": False, "direction": None, "from_level": None,
                 "to_level": None, "confirmed": False, "rule_status": {}}
 
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     tolerance = LEVEL_TOLERANCE_PIPS * pip
 
     # Separate fresh levels by type
@@ -640,7 +641,8 @@ def _detect_engulfing(candles: list[dict], lookback: int = 15) -> list[dict]:
 
 
 def _multi_tf_engulfing(h4_engulfing: list[dict], h1_candles: list[dict] | None,
-                        levels: list[dict], current_price: float) -> dict:
+                        levels: list[dict], current_price: float,
+                        symbol: Optional[str] = None) -> dict:
     """Emperor's 2-TF engulfing zone analysis (PDF Pages 46-47).
 
     SOP:
@@ -678,7 +680,7 @@ def _multi_tf_engulfing(h4_engulfing: list[dict], h1_candles: list[dict] | None,
     # Find SNR levels that fall inside the H4 engulfing zone
     zone_hi = active_zone["zone_high"]
     zone_lo = active_zone["zone_low"]
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     tol = LEVEL_TOLERANCE_PIPS * pip
 
     for lvl in levels:
@@ -730,7 +732,8 @@ def _multi_tf_engulfing(h4_engulfing: list[dict], h1_candles: list[dict] | None,
 # 5. Trendline Detection (Emperor: Regular, Breakout, QM)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _detect_trendlines(h4_candles: list[dict], current_price: float) -> list[dict]:
+def _detect_trendlines(h4_candles: list[dict], current_price: float,
+                       symbol: Optional[str] = None) -> list[dict]:
     """Detect trendlines algorithmically by connecting swing points.
 
     Emperor's trendlines are "angled SNR" that map trend direction.
@@ -746,7 +749,7 @@ def _detect_trendlines(h4_candles: list[dict], current_price: float) -> list[dic
     if len(h4_candles) < 10:
         return []
 
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     tolerance = LEVEL_TOLERANCE_PIPS * pip * 3  # wider zone for trendlines
     recent = h4_candles[-40:]
     # Emperor hooking method: trendlines use candle BODIES, not wicks
@@ -824,7 +827,8 @@ def _detect_trendlines(h4_candles: list[dict], current_price: float) -> list[dic
 
 
 def _trendline_snr_confluence(trendlines: list[dict], levels: list[dict],
-                              current_price: float) -> dict:
+                              current_price: float,
+                              symbol: Optional[str] = None) -> dict:
     """Check for Emperor's 'X-factor' — trendline + SNR convergence.
 
     When a trendline and an SNR level meet at the same price zone, it's
@@ -833,7 +837,7 @@ def _trendline_snr_confluence(trendlines: list[dict], levels: list[dict],
     Emperor rule: "Trendline doesn't apply a GAP SNR (except when refined
     into LTF Engulfing)." — so gap levels are excluded from confluence.
     """
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     tolerance = LEVEL_TOLERANCE_PIPS * pip * 5  # generous zone for convergence
 
     for tl in trendlines:
@@ -906,6 +910,7 @@ def _classify_entry_tier(
     current_price: float,
     h4_candles: list[dict],
     tl_confluence: dict,
+    symbol: Optional[str] = None,
 ) -> dict:
     """Classify entry tier per the Emperor's 4 setup types.
 
@@ -919,7 +924,7 @@ def _classify_entry_tier(
         return {"tier": "no_setup", "setup_num": 0,
                 "label": "No active storyline", "confidence": "none"}
 
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     tolerance = LEVEL_TOLERANCE_PIPS * pip
     direction = storyline["direction"]
     confirmed = storyline.get("confirmed", False)
@@ -1086,6 +1091,7 @@ def _sop_score(
     qm_levels: list[dict],
     current_price: float,
     mtf_eg: dict | None = None,
+    symbol: Optional[str] = None,
 ) -> tuple[int, list[str]]:
     """Score using the Emperor's 5-action SOP flow.
 
@@ -1102,7 +1108,7 @@ def _sop_score(
     """
     if mtf_eg is None:
         mtf_eg = {}
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
     score = 0
     notes: list[str] = []
 
@@ -1220,6 +1226,7 @@ def _build_trade_plan(
     all_levels: list[dict],
     daily_candles: list[dict],
     current_price: float,
+    symbol: Optional[str] = None,
 ) -> dict:
     """Build concrete trade plan: Entry, SL, TP1, TP2, R:R.
 
@@ -1238,10 +1245,12 @@ def _build_trade_plan(
     if setup not in ("BUY", "SELL") or not entry_price:
         return empty
 
-    pip = _pip_size(entry_price)
+    pip = _pip_size(entry_price, symbol)
+    slp = instruments.sl_params(symbol, "h4")
+    min_sl = instruments.min_sl_distance(symbol, entry_price)
     atr = _calc_atr(daily_candles)
     if atr == 0:
-        atr = pip * 50  # fallback: 50 pips
+        atr = min_sl * 5  # fallback when ATR unavailable (≈ structure-scale volatility)
 
     is_buy = setup == "BUY"
 
@@ -1259,22 +1268,22 @@ def _build_trade_plan(
         elif not is_buy and lvl["type"] == "resistance" and lvl["price"] > entry:
             sl_candidates.append(lvl["price"])
 
+    buffer = atr * slp["buffer"]  # structure buffer scales with asset volatility
     if sl_candidates:
         if is_buy:
             # Nearest support below entry → SL below it
             nearest_below = max(sl_candidates)
-            sl = nearest_below - atr * 0.15  # small buffer below zone
+            sl = nearest_below - buffer
         else:
             nearest_above = min(sl_candidates)
-            sl = nearest_above + atr * 0.15
+            sl = nearest_above + buffer
     else:
-        # Fallback: ATR-based SL
-        sl = entry - atr * 0.5 if is_buy else entry + atr * 0.5
+        # Fallback: ATR-based SL (per-asset multiple)
+        sl = entry - atr * slp["atr_fallback"] if is_buy else entry + atr * slp["atr_fallback"]
 
-    # Clamp SL: minimum 10 pips, maximum ATR distance
+    # Clamp SL: per-asset minimum floor, maximum = per-asset ATR cap
     sl_dist = abs(entry - sl)
-    min_sl = pip * 10
-    max_sl = atr * 0.8
+    max_sl = max(atr * slp["atr_cap"], min_sl)  # cap must never fall below the floor
     if sl_dist < min_sl:
         sl = entry - min_sl if is_buy else entry + min_sl
     elif sl_dist > max_sl:
@@ -1368,13 +1377,13 @@ def analyze_pair(
     # is yesterday's settlement and would stale-out entry/roadblock/R:R calculations.
     _price_src = next((c for c in (m15_candles, h1_candles, h4_candles, daily_candles) if c), None)
     current_price = _price_src[-1]["close"]
-    pip = _pip_size(current_price)
+    pip = _pip_size(current_price, symbol)
 
     # 1. Mark SNR levels from daily close-to-open junctions
-    levels = _mark_levels(daily_candles)
+    levels = _mark_levels(daily_candles, symbol=symbol)
 
     # 2. Detect QM patterns from H4
-    qm_levels = _detect_qm_levels(h4_candles or [], current_price)
+    qm_levels = _detect_qm_levels(h4_candles or [], current_price, symbol=symbol)
     # Merge QM levels into main level list
     all_levels = levels + qm_levels
     all_levels = _deduplicate_levels(all_levels, LEVEL_TOLERANCE_PIPS * pip)
@@ -1383,18 +1392,18 @@ def analyze_pair(
     unfresh_levels = [l for l in all_levels if not l["fresh"]]
 
     # 3. Detect storyline (4 rules)
-    storyline = _detect_storyline(all_levels, h4_candles or [], current_price)
+    storyline = _detect_storyline(all_levels, h4_candles or [], current_price, symbol=symbol)
 
     # 4. Detect engulfing patterns (Perfect, QM, Hidden) + PEZ/FEZ
     engulfing = _detect_engulfing(h4_candles or daily_candles[-20:])
 
     # 4b. Multi-TF engulfing: drop to H1 to find levels inside H4 zone
     #     + EG-to-EG / EG-to-EF / EF-to-EG flow (Emperor Pages 46-47)
-    mtf_eg = _multi_tf_engulfing(engulfing, h1_candles, all_levels, current_price)
+    mtf_eg = _multi_tf_engulfing(engulfing, h1_candles, all_levels, current_price, symbol=symbol)
 
     # 5. Detect trendlines
-    trendlines = _detect_trendlines(h4_candles or [], current_price)
-    tl_confluence = _trendline_snr_confluence(trendlines, all_levels, current_price)
+    trendlines = _detect_trendlines(h4_candles or [], current_price, symbol=symbol)
+    tl_confluence = _trendline_snr_confluence(trendlines, all_levels, current_price, symbol=symbol)
 
     # 6. Roadblocks
     direction = (storyline.get("direction")
@@ -1406,13 +1415,13 @@ def analyze_pair(
     # 7. Entry tier classification (Emperor setups 1-4)
     entry = _classify_entry_tier(
         storyline, engulfing, all_levels, current_price,
-        h4_candles or [], tl_confluence,
+        h4_candles or [], tl_confluence, symbol=symbol,
     )
 
     # 8. 5-Action SOP scoring
     score, notes = _sop_score(
         all_levels, storyline, engulfing, entry, roadblocks,
-        tl_confluence, qm_levels, current_price, mtf_eg,
+        tl_confluence, qm_levels, current_price, mtf_eg, symbol=symbol,
     )
 
     # ── Setup determination ───────────────────────────────────────────
@@ -1477,6 +1486,7 @@ def analyze_pair(
         all_levels=all_levels,
         daily_candles=daily_candles,
         current_price=current_price,
+        symbol=symbol,
     )
 
     return {

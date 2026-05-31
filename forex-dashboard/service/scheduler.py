@@ -90,7 +90,7 @@ def _run_alerts():
             bars = cache.read_candles(sym, DEFAULT_INTERVAL, DEFAULT_BACKFILL)
             if len(bars) < 200:
                 continue
-            result = analyze(bars)
+            result = analyze(bars, symbol=sym)
             if result.get("signal") == "insufficient_data":
                 continue
             alerts.evaluate_pair(
