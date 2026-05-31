@@ -28,7 +28,7 @@ PRIORITY_PAIRS = [
     "USD/CAD", "NZD/USD", "EUR/GBP", "EUR/JPY", "EUR/CHF",
     "EUR/AUD", "GBP/JPY", "GBP/CHF", "AUD/JPY", "CAD/JPY",
     "XAU/USD", "XAG/USD",  # Gold, Silver — MT5 maps to XAUUSDm / XAGUSDm
-    "DE30",                 # DAX (Germany 40) — MT5 maps to DE30m
+    "DE30", "US30", "USTEC",  # DAX 40, Dow 30, Nasdaq 100 — MT5 maps to DE30m / US30m / USTECm
 ]
 
 INTERVAL_SECS = {

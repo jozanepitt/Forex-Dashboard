@@ -45,6 +45,7 @@ CRT_UNIVERSE = [
     "USD/CAD", "NZD/USD", "EUR/GBP", "EUR/JPY", "EUR/CHF",
     "EUR/AUD", "GBP/JPY", "GBP/CHF", "AUD/JPY", "CAD/JPY",
     "XAU/USD", "XAG/USD",
+    "DE30", "US30", "USTEC",
 ]
 
 NY_HOUR_CBDR = 17

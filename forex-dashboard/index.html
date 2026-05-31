@@ -900,13 +900,15 @@ const FOREX_PAIRS = [
   { symbol:'CAD/JPY', base:113.20, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
   { symbol:'XAU/USD', base:2050.0, type:'metal', pip:0.10, decimals:2, pipValue:10 },
   { symbol:'XAG/USD', base:24.50,  type:'metal', pip:0.01, decimals:3, pipValue:50 },
-  { symbol:'DE30',    base:25000,  type:'index', pip:1.0,  decimals:1, pipValue:1 }
+  { symbol:'DE30',    base:25000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
+  { symbol:'US30',    base:44000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
+  { symbol:'USTEC',   base:20000,  type:'index', pip:1.0,  decimals:1, pipValue:1 }
 ];
 
 const PRIORITY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
   'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD',
-  'XAU/USD', 'XAG/USD', 'DE30'
+  'XAU/USD', 'XAG/USD', 'DE30', 'US30', 'USTEC'
 ];
 
 // API keys live in the local fetcher service (service/.env), not in the browser.
@@ -4746,6 +4748,7 @@ async function loadCrt() {
 function _crtFmtPrice(p, sym) {
   if (p === undefined || p === null) return '—';
   if (!sym) return p.toFixed(5);
+  if (p > 5000) return p.toFixed(1);            // indices: DE30, US30, USTEC
   if (sym === 'XAU/USD') return p.toFixed(2);  // gold ~2050.00
   if (sym === 'XAG/USD') return p.toFixed(3);  // silver ~24.500
   if (sym.includes('JPY')) return p.toFixed(3);
