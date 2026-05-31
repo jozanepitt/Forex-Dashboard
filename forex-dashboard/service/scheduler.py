@@ -10,7 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import alerts
 import fetcher
 from btmm_core import active_kill_zone
-from config import DEFAULT_INTERVAL, PRIORITY_PAIRS
+from config import BTMM_ALERTS_ENABLED, DEFAULT_INTERVAL, PRIORITY_PAIRS
 
 log = logging.getLogger("scheduler")
 
@@ -45,11 +45,12 @@ def refresh_all():
     except Exception as e:
         log.warning("kill zone alert failed: %s", e)
 
-    # Run Discord alerts after fresh candle data is in cache
-    try:
-        _run_alerts()
-    except Exception as e:
-        log.warning("alerts failed: %s", e)
+    # Run BTMM Discord alerts after fresh candle data is in cache (paused unless enabled)
+    if BTMM_ALERTS_ENABLED:
+        try:
+            _run_alerts()
+        except Exception as e:
+            log.warning("alerts failed: %s", e)
 
     # Run 1AM CRT scanner + Discord alerts
     try:

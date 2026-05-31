@@ -44,6 +44,12 @@ INTERVAL_SECS = {
 DEFAULT_INTERVAL = "15min"
 DEFAULT_BACKFILL = 3200
 
+# Per-strategy Discord alert toggles. BTMM is paused for now to focus on the
+# CRT + SNR dashboards; re-enable by setting BTMM_ALERTS_ENABLED=true (or flip
+# the default below). Dashboard /btmm display is unaffected — this only gates
+# the scheduler's Discord dispatch.
+BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+
 
 def load_keys():
     """Return list of {name, value} for keys defined in env.
