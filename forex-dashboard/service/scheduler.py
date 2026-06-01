@@ -1,8 +1,18 @@
-"""Background scheduler: refresh every 15 minutes (UTC-aligned, 2-min grace)."""
+"""Background scheduler: refresh every 15 minutes (UTC-aligned, 2-min grace).
+
+Resilience: every data fetch is timeout-guarded so a blocking provider call
+(notably MT5's `copy_rates_from_pos`, which has no native timeout) can never
+hang `refresh_all` and — because the job runs with max_instances=1 — wedge the
+whole scheduler indefinitely. A separate watchdog fires a Discord warning if no
+successful refresh has happened recently, so a stall is loud, never silent.
+"""
 from __future__ import annotations
 
+import json
 import logging
+import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -10,13 +20,65 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import alerts
 import fetcher
 from btmm_core import active_kill_zone
-from config import BTMM_ALERTS_ENABLED, DEFAULT_INTERVAL, PRIORITY_PAIRS
+from config import BTMM_ALERTS_ENABLED, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
 
 log = logging.getLogger("scheduler")
 
-FANOUT_DELAY_SECS = 2  # spread 15-pair fanout across ~30s so a single key never blows 8/min
+FANOUT_DELAY_SECS = 2     # spread 15-pair fanout across ~30s so a single key never blows 8/min
+FETCH_TIMEOUT_SECS = 15   # max wall-time for any single provider fetch before we abandon it
+STALL_THRESHOLD_SECS = 1200  # 20 min with no successful refresh → watchdog warns
 
 _prev_kill_zone: Optional[str] = None
+_STATE_PATH = SERVICE_ROOT / "scheduler_state.json"
+_last_ok_refresh: float = 0.0
+
+
+def _record_refresh(ts: float) -> None:
+    """Persist the last successful-refresh timestamp so the watchdog and the
+    external healthcheck can detect a stalled scheduler."""
+    global _last_ok_refresh
+    _last_ok_refresh = ts
+    try:
+        _STATE_PATH.write_text(json.dumps({"last_ok_refresh": ts}))
+    except Exception as e:
+        log.debug("could not persist scheduler state: %s", e)
+
+
+def last_refresh_ts() -> float:
+    """Last successful refresh time (epoch secs), from memory or disk. 0 if never."""
+    if _last_ok_refresh:
+        return _last_ok_refresh
+    try:
+        return float(json.loads(_STATE_PATH.read_text()).get("last_ok_refresh", 0))
+    except Exception:
+        return 0.0
+
+
+def _fetch_guarded(sym: str, interval: str, limit: Optional[int] = None,
+                   timeout: float = FETCH_TIMEOUT_SECS) -> None:
+    """Run one fetch in a daemon thread and abandon it if it exceeds `timeout`.
+
+    MT5's copy_rates is a blocking C call with no timeout; without this guard a
+    single hung call would freeze refresh_all forever (max_instances=1)."""
+    box: dict = {}
+
+    def _do():
+        try:
+            if limit is not None:
+                fetcher.get_candles(sym, interval, limit=limit)
+            else:
+                fetcher.get_candles(sym, interval)
+            box["ok"] = True
+        except Exception as e:  # noqa: BLE001 — propagate to caller below
+            box["err"] = e
+
+    t = threading.Thread(target=_do, name=f"fetch-{sym}-{interval}", daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        raise TimeoutError(f"{sym} {interval} fetch exceeded {timeout}s (provider hung)")
+    if "err" in box:
+        raise box["err"]
 
 
 def refresh_all():
@@ -28,13 +90,15 @@ def refresh_all():
         if i > 0:
             time.sleep(FANOUT_DELAY_SECS)
         try:
-            fetcher.get_candles(sym, DEFAULT_INTERVAL)  # M15
-            fetcher.get_candles(sym, "1h", limit=200)   # H1 — needed by M15 SNR scanner (~8 days)
-            fetcher.get_candles(sym, "1day", limit=60)  # daily — needed by SNR-H4 scanner
+            _fetch_guarded(sym, DEFAULT_INTERVAL)          # M15
+            _fetch_guarded(sym, "1h", limit=200)           # H1 — M15 SNR scanner (~8 days)
+            _fetch_guarded(sym, "1day", limit=60)          # daily — SNR-H4 scanner
             updated += 1
         except Exception as e:
-            log.error("refresh_all: %s failed: %s", sym, e)
+            log.error("refresh_all: %s fetch failed/timed out: %s", sym, e)
     log.info("refresh_all: done in %.1fs (%d/%d ok)", time.time() - t0, updated, len(PRIORITY_PAIRS))
+    if updated:
+        _record_refresh(time.time())  # mark healthy only when we actually got fresh data
 
     # Fire kill zone open alert on session transitions
     try:
@@ -167,11 +231,38 @@ def _run_snr_m15_alerts():
             log.debug("SNR-M15 alert eval failed for %s: %s", row.get("symbol"), e)
 
 
+_stall_warned = False
+
+
+def _watchdog():
+    """Fire a Discord warning if the scheduler hasn't refreshed in a while.
+
+    Runs as an independent job so it stays alive even if refresh_all is slow.
+    Turns a silent multi-hour blackout into a single loud, throttled alert."""
+    global _stall_warned
+    last = last_refresh_ts()
+    if last <= 0:
+        return  # never refreshed yet (just started) — give it a cycle
+    stale_secs = time.time() - last
+    if stale_secs > STALL_THRESHOLD_SECS:
+        if not _stall_warned:
+            try:
+                alerts.alert_scheduler_stall(int(stale_secs // 60))
+                _stall_warned = True
+            except Exception as e:
+                log.warning("stall alert failed: %s", e)
+    else:
+        _stall_warned = False  # recovered → re-arm
+
+
 def start() -> BackgroundScheduler:
     sched = BackgroundScheduler(timezone="UTC", daemon=True)
     # Run 2 min after each 15-min mark so the candle is fully closed by broker.
     sched.add_job(refresh_all, "cron", minute="2,17,32,47", id="refresh_all",
                   misfire_grace_time=120, max_instances=1, coalesce=True)
+    # Independent watchdog every 5 min — alerts if refresh_all has stalled.
+    sched.add_job(_watchdog, "cron", minute="*/5", id="watchdog",
+                  misfire_grace_time=60, max_instances=1, coalesce=True)
     sched.start()
-    log.info("scheduler started (cron: :02,:17,:32,:47 UTC)")
+    log.info("scheduler started (refresh cron :02,:17,:32,:47 UTC; watchdog every 5m)")
     return sched

@@ -25,6 +25,9 @@ index_v8.html
 
 # Runtime state (regenerated at runtime — not source)
 service/alerts_state.json
+service/scheduler_state.json
+service/service.log
+service/service.log.*
 
 # OneDrive/FUSE sync artifacts
 *.fuse_hidden*

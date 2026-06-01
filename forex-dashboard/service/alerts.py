@@ -319,6 +319,29 @@ def alert_kill_zone_open(zone_name: str):
         log.info("alert sent: kill zone %s", zone_name)
 
 
+def alert_scheduler_stall(stale_minutes: int):
+    """Fire when the scheduler hasn't refreshed market data in a while.
+
+    This is the safety net that turns a silent signal blackout into a loud,
+    visible warning so you never again go a whole session with no signals."""
+    rule = "scheduler_stall"
+    if _is_throttled("__watchdog__", rule):
+        return
+    embed = {
+        "title":       "🚨 Signal service STALLED — no fresh data",
+        "description": (
+            f"The scheduler has not refreshed market data for **~{stale_minutes} min**.\n"
+            "Discord signals may be stale or stopped. Check the service / MT5 terminal "
+            "and restart the dashboard if needed."
+        ),
+        "color":       _COLOURS["strong_sell"],
+        "footer":      {"text": f"Watchdog · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent("__watchdog__", rule)
+        log.warning("alert sent: scheduler stall (%d min)", stale_minutes)
+
+
 def alert_adr_exhausted(pair: str, adr_pct: float):
     """Fire when ADR > 85% consumed — warns against new entries."""
     rule = "adr_exhausted"

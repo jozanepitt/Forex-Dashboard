@@ -27,11 +27,22 @@ from config import (
     PRIORITY_PAIRS,
     SERVICE_HOST,
     SERVICE_PORT,
+    SERVICE_ROOT,
 )
 
+# Log to a rotating file (in addition to stdout) so stalls/errors are
+# diagnosable even when the service runs headless under pythonw (no console).
+from logging.handlers import RotatingFileHandler  # noqa: E402
+
+_log_fmt = "%(asctime)s %(name)s %(levelname)s: %(message)s"
+_file_handler = RotatingFileHandler(
+    SERVICE_ROOT / "service.log", maxBytes=2_000_000, backupCount=5, encoding="utf-8"
+)
+_file_handler.setFormatter(logging.Formatter(_log_fmt))
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    format=_log_fmt,
+    handlers=[logging.StreamHandler(), _file_handler],
 )
 log = logging.getLogger("app")
 
