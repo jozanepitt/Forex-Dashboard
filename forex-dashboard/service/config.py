@@ -44,11 +44,16 @@ INTERVAL_SECS = {
 DEFAULT_INTERVAL = "15min"
 DEFAULT_BACKFILL = 3200
 
-# Per-strategy Discord alert toggles. BTMM is paused for now to focus on the
-# CRT + SNR dashboards; re-enable by setting BTMM_ALERTS_ENABLED=true (or flip
-# the default below). Dashboard /btmm display is unaffected — this only gates
-# the scheduler's Discord dispatch.
-BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+# Per-strategy Discord alert toggles. Dashboard /btmm display is unaffected —
+# these only gate the scheduler's Discord dispatch.
+BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# BTMM A+-only mode: when True, the ONLY BTMM alert sent is the highest-tier
+# "A+ Setup" (gold embed, "This is a highest-tier BTMM setup"). All other BTMM
+# alerts — Strong Buy/Sell, named/Safety setups, 5/13 cross, ADR warnings, and
+# kill-zone-open pings — are suppressed as noise. Set to "false" to get the
+# full (noisier) BTMM alert set back.
+BTMM_APLUS_ONLY = os.environ.get("BTMM_APLUS_ONLY", "true").lower() in ("1", "true", "yes")
 
 
 def load_keys():

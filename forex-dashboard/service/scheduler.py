@@ -20,7 +20,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import alerts
 import fetcher
 from btmm_core import active_kill_zone
-from config import BTMM_ALERTS_ENABLED, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
+from config import BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
 
 log = logging.getLogger("scheduler")
 
@@ -100,14 +100,16 @@ def refresh_all():
     if updated:
         _record_refresh(time.time())  # mark healthy only when we actually got fresh data
 
-    # Fire kill zone open alert on session transitions
-    try:
-        current_kz = active_kill_zone(int(time.time()))
-        if current_kz and current_kz != _prev_kill_zone:
-            alerts.alert_kill_zone_open(current_kz)
-        _prev_kill_zone = current_kz
-    except Exception as e:
-        log.warning("kill zone alert failed: %s", e)
+    # Fire kill zone open alert on session transitions.
+    # Suppressed in BTMM A+-only mode (user wants A+ setups only, nothing else).
+    if BTMM_ALERTS_ENABLED and not BTMM_APLUS_ONLY:
+        try:
+            current_kz = active_kill_zone(int(time.time()))
+            if current_kz and current_kz != _prev_kill_zone:
+                alerts.alert_kill_zone_open(current_kz)
+            _prev_kill_zone = current_kz
+        except Exception as e:
+            log.warning("kill zone alert failed: %s", e)
 
     # Run BTMM Discord alerts after fresh candle data is in cache (paused unless enabled)
     if BTMM_ALERTS_ENABLED:

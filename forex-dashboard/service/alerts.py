@@ -10,7 +10,7 @@ from typing import Optional
 
 import requests
 import instruments
-from config import DISCORD_WEBHOOK_URL
+from config import DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY
 
 log = logging.getLogger("alerts")
 
@@ -813,7 +813,16 @@ def evaluate_pair(pair_symbol: str, signal: str, score: float,
             kz=kz,
         )
 
+    # ── A+-ONLY MODE ─────────────────────────────────────────────────────────
+    # When enabled (default), the A+ setup above is the ONLY BTMM alert we send.
+    # Everything below (named/Safety setups, Strong signals, 5/13 cross, ADR) is
+    # suppressed as noise. Flip BTMM_APLUS_ONLY=false to restore the full set.
+    if BTMM_APLUS_ONLY:
+        return
+
     # Rule 2 — Named setup (Safety Trade etc.) — BOTH confidences must be high
+    if setup_key == "aplus" and is_high_conf:
+        pass  # already sent above
     elif setup_key and active_setup and is_high_conf and setup_is_high:
         alert_active_setup(
             pair=pair_symbol,
