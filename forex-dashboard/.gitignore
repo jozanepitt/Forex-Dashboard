@@ -28,6 +28,7 @@ service/alerts_state.json
 service/scheduler_state.json
 service/service.log
 service/service.log.*
+service/guardian.log
 
 # OneDrive/FUSE sync artifacts
 *.fuse_hidden*

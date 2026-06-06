@@ -10,7 +10,7 @@ from typing import Optional
 
 import requests
 import instruments
-from config import DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY
+from config import DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY
 
 log = logging.getLogger("alerts")
 
@@ -395,7 +395,10 @@ def alert_crt_setup(pair: str, row: dict):
     session  = row.get("session_1am_sast", "")
     if setup not in ("BUY", "SELL"):
         return
-    if grade not in ("A", "B"):
+    allowed_grades = ("A",) if ALERTS_GRADE_A_ONLY else ("A", "B")
+    if grade not in allowed_grades:
+        if grade == "B":
+            log.debug("CRT SUPPRESSED %s: Grade B (A-only mode)", pair)
         return
     if kt not in ("WAITING", "ACTIVE"):
         return
@@ -488,7 +491,10 @@ def alert_snr_setup(pair: str, row: dict):
     grade = row.get("grade")
     if setup not in ("BUY", "SELL"):
         return
-    if grade not in ("A", "B"):
+    allowed_grades = ("A",) if ALERTS_GRADE_A_ONLY else ("A", "B")
+    if grade not in allowed_grades:
+        if grade == "B":
+            log.debug("SNR SUPPRESSED %s: Grade B (A-only mode)", pair)
         return
 
     storyline = row.get("storyline", {})
@@ -642,7 +648,10 @@ def alert_snr_m15_setup(pair: str, row: dict):
     grade = row.get("grade")
     if setup not in ("BUY", "SELL"):
         return
-    if grade not in ("A", "B"):
+    allowed_grades = ("A",) if ALERTS_GRADE_A_ONLY else ("A", "B")
+    if grade not in allowed_grades:
+        if grade == "B":
+            log.debug("SNR-M15 SUPPRESSED %s: Grade B (A-only mode)", pair)
         return
 
     storyline = row.get("storyline", {})

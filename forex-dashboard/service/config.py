@@ -55,6 +55,11 @@ BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "true").lower() in (
 # full (noisier) BTMM alert set back.
 BTMM_APLUS_ONLY = os.environ.get("BTMM_APLUS_ONLY", "true").lower() in ("1", "true", "yes")
 
+# Grade-A-only mode for the scanner dashboards (1AM CRT, SNR Emperor H4, M15 SNR).
+# When True, only Grade A setups are sent to Discord; Grade B (and below) are
+# suppressed as noise. Set to "false" to allow Grade B alerts again.
+ALERTS_GRADE_A_ONLY = os.environ.get("ALERTS_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+
 
 def load_keys():
     """Return list of {name, value} for keys defined in env.

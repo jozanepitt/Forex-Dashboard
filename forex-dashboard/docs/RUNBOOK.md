@@ -57,11 +57,33 @@ no error and no log.
 
 ---
 
+## Process guardian (auto-restart, no admin)
+
+The in-process watchdog can warn about a *stalled* scheduler, but it cannot warn
+if the whole process **dies** (it dies with it). A 2026-06-05 incident showed the
+service can be killed externally (process tied to a launching session), going
+silent for hours.
+
+**Protection:** `service-guardian-loop.ps1` runs a single-instance loop (global
+mutex) that every 3 min relaunches the service **detached** (WMI
+`Win32_Process.Create`) if port 3002 is not listening. It is started hidden at
+logon by `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\ForexSignalGuardian.vbs`.
+Recovery events are logged to `service/guardian.log`.
+
+- **Check it's alive:** look for a `powershell.exe` running
+  `-File ...service-guardian-loop.ps1`, or tail `service/guardian.log`.
+- **Caveat:** runs only while logged in (locked is fine). A full logout/reboot
+  re-arms it at next logon. The Startup `.vbs` lives outside the repo (in
+  `%APPDATA%`) — recreate it from the path above if the machine is reimaged.
+
 ## Alert toggles
 
 - BTMM Discord alerts are gated by `BTMM_ALERTS_ENABLED` (env, default off).
   CRT + SNR (H4 & M15) always alert. Re-enable BTMM: set
   `BTMM_ALERTS_ENABLED=true` in `service/.env` and restart.
+- Scanner dashboards (CRT, SNR H4, M15 SNR) are gated by `ALERTS_GRADE_A_ONLY`
+  (env, default **true**): only Grade **A** setups are sent. Set to `false` in
+  `service/.env` and restart to allow Grade B again.
 
 ## Pip/SL accuracy
 
