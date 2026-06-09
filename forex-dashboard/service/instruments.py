@@ -54,6 +54,10 @@ SYMBOL_SPECS: dict[str, dict] = {
     "EUR/CHF": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
     "EUR/AUD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=12),
     "GBP/CHF": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=12),
+    "GBP/AUD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=12),  # volatile GBP cross — wider floor
+    "AUD/CAD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
+    "AUD/CHF": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
+    "AUD/NZD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),  # tight range pair
     # ── JPY pairs (3-digit, pip = 0.01) ──
     "USD/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
     "EUR/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),

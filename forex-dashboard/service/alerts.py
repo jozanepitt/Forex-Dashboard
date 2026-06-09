@@ -10,7 +10,10 @@ from typing import Optional
 
 import requests
 import instruments
-from config import DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY
+from config import (
+    DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY, CRT_GRADE_A_ONLY,
+    ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
+)
 
 log = logging.getLogger("alerts")
 
@@ -228,6 +231,66 @@ def _check_rr(entry: float, sl: float, tp1: float, direction: str,
     return True
 
 
+def _passes_quality_filters(pair: str, direction: str, entry_price: float) -> tuple[bool, str]:
+    """Two pattern-derived gates on SNR signals (H4 + M15). Both configurable via env.
+
+    1. Distance gate — skip signals where the current market price is far from
+       the entry zone. Stale setups either never fill or fill into established
+       momentum; in the 2026-06-09 audit, losing signals averaged 166 pips
+       away from the zone while winning signals averaged 15 pips.
+    2. Trend gate — skip signals that align with the H1 trend. SNR is a
+       reversal strategy; in the same audit, 0% of wins were with-trend while
+       86% of losses were. We only fire counter-trend or flat-market signals.
+
+    Returns (True, "") to pass, (False, reason) to skip.
+    """
+    import cache  # local import to keep alerts importable standalone
+
+    direction_l = direction.lower()
+
+    # --- Distance gate -----------------------------------------------------
+    if ALERTS_DISTANCE_FILTER_PIPS and ALERTS_DISTANCE_FILTER_PIPS > 0 and entry_price:
+        try:
+            recent = cache.read_candles(pair, "15min", limit=2)
+            if recent:
+                current = recent[-1]["close"]
+                pip = _pip_size(current, pair)
+                if pip > 0:
+                    dist_pips = abs(current - entry_price) / pip
+                    if dist_pips > ALERTS_DISTANCE_FILTER_PIPS:
+                        return (False, f"distance {dist_pips:.0f} pips > {ALERTS_DISTANCE_FILTER_PIPS:.0f} (stale)")
+        except Exception as e:
+            log.debug("distance filter skipped for %s: %s", pair, e)
+
+    # --- H1-trend gate -----------------------------------------------------
+    if ALERTS_TREND_FILTER_ENABLED:
+        try:
+            h1 = cache.read_candles(pair, "1h", limit=30)
+            if len(h1) >= 20:
+                closes = [b["close"] for b in h1]
+                # EMA20 (over the last 20 H1 bars)
+                k = 2 / 21
+                ema = closes[0]
+                for c in closes:
+                    ema = c * k + ema * (1 - k)
+                last = closes[-1]
+                diff_pct = (last - ema) / ema * 100 if ema else 0
+                if diff_pct > 0.15:
+                    h1_trend = "bullish"
+                elif diff_pct < -0.15:
+                    h1_trend = "bearish"
+                else:
+                    h1_trend = "flat"
+                if h1_trend == "bullish" and direction_l in ("buy", "bullish"):
+                    return (False, "with H1 bullish trend (counter-trend only)")
+                if h1_trend == "bearish" and direction_l in ("sell", "bearish"):
+                    return (False, "with H1 bearish trend (counter-trend only)")
+        except Exception as e:
+            log.debug("trend filter skipped for %s: %s", pair, e)
+
+    return (True, "")
+
+
 def alert_aplus_setup(pair: str, score: float, checklist: int,
                       direction: str, entry: float, sl: float,
                       tp1: float, tp2: Optional[float], kz: Optional[str]):
@@ -395,7 +458,7 @@ def alert_crt_setup(pair: str, row: dict):
     session  = row.get("session_1am_sast", "")
     if setup not in ("BUY", "SELL"):
         return
-    allowed_grades = ("A",) if ALERTS_GRADE_A_ONLY else ("A", "B")
+    allowed_grades = ("A",) if CRT_GRADE_A_ONLY else ("A", "B")
     if grade not in allowed_grades:
         if grade == "B":
             log.debug("CRT SUPPRESSED %s: Grade B (A-only mode)", pair)
@@ -528,6 +591,12 @@ def alert_snr_setup(pair: str, row: dict):
         if not _check_rr(plan_entry_chk, plan_sl_chk, plan_tp1_chk, direction_rr, min_rr=0.8, symbol=pair):
             log.warning("SNR alert BLOCKED for %s: bad R:R — trade plan invalid", pair)
             return
+
+    # Pattern-derived quality filters (distance + H1 trend). 2026-06-09 audit basis.
+    passed_q, q_reason = _passes_quality_filters(pair, setup, plan_entry_chk)
+    if not passed_q:
+        log.info("SNR FILTERED %s %s: %s", pair, setup, q_reason)
+        return
 
     from_level = storyline.get("from_level")
     rule = f"msnr_{setup.lower()}_{tier}_{setup_num}_{_fmt_price(from_level) if from_level else 'x'}"
@@ -680,6 +749,12 @@ def alert_snr_m15_setup(pair: str, row: dict):
         if not _check_rr(plan_entry, plan_sl, plan_tp1, direction_rr, min_rr=0.8, symbol=pair):
             log.warning("SNR-M15 alert BLOCKED for %s: bad R:R — trade plan invalid", pair)
             return
+
+    # Pattern-derived quality filters (distance + H1 trend). 2026-06-09 audit basis.
+    passed_q, q_reason = _passes_quality_filters(pair, setup, plan_entry)
+    if not passed_q:
+        log.info("SNR-M15 FILTERED %s %s: %s", pair, setup, q_reason)
+        return
 
     from_level = storyline.get("from_level")
     rule = f"m15_msnr_{setup.lower()}_{tier}_{setup_num}_{_fmt_price(from_level) if from_level else 'x'}"

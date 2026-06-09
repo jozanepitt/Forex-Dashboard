@@ -27,6 +27,7 @@ PRIORITY_PAIRS = [
     "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD",
     "USD/CAD", "NZD/USD", "EUR/GBP", "EUR/JPY", "EUR/CHF",
     "EUR/AUD", "GBP/JPY", "GBP/CHF", "AUD/JPY", "CAD/JPY",
+    "GBP/AUD", "AUD/CAD", "AUD/CHF", "AUD/NZD",  # AUD crosses — clean structure
     "XAU/USD", "XAG/USD",  # Gold, Silver — MT5 maps to XAUUSDm / XAGUSDm
     "DE30", "US30", "USTEC",  # DAX 40, Dow 30, Nasdaq 100 — MT5 maps to DE30m / US30m / USTECm
 ]
@@ -55,10 +56,23 @@ BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "true").lower() in (
 # full (noisier) BTMM alert set back.
 BTMM_APLUS_ONLY = os.environ.get("BTMM_APLUS_ONLY", "true").lower() in ("1", "true", "yes")
 
-# Grade-A-only mode for the scanner dashboards (1AM CRT, SNR Emperor H4, M15 SNR).
+# Grade-A-only mode for SNR Emperor H4 and M15 SNR scanners.
 # When True, only Grade A setups are sent to Discord; Grade B (and below) are
 # suppressed as noise. Set to "false" to allow Grade B alerts again.
 ALERTS_GRADE_A_ONLY = os.environ.get("ALERTS_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+
+# 1AM CRT grade gate — separate from the SNR flag above because CRT fires fewer
+# setups and Grade B setups are acceptable signals there (they don't push as many
+# alerts as SNR). Default false = A + B both sent to Discord.
+CRT_GRADE_A_ONLY = os.environ.get("CRT_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+
+# Quality filters for SNR (H4 + M15) — based on 2026-06-09 pattern audit.
+# DISTANCE filter: skip signal if price is too far from the entry zone when fired
+#   (stale setups never fill or fill into established momentum). 0 disables.
+# TREND filter: skip signal if direction aligns with H1 trend (SNR is a reversal
+#   strategy; with-trend signals had 0% win rate in audit). Disable to allow all.
+ALERTS_DISTANCE_FILTER_PIPS = float(os.environ.get("ALERTS_DISTANCE_FILTER_PIPS", "50"))
+ALERTS_TREND_FILTER_ENABLED = os.environ.get("ALERTS_TREND_FILTER_ENABLED", "true").lower() in ("1", "true", "yes")
 
 
 def load_keys():
