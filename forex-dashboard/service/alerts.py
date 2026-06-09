@@ -12,7 +12,7 @@ import requests
 import instruments
 from config import (
     DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY, CRT_GRADE_A_ONLY,
-    ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
+    CRT_5AM_GRADE_A_ONLY, ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
 )
 
 log = logging.getLogger("alerts")
@@ -536,6 +536,91 @@ def alert_crt_setup(pair: str, row: dict):
                  pair, setup, grade, kt, session)
 
 
+def alert_crt_5am_setup(pair: str, row: dict):
+    """Fire when a 5AM CRT scanner row reaches Grade A in the NY Open kill zone.
+
+    `row` is one element from crt_strategy.analyze_universe_5am()['pairs'].
+    Grade A only by default (CRT_5AM_GRADE_A_ONLY=true). Throttled per session.
+    Key window: 09:00–11:00 NY / 11:00–13:00 SAST.
+    """
+    setup   = row.get("setup")
+    grade   = row.get("grade")
+    kt      = row.get("key_time_status")
+    is_live = row.get("session_is_live", True)
+    session = row.get("session_5am_sast", "")
+    if setup not in ("BUY", "SELL"):
+        return
+    allowed_grades = ("A",) if CRT_5AM_GRADE_A_ONLY else ("A", "B")
+    if grade not in allowed_grades:
+        if grade == "B":
+            log.debug("CRT-5AM SUPPRESSED %s: Grade B (A-only mode)", pair)
+        return
+    if kt not in ("WAITING", "ACTIVE"):
+        return
+    if not is_live:
+        return
+
+    rule = f"crt5am_{setup.lower()}_{session.replace(' ', '_').replace(':', '')}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow       = "📈" if setup == "BUY" else "📉"
+    grade_badge = "⭐ " if grade == "A" else ""
+    colour      = 0xFFD700 if grade == "A" else (_COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"])
+    entry_zone  = row.get("entry_zone") or {}
+    entry_side  = entry_zone.get("side", "")
+    entry_level = entry_zone.get("level")
+    entry_str   = (
+        f"{'Sell ≥' if entry_side == 'above_open' else 'Buy ≤' if entry_side == 'below_open' else '—'} "
+        f"`{_fmt_price(entry_level)}`" if entry_level is not None else "—"
+    )
+
+    c5      = row.get("candle_5am") or {}
+    crt_hi, crt_lo = row.get("crt_high"), row.get("crt_low")
+    crt_str = f"`{_fmt_price(crt_hi)}` / `{_fmt_price(crt_lo)}`" if (crt_hi and crt_lo) else "—"
+    c5_open, c5_close = c5.get("open"), c5.get("close")
+    c5_str  = (
+        f"O `{_fmt_price(c5_open)}` → C `{_fmt_price(c5_close)}` ({c5.get('type', '?')})"
+        if c5_open is not None and c5_close is not None else "—"
+    )
+
+    smt_raw   = row.get("smt", "NONE")
+    smt_label = {
+        "BULLISH-DIVERGENCE":         "🟢 Bullish divergence",
+        "BEARISH-DIVERGENCE":         "🔴 Bearish divergence",
+        "BULLISH-DIVERGENCE-PARTNER": "🟡 Partner bullish div",
+        "BEARISH-DIVERGENCE-PARTNER": "🟡 Partner bearish div",
+        "NONE":                       "—",
+    }.get(smt_raw, smt_raw)
+
+    fields = [
+        {"name": "Setup",        "value": f"**{setup}**",                                              "inline": True},
+        {"name": "Grade",        "value": f"{grade_badge}**{grade} ({row.get('score', 0)}/12)**",      "inline": True},
+        {"name": "Key Time",     "value": f"**{kt}** · {row.get('key_time_window_sast', '')}",         "inline": True},
+        {"name": "Entry",        "value": entry_str,                                                    "inline": True},
+        {"name": "5AM Candle",   "value": c5_str,                                                      "inline": True},
+        {"name": "CRT H/L",      "value": crt_str,                                                     "inline": True},
+        {"name": "Profile",      "value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
+        {"name": "DOL Bias",     "value": row.get("dol_bias", "?") or "—",                             "inline": True},
+        {"name": "SMT",          "value": smt_label,                                                    "inline": True},
+        {"name": "OHLC Pattern", "value": row.get("ohlc_pattern", "?"),                                 "inline": True},
+    ]
+
+    provisional = row.get("provisional", False)
+    m15_count   = row.get("m15_count", 0)
+    prov_suffix = f"  ⚠ forming ({m15_count}/16 M15s)" if provisional else ""
+
+    embed = {
+        "title":       f"{arrow} {grade_badge}{pair} — 5AM CRT {setup}{prov_suffix}",
+        "description": row.get("notes") or "5AM CRT scanner: NY Open kill zone confluence.",
+        "color":       colour,
+        "fields":      fields,
+        "footer":      {"text": f"5AM CRT · session {session} SAST · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("CRT-5AM alert sent: %s %s grade=%s kt=%s session=%s",
+                 pair, setup, grade, kt, session)
 
 
 def alert_snr_setup(pair: str, row: dict):

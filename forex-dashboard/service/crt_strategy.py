@@ -44,6 +44,7 @@ CRT_UNIVERSE = [
     "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD",
     "USD/CAD", "NZD/USD", "EUR/GBP", "EUR/JPY", "EUR/CHF",
     "EUR/AUD", "GBP/JPY", "GBP/CHF", "AUD/JPY", "CAD/JPY",
+    "GBP/AUD", "AUD/CAD", "AUD/CHF", "AUD/NZD",  # AUD crosses
     "XAU/USD", "XAG/USD",
     "DE30", "US30", "USTEC",
 ]
@@ -55,8 +56,15 @@ NY_HOUR_5AM = 5
 
 # Key time windows for 1AM CRT (offsets from 1AM anchor in hours)
 KEY_TIME_WINDOWS_1AM = [
-    {"name": "London Open", "start_h": 1, "end_h": 2},      # 2-3 AM NY
-    {"name": "Silver Bullet", "start_h": 2, "end_h": 3},    # 3-4 AM NY
+    {"name": "London Open",    "start_h": 1, "end_h": 2},   # 2-3 AM NY  = 4-5 AM SAST
+    {"name": "Silver Bullet",  "start_h": 2, "end_h": 3},   # 3-4 AM NY  = 5-6 AM SAST
+]
+
+# Key time windows for 5AM CRT (offsets from 5AM NY anchor in hours)
+# Source: MADO / @Im-speculator — "How to Trade the 5AM CRT"
+KEY_TIME_WINDOWS_5AM = [
+    {"name": "London Lunch",   "start_h": 1,   "end_h": 2},   # 6-7 AM NY  =  8-9 AM SAST
+    {"name": "NY Open",        "start_h": 2,   "end_h": 3.5}, # 7-8:30 AM NY = 9-10:30 AM SAST
 ]
 
 M15_PER_H4 = 16
@@ -380,4 +388,285 @@ def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
         "grade_a": grade_a,
         "grade_b": grade_b,
         "pairs": pairs_out,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 5AM CRT — NY Open kill-zone strategy
+# ──────────────────────────────────────────────────────────────────────────────
+
+def analyze_pair_5am(
+    symbol: str,
+    m15_candles: list,
+    smt_partner_buckets: Optional[dict] = None,
+    now_ny: Optional[datetime] = None,
+) -> dict:
+    """Run the 5AM CRT pipeline for one pair.
+
+    The 5AM H4 candle (NY 05:00–09:00 / SAST 07:00–11:00) is the setup candle.
+    Key entry window is the NY Open kill zone (09:00–11:00 NY / 11:00–13:00 SAST).
+    SMT comparison is on the 5AM candle of EUR/USD ↔ GBP/USD.
+    """
+    if now_ny is None:
+        now_ny = datetime.now(NY)
+
+    if not m15_candles or len(m15_candles) < 32:
+        return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-DATA",
+                "reason": "insufficient M15 candles", "score": 0,
+                "dol_bias": None, "candle_5am": None,
+                "provisional": False, "m15_count": len(m15_candles) if m15_candles else 0}
+
+    buckets    = build_h4_buckets(m15_candles)
+    anchors    = latest_populated_session(buckets, now_ny)
+    anchor_5am = anchors["crt_1am"] + timedelta(hours=4)
+
+    b_cbdr = buckets.get(anchors["cbdr"])
+    b_asia = buckets.get(anchors["asia"])
+    b_1am  = buckets.get(anchors["crt_1am"])
+    b_5am  = buckets.get(anchor_5am)
+
+    # CRT range (CBDR + Asia high/low)
+    if b_cbdr and b_asia:
+        crt_high = max(b_cbdr["high"], b_asia["high"])
+        crt_low  = min(b_cbdr["low"],  b_asia["low"])
+    elif b_cbdr:
+        crt_high, crt_low = b_cbdr["high"], b_cbdr["low"]
+    elif b_asia:
+        crt_high, crt_low = b_asia["high"], b_asia["low"]
+    else:
+        crt_high = crt_low = None
+
+    # DOL from 5AM anchor
+    current_price = b_5am["close"] if b_5am else (m15_candles[-1]["close"] if m15_candles else 0)
+    dol = detect_dol(buckets, anchor_5am, current_price,
+                     session_high=crt_high, session_low=crt_low)
+    dol_bias = dol["bias"]
+
+    # ATR
+    atr_ref = anchor_5am if b_5am else (anchors["crt_1am"] if b_1am else anchors["cbdr"])
+    atr = atr_h4(buckets, atr_ref)
+
+    # Candle classifications
+    cbdr_type = classify_candle(b_cbdr, None,   atr) if b_cbdr else "missing"
+    asia_type = classify_candle(b_asia, b_cbdr, atr) if b_asia else "missing"
+    am1_type  = classify_candle(b_1am,  b_asia, atr) if b_1am  else "missing"
+    am5_type  = classify_candle(b_5am,  b_1am,  atr) if b_5am  else "missing"
+
+    # Profile type for 5AM setup
+    if am1_type == "expansion" and am5_type == "expansion":
+        profile_type  = "TYPE_1_CONT"
+        profile_label = "1AM expansion → 5AM continuation"
+    elif am5_type == "expansion":
+        profile_type  = "5AM_EXPANSION"
+        profile_label = f"1AM {am1_type} → 5AM expansion"
+    else:
+        profile_type  = "NO-5AM-EXPANSION"
+        profile_label = f"1AM {am1_type} / 5AM {am5_type}"
+
+    # 5AM candle facts + OHLC setup
+    candle_5am = None
+    ohlc       = "unknown"
+    setup      = "NO-TRADE"
+    entry_zone = None
+    m15_count  = len(b_5am["m15s"]) if b_5am else 0
+    provisional = anchors["is_live"] and b_5am is not None and m15_count < M15_PER_H4
+
+    if b_5am:
+        c = b_5am
+        candle_5am = {
+            "open":      c["open"],
+            "high":      c["high"],
+            "low":       c["low"],
+            "close":     c["close"],
+            "direction": "bullish" if c["close"] > c["open"] else "bearish" if c["close"] < c["open"] else "doji",
+        }
+        ohlc = ohlc_pattern(b_5am)
+        if ohlc == "OLHC":
+            setup      = "BUY"
+            entry_zone = {"side": "below_open", "level": c["open"]}
+        elif ohlc == "OHLC":
+            setup      = "SELL"
+            entry_zone = {"side": "above_open", "level": c["open"]}
+
+    # SMT (EUR/USD ↔ GBP/USD on the 5AM candle)
+    smt = "NONE"
+    if b_5am and b_1am and smt_partner_buckets:
+        smt = detect_smt(
+            b_5am, b_1am,
+            smt_partner_buckets.get("5am"),
+            smt_partner_buckets.get("1am"),
+        )
+
+    # Key-time: NY Open kill zone
+    kt                   = key_time_status_split(now_ny, anchor_5am, KEY_TIME_WINDOWS_5AM)
+    key_time_status      = kt["status"]
+    key_time_window_sast = kt["sast_display"]
+    active_kt_window     = kt["active_window"]
+
+    # Intraday profile (anchored at 5AM)
+    intraday = detect_intraday_profile(buckets, anchor_5am, crt_high, crt_low)
+
+    # Order blocks (M15 within 5AM bucket)
+    ob_candles   = b_5am["m15s"] if b_5am else m15_candles[-32:]
+    order_blocks = detect_order_blocks(ob_candles, atr)
+    entry_ob     = None
+    if order_blocks and entry_zone:
+        for ob in order_blocks:
+            if setup == "BUY" and ob["type"] == "bullish":
+                entry_ob = ob
+                break
+            elif setup == "SELL" and ob["type"] == "bearish":
+                entry_ob = ob
+                break
+
+    # Confluence scoring (max ~12)
+    score = 0
+    notes = []
+    if profile_type == "TYPE_1_CONT":
+        score += 3
+        notes.append("TYPE_1_CONT: 1AM expansion → 5AM continuation")
+    elif profile_type == "5AM_EXPANSION":
+        score += 2
+        notes.append(f"5AM expansion (1AM {am1_type})")
+    if setup == "BUY"  and dol_bias == "BULLISH":
+        score += 2
+        notes.append("DOL bullish aligns BUY")
+    if setup == "SELL" and dol_bias == "BEARISH":
+        score += 2
+        notes.append("DOL bearish aligns SELL")
+    if setup == "BUY"  and crt_low  is not None and b_5am and b_5am["low"]  < crt_low:
+        score += 1
+        notes.append("5AM swept CRT low")
+    if setup == "SELL" and crt_high is not None and b_5am and b_5am["high"] > crt_high:
+        score += 1
+        notes.append("5AM swept CRT high")
+    if smt in ("BULLISH-DIVERGENCE", "BEARISH-DIVERGENCE"):
+        score += 2
+        notes.append(f"SMT {smt}")
+    elif smt.endswith("-PARTNER"):
+        score += 1
+        notes.append(f"SMT (partner-led) {smt}")
+    if key_time_status == "ACTIVE":
+        score += 2
+        notes.append(f"In key-time: {active_kt_window}")
+    elif key_time_status == "WAITING":
+        score += 1
+        notes.append("Approaching NY Open key-time")
+    if entry_ob:
+        score += 1
+        notes.append(f"M15 OB ({entry_ob['type']})")
+    if intraday["profile"] in ("normal_protraction", "london_lunch_reversal"):
+        score += 1
+        notes.append(f"Intraday: {intraday['label']}")
+
+    if score >= 9:
+        grade = "A"
+    elif score >= 6:
+        grade = "B"
+    elif score >= 3:
+        grade = "C"
+    else:
+        grade = "NO-TRADE"
+
+    sast = ZoneInfo("Africa/Johannesburg")
+    return {
+        "symbol":                   symbol,
+        "dol_bias":                 dol_bias,
+        "dol_target":               dol.get("target"),
+        "dol_type":                 dol.get("dol_type"),
+        "crt_high":                 crt_high,
+        "crt_low":                  crt_low,
+        "candle_5pm":               bucket_brief(b_cbdr, cbdr_type),
+        "candle_9pm":               bucket_brief(b_asia, asia_type),
+        "candle_1am":               bucket_brief(b_1am,  am1_type),
+        "candle_5am":               candle_5am and {**candle_5am, "type": am5_type},
+        "profile_type":             profile_type,
+        "profile_label":            profile_label,
+        "intraday_profile":         intraday,
+        "ohlc_pattern":             ohlc,
+        "setup":                    setup,
+        "entry_zone":               entry_zone,
+        "order_blocks":             order_blocks[:2],
+        "entry_ob":                 entry_ob,
+        "smt":                      smt,
+        "key_time_status":          key_time_status,
+        "key_time_window_sast":     key_time_window_sast,
+        "key_time_active_window":   active_kt_window,
+        "key_time_windows":         kt["windows"],
+        "session_5am_sast":         anchor_5am.astimezone(sast).strftime("%Y-%m-%d %H:%M"),
+        "session_is_live":          anchors["is_live"],
+        "provisional":              provisional,
+        "m15_count":                m15_count,
+        "score":                    score,
+        "grade":                    grade,
+        "notes":                    "; ".join(notes) if notes else "No confluence",
+    }
+
+
+def analyze_universe_5am(candles_by_pair: dict[str, dict]) -> dict:
+    """Run analyze_pair_5am for every pair in CRT_UNIVERSE."""
+    now_ny = datetime.now(NY)
+
+    smt_partners = {"EUR/USD": "GBP/USD", "GBP/USD": "EUR/USD"}
+    partner_buckets_by_sym: dict[str, Optional[dict]] = {}
+    session_used = None
+    for sym in ("EUR/USD", "GBP/USD"):
+        m15 = candles_by_pair.get(sym, {}).get("m15", [])
+        if m15:
+            buckets    = build_h4_buckets(m15)
+            sess       = latest_populated_session(buckets, now_ny)
+            anchor_5am = sess["crt_1am"] + timedelta(hours=4)
+            partner_buckets_by_sym[sym] = {
+                "5am": buckets.get(anchor_5am),
+                "1am": buckets.get(sess["crt_1am"]),
+            }
+            if session_used is None:
+                session_used = sess
+        else:
+            partner_buckets_by_sym[sym] = None
+    if session_used is None:
+        session_used = session_anchors_now(now_ny) | {"is_live": True}
+    anchors    = session_used
+    anchor_5am = anchors["crt_1am"] + timedelta(hours=4)
+
+    pairs_out = []
+    for sym in CRT_UNIVERSE:
+        bundles    = candles_by_pair.get(sym, {})
+        partner    = smt_partners.get(sym)
+        partner_bk = partner_buckets_by_sym.get(partner) if partner else None
+        pairs_out.append(
+            analyze_pair_5am(
+                symbol=sym,
+                m15_candles=bundles.get("m15", []),
+                smt_partner_buckets=partner_bk,
+                now_ny=now_ny,
+            )
+        )
+
+    buys    = sum(1 for p in pairs_out if p["setup"] == "BUY")
+    sells   = sum(1 for p in pairs_out if p["setup"] == "SELL")
+    grade_a = sum(1 for p in pairs_out if p["grade"] == "A")
+    grade_b = sum(1 for p in pairs_out if p["grade"] == "B")
+
+    sast = ZoneInfo("Africa/Johannesburg")
+    return {
+        "universe":  CRT_UNIVERSE,
+        "now_ny":    now_ny.strftime("%Y-%m-%d %H:%M %Z"),
+        "anchors_ny": {
+            "cbdr":    anchors["cbdr"].strftime("%Y-%m-%d %H:%M %Z"),
+            "asia":    anchors["asia"].strftime("%Y-%m-%d %H:%M %Z"),
+            "crt_1am": anchors["crt_1am"].strftime("%Y-%m-%d %H:%M %Z"),
+            "crt_5am": anchor_5am.strftime("%Y-%m-%d %H:%M %Z"),
+        },
+        "anchors_sast": {
+            "cbdr":    anchors["cbdr"].astimezone(sast).strftime("%Y-%m-%d %H:%M"),
+            "asia":    anchors["asia"].astimezone(sast).strftime("%Y-%m-%d %H:%M"),
+            "crt_1am": anchors["crt_1am"].astimezone(sast).strftime("%Y-%m-%d %H:%M"),
+            "crt_5am": anchor_5am.astimezone(sast).strftime("%Y-%m-%d %H:%M"),
+        },
+        "buys":    buys,
+        "sells":   sells,
+        "grade_a": grade_a,
+        "grade_b": grade_b,
+        "pairs":   pairs_out,
     }

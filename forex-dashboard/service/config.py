@@ -66,6 +66,9 @@ ALERTS_GRADE_A_ONLY = os.environ.get("ALERTS_GRADE_A_ONLY", "true").lower() in (
 # alerts as SNR). Default false = A + B both sent to Discord.
 CRT_GRADE_A_ONLY = os.environ.get("CRT_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 
+# 5AM CRT grade gate — NY Open kill-zone session. Grade A only (default true).
+CRT_5AM_GRADE_A_ONLY = os.environ.get("CRT_5AM_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+
 # Quality filters for SNR (H4 + M15) — based on 2026-06-09 pattern audit.
 # DISTANCE filter: skip signal if price is too far from the entry zone when fired
 #   (stale setups never fill or fill into established momentum). 0 disables.

@@ -124,6 +124,12 @@ def refresh_all():
     except Exception as e:
         log.warning("CRT alerts failed: %s", e)
 
+    # Run 5AM CRT scanner + Discord alerts (NY Open kill zone)
+    try:
+        _run_crt_5am_alerts()
+    except Exception as e:
+        log.warning("CRT-5AM alerts failed: %s", e)
+
     # Run Malaysian SNR Emperor scanner + Discord alerts
     try:
         _run_snr_alerts()
@@ -193,6 +199,29 @@ def _run_crt_alerts():
             alerts.alert_crt_setup(row["symbol"], row)
         except Exception as e:
             log.debug("CRT alert eval failed for %s: %s", row.get("symbol"), e)
+
+
+def _run_crt_5am_alerts():
+    """Run the 5AM CRT scanner and fire Discord alerts for Grade A setups.
+
+    Key windows per MADO spec:
+      London Lunch  06:00–07:00 NY (08:00–09:00 SAST)
+      NY Open       07:00–08:30 NY (09:00–10:30 SAST)
+    """
+    import cache
+    import crt_strategy
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in crt_strategy.CRT_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=400),
+        }
+    result = crt_strategy.analyze_universe_5am(candles_by_pair)
+    for row in result.get("pairs", []):
+        try:
+            alerts.alert_crt_5am_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("CRT-5AM alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 def _run_snr_alerts():
