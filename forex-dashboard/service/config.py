@@ -77,6 +77,14 @@ CRT_5AM_GRADE_A_ONLY = os.environ.get("CRT_5AM_GRADE_A_ONLY", "false").lower() i
 ALERTS_DISTANCE_FILTER_PIPS = float(os.environ.get("ALERTS_DISTANCE_FILTER_PIPS", "50"))
 ALERTS_TREND_FILTER_ENABLED = os.environ.get("ALERTS_TREND_FILTER_ENABLED", "true").lower() in ("1", "true", "yes")
 
+# EMS gate for M15 SNR signals — based on "The Alchemist EMS Trinity" + MSNR
+# ALCHEMIST notes. When True, an M15 SNR alert only fires if the higher
+# timeframe (H4) storyline agrees in direction AND price shows a liquidity
+# sweep AND a market structure shift. This turns M15 from a standalone (noisy)
+# signal source into a precision refinement of the HTF bias. Set "false" to
+# revert to the old standalone M15 behaviour.
+SNR_M15_EMS_GATE_ENABLED = os.environ.get("SNR_M15_EMS_GATE_ENABLED", "true").lower() in ("1", "true", "yes")
+
 
 def load_keys():
     """Return list of {name, value} for keys defined in env.

@@ -346,6 +346,82 @@ def _find_swings(candles: list[dict], left: int = 2, right: int = 2,
     return swings
 
 
+def detect_liquidity_sweep(candles: list[dict], direction: str,
+                           swing_left: int = 2, swing_right: int = 2,
+                           recent: int = 5) -> bool:
+    """Detect a liquidity sweep ("MISS" / FU candle) validating an SNR zone.
+
+    Per MSNR ALCHEMIST / EMS Trinity: a high-quality reversal is preceded by
+    price sweeping the liquidity resting beyond a prior swing, then reclaiming
+    the level (closing back inside).
+
+    BUY  → a recent candle wicks BELOW a prior swing low, closes back above it
+           (sell-side liquidity swept).
+    SELL → a recent candle wicks ABOVE a prior swing high, closes back below it
+           (buy-side liquidity swept).
+
+    Only the last `recent` candles are considered for the sweep; the swept
+    swing must have formed earlier.
+    """
+    if not candles or len(candles) < swing_left + swing_right + 2:
+        return False
+    swings = _find_swings(candles, left=swing_left, right=swing_right)
+    n = len(candles)
+    recent_start = max(0, n - recent)
+
+    if direction == "BUY":
+        swing_lows = [s for s in swings if s["type"] == "low"]
+        for i in range(recent_start, n):
+            c = candles[i]
+            for s in swing_lows:
+                if s["idx"] < i and c["low"] < s["price"] and c["close"] > s["price"]:
+                    return True
+    elif direction == "SELL":
+        swing_highs = [s for s in swings if s["type"] == "high"]
+        for i in range(recent_start, n):
+            c = candles[i]
+            for s in swing_highs:
+                if s["idx"] < i and c["high"] > s["price"] and c["close"] < s["price"]:
+                    return True
+    return False
+
+
+def detect_mss(candles: list[dict], direction: str,
+               swing_left: int = 2, swing_right: int = 2) -> bool:
+    """Detect a Market Structure Shift (MSS / CHoCH) in the given direction.
+
+    Per EMS Trinity / SMC: a shift is the first break of the prevailing
+    structure, signalling the algo has changed delivery direction.
+
+    BUY  → prior structure was bearish (descending lower-highs); the latest
+           close breaks ABOVE the most recent lower-high.
+    SELL → prior structure was bullish (ascending higher-lows); the latest
+           close breaks BELOW the most recent higher-low.
+    """
+    if not candles or len(candles) < swing_left + swing_right + 2:
+        return False
+    swings = _find_swings(candles, left=swing_left, right=swing_right)
+    last_close = candles[-1]["close"]
+
+    if direction == "BUY":
+        highs = [s for s in swings if s["type"] == "high"]
+        if len(highs) < 2:
+            return False
+        # bearish context: most recent swing high is a lower high
+        if not (highs[-1]["price"] < highs[-2]["price"]):
+            return False
+        return last_close > highs[-1]["price"]
+    elif direction == "SELL":
+        lows = [s for s in swings if s["type"] == "low"]
+        if len(lows) < 2:
+            return False
+        # bullish context: most recent swing low is a higher low
+        if not (lows[-1]["price"] > lows[-2]["price"]):
+            return False
+        return last_close < lows[-1]["price"]
+    return False
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. Storyline Detection (4 Rules from Emperor)
 # ──────────────────────────────────────────────────────────────────────────────

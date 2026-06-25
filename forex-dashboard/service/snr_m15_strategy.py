@@ -188,6 +188,51 @@ def _build_trade_plan_m15(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# EMS confluence gate (Engulfing + MSNR + SMC)
+# ──────────────────────────────────────────────────────────────────────────────
+# Per "The Alchemist EMS Trinity" + MSNR ALCHEMIST notes: an M15 SNR signal is
+# only tradeable when the higher timeframe (H4) bias agrees AND price has shown
+# a liquidity sweep AND a market structure shift. Without these, M15 is just
+# noise; with them, M15 becomes a precision refinement of the HTF intent.
+
+import snr_strategy
+
+
+def h4_direction_agrees(h4_row: Optional[dict], m15_direction: str) -> bool:
+    """True when the H4 scanner's storyline is active and biased in the same
+    direction as the M15 signal (BUY<->bullish, SELL<->bearish)."""
+    if not h4_row:
+        return False
+    storyline = h4_row.get("storyline") or {}
+    if not storyline.get("active"):
+        return False
+    want = "bullish" if m15_direction == "BUY" else "bearish"
+    return storyline.get("direction") == want
+
+
+def ems_gate(m15_row: dict, h4_row: Optional[dict],
+             m15_candles: list[dict]) -> tuple[bool, str]:
+    """Gate an M15 SNR signal through the EMS confluence checklist.
+
+    Returns (True, "") to pass, or (False, reason) to reject. Checks run in
+    order so the reject reason names the first failed confluence:
+      1. H4 bias aligned (HTF agreement)
+      2. Liquidity sweep present (zone validated)
+      3. Market structure shift present (delivery confirmed)
+    """
+    direction = m15_row.get("setup")
+    if direction not in ("BUY", "SELL"):
+        return False, "no directional setup"
+    if not h4_direction_agrees(h4_row, direction):
+        return False, "H4 bias not aligned"
+    if not snr_strategy.detect_liquidity_sweep(m15_candles, direction):
+        return False, "no liquidity sweep"
+    if not snr_strategy.detect_mss(m15_candles, direction):
+        return False, "no market structure shift"
+    return True, ""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Per-pair analysis — M15 version
 # ──────────────────────────────────────────────────────────────────────────────
 

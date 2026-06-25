@@ -244,9 +244,15 @@ def _run_snr_alerts():
 
 
 def _run_snr_m15_alerts():
-    """Run the M15 SNR Fast Scanner and fire Discord alerts for confirmed setups."""
+    """Run the M15 SNR Fast Scanner and fire Discord alerts for confirmed setups.
+
+    The EMS gate (see alerts.alert_snr_m15_setup) needs the H4 scanner's
+    storyline for the same pair, so we run the H4 analysis here and pass each
+    pair's H4 row + raw M15 candles into the alert evaluator.
+    """
     import cache
     import snr_m15_strategy
+    import snr_strategy
 
     candles_by_pair: dict[str, dict] = {}
     for sym in snr_m15_strategy.SNR_M15_UNIVERSE:
@@ -254,12 +260,33 @@ def _run_snr_m15_alerts():
             "1h": cache.read_candles(sym, "1h", limit=200),
             "m15": cache.read_candles(sym, "15min", limit=400),
         }
+
+    # H4 storyline context for the EMS gate (uses M15 + daily candles).
+    h4_by_pair: dict[str, dict] = {}
+    try:
+        h4_candles_by_pair = {
+            sym: {
+                "m15": candles_by_pair[sym]["m15"],
+                "1d": cache.read_candles(sym, "1day", limit=60),
+            }
+            for sym in snr_strategy.SNR_UNIVERSE
+        }
+        h4_result = snr_strategy.analyze_universe(h4_candles_by_pair)
+        h4_by_pair = {r["symbol"]: r for r in h4_result.get("pairs", [])}
+    except Exception as e:
+        log.debug("SNR-M15 EMS gate: H4 context unavailable: %s", e)
+
     result = snr_m15_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
+        sym = row["symbol"]
         try:
-            alerts.alert_snr_m15_setup(row["symbol"], row)
+            alerts.alert_snr_m15_setup(
+                sym, row,
+                h4_row=h4_by_pair.get(sym),
+                m15_candles=candles_by_pair.get(sym, {}).get("m15"),
+            )
         except Exception as e:
-            log.debug("SNR-M15 alert eval failed for %s: %s", row.get("symbol"), e)
+            log.debug("SNR-M15 alert eval failed for %s: %s", sym, e)
 
 
 _stall_warned = False

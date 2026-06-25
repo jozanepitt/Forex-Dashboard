@@ -13,6 +13,7 @@ import instruments
 from config import (
     DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY, CRT_GRADE_A_ONLY,
     CRT_5AM_GRADE_A_ONLY, ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
+    SNR_M15_EMS_GATE_ENABLED,
 )
 
 log = logging.getLogger("alerts")
@@ -885,7 +886,8 @@ def alert_snr_setup(pair: str, row: dict):
                  pair, setup, grade, tier, setup_num, confidence)
 
 
-def alert_snr_m15_setup(pair: str, row: dict):
+def alert_snr_m15_setup(pair: str, row: dict, h4_row: Optional[dict] = None,
+                        m15_candles: Optional[list] = None):
     """Fire when the M15 SNR Fast Scanner signals a tradeable setup.
 
     QUALITY GATE — same standards as H4 scanner but tagged as M15:
@@ -893,6 +895,11 @@ def alert_snr_m15_setup(pair: str, row: dict):
     - Active storyline with confirmed M15 breakout
     - Entry tier = Low or Medium risk
     - Confidence = high or medium
+
+    EMS GATE (when SNR_M15_EMS_GATE_ENABLED) — additionally requires that the
+    H4 storyline agrees in direction AND price shows a liquidity sweep AND a
+    market structure shift, per the Alchemist EMS Trinity. `h4_row` is the H4
+    scanner's row for this pair; `m15_candles` are the raw M15 candles.
 
     Throttle key includes "m15_" prefix so M15 and H4 alerts
     are tracked independently (you can get both for the same pair).
@@ -939,6 +946,16 @@ def alert_snr_m15_setup(pair: str, row: dict):
     if not passed_q:
         log.info("SNR-M15 FILTERED %s %s: %s", pair, setup, q_reason)
         return
+
+    # EMS gate: HTF agreement + liquidity sweep + market structure shift.
+    # Turns M15 into a precision refinement of the H4 bias instead of a
+    # standalone (noisy) signal. Skipped gracefully if context is unavailable.
+    if SNR_M15_EMS_GATE_ENABLED and m15_candles:
+        import snr_m15_strategy
+        ems_ok, ems_reason = snr_m15_strategy.ems_gate(row, h4_row, m15_candles)
+        if not ems_ok:
+            log.info("SNR-M15 EMS-GATE BLOCKED %s %s: %s", pair, setup, ems_reason)
+            return
 
     from_level = storyline.get("from_level")
     rule = f"m15_msnr_{setup.lower()}_{tier}_{setup_num}_{_fmt_price(from_level) if from_level else 'x'}"
