@@ -223,6 +223,60 @@ def detect_smt(
     return "NONE"
 
 
+def _smt_between(self_curr: Optional[dict], self_prev: Optional[dict],
+                  part_curr: Optional[dict], part_prev: Optional[dict]) -> Optional[str]:
+    """Return SMT label between two session buckets, or None if no data/divergence."""
+    if not (self_curr and self_prev and part_curr and part_prev):
+        return None
+    s_swept_high = self_curr["high"] > self_prev["high"]
+    p_swept_high = part_curr["high"] > part_prev["high"]
+    s_swept_low  = self_curr["low"]  < self_prev["low"]
+    p_swept_low  = part_curr["low"]  < part_prev["low"]
+    if s_swept_high != p_swept_high:
+        return "BEARISH-DIVERGENCE" if s_swept_high else "BEARISH-DIVERGENCE-PARTNER"
+    if s_swept_low != p_swept_low:
+        return "BULLISH-DIVERGENCE" if s_swept_low else "BULLISH-DIVERGENCE-PARTNER"
+    return None
+
+
+def detect_smt_multi_session(
+    self_sessions: dict,
+    partner_sessions: dict,
+) -> dict:
+    """Multi-session SMT for 5AM CRT (per MADO 5AM CRT PDF pages 14–16).
+
+    Compares three session pairs and returns the strongest divergence found:
+      1. London (1AM bucket) vs London Lunch (5AM bucket)
+      2. London Lunch (5AM bucket) vs NY (9AM bucket)
+      3. London (1AM bucket) vs NY (9AM bucket)
+
+    `self_sessions` / `partner_sessions` keyed by {"london", "london_lunch", "ny"}.
+    Self-led divergences are preferred over partner-led; first-found wins among ties.
+    """
+    comparisons = [
+        ("London→Lunch", self_sessions.get("london_lunch"), self_sessions.get("london"),
+                          partner_sessions.get("london_lunch"), partner_sessions.get("london")),
+        ("Lunch→NY",      self_sessions.get("ny"),           self_sessions.get("london_lunch"),
+                          partner_sessions.get("ny"),       partner_sessions.get("london_lunch")),
+        ("London→NY",     self_sessions.get("ny"),           self_sessions.get("london"),
+                          partner_sessions.get("ny"),       partner_sessions.get("london")),
+    ]
+    findings = []
+    for label, sc, sp, pc, pp in comparisons:
+        smt = _smt_between(sc, sp, pc, pp)
+        if smt:
+            findings.append((label, smt))
+
+    # Prefer self-led over partner-led
+    for label, smt in findings:
+        if not smt.endswith("-PARTNER"):
+            return {"smt": smt, "session_pair": label}
+    if findings:
+        label, smt = findings[0]
+        return {"smt": smt, "session_pair": label}
+    return {"smt": "NONE", "session_pair": None}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Candle Classification
 # ──────────────────────────────────────────────────────────────────────────────
@@ -343,64 +397,153 @@ def detect_order_blocks(m15_candles: list[dict], atr: Optional[float] = None, ma
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Intraday Profile Detection
+# Intraday Profile Detection (per MADO @Im-speculator PDFs)
 # ──────────────────────────────────────────────────────────────────────────────
 
+def detect_intraday_profile_1am(
+    buckets: dict[datetime, dict],
+    anchor_1am: datetime,
+    crt_high: Optional[float],
+    crt_low: Optional[float],
+) -> dict:
+    """1AM CRT intraday profile detection (per MADO 1AM CRT PDF pages 6–8).
+
+    Two profiles for the 1AM candle:
+      1. Normal Protraction — 9PM is consolidation, 1AM does the manipulation+expansion
+         (1AM forms the HoD or LoD; London/NY then reverses).
+      2. Delayed Protraction — 9PM is manipulation (sweeps Asia range), 1AM continues
+         the same direction with deeper extension before reversal.
+
+    Distinguishes them via the 9PM bucket character:
+      * 9PM body-to-range ratio < 0.4 and inside Asia range → consolidation → Normal
+      * 9PM body-to-range ratio ≥ 0.4 AND 1AM continues same direction → Delayed
+    """
+    b_1am  = buckets.get(anchor_1am)
+    b_asia = buckets.get(anchor_1am - timedelta(hours=4))   # 9PM bucket
+
+    if not b_1am:
+        return {"profile": "unknown", "label": "Insufficient data"}
+
+    one_dir = ("bullish" if b_1am["close"] > b_1am["open"]
+               else "bearish" if b_1am["close"] < b_1am["open"]
+               else "doji")
+    one_swept_high = crt_high is not None and b_1am["high"] > crt_high
+    one_swept_low  = crt_low  is not None and b_1am["low"]  < crt_low
+    one_swept      = one_swept_high or one_swept_low
+
+    # 9PM character — is it a manipulation candle (extended, with body)?
+    asia_is_manipulation = False
+    asia_dir = None
+    if b_asia:
+        asia_range = b_asia["high"] - b_asia["low"]
+        asia_body  = abs(b_asia["close"] - b_asia["open"])
+        if asia_range > 0:
+            asia_is_manipulation = (asia_body / asia_range) >= 0.4
+        asia_dir = "bullish" if b_asia["close"] > b_asia["open"] else "bearish"
+
+    # DELAYED: 9PM manipulation, 1AM continues same direction with sweep
+    if asia_is_manipulation and asia_dir == one_dir and one_swept:
+        return {
+            "profile":   "delayed_protraction",
+            "label":     "Delayed Protraction (9PM manip → 1AM deeper extension)",
+            "direction": one_dir,
+        }
+
+    # NORMAL: 1AM sweeps CRT range with body (manipulation + expansion in same candle)
+    if one_swept and one_dir != "doji":
+        return {
+            "profile":   "normal_protraction",
+            "label":     "Normal Protraction (1AM forms HoD/LoD)",
+            "direction": one_dir,
+        }
+
+    if one_dir != "doji":
+        return {
+            "profile":   "pending",
+            "label":     f"1AM {one_dir}, no CRT sweep yet",
+            "direction": one_dir,
+        }
+    return {"profile": "pending", "label": "1AM doji, profile pending"}
+
+
+def detect_intraday_profile_5am(
+    buckets: dict[datetime, dict],
+    anchor_5am: datetime,
+    crt_high: Optional[float],
+    crt_low: Optional[float],
+) -> dict:
+    """5AM CRT intraday profile detection (per MADO 5AM CRT PDF pages 5–11).
+
+    Three profiles for the 5AM candle:
+      1. London Lunch Low/High of the Day — the low (or high) of the entire day
+         forms during the first half of the 5AM bucket (5–7 AM EST = London Lunch),
+         then reverses for NY (e.g. low at lunch, rally into NY).
+      2. NY Continuation — the NY H4 bucket (9 AM EST) continues 5AM direction.
+      3. NY Reversal — the NY H4 bucket reverses 5AM direction.
+
+    Detection:
+      * Look at M15 sub-candles of 5AM bucket; first half = London Lunch portion
+        (5–7 AM EST), second half = NY Open portion (7–9 AM EST).
+      * If extreme (low for bullish 5AM, high for bearish 5AM) is in the lunch half
+        AND 5AM closes opposite-of-extreme direction → London Lunch extreme of day.
+      * Otherwise classify via the 9 AM EST H4 bucket.
+    """
+    b_5am = buckets.get(anchor_5am)
+    b_ny  = buckets.get(anchor_5am + timedelta(hours=4))   # 9AM bucket (NY morning)
+
+    if not b_5am:
+        return {"profile": "unknown", "label": "Insufficient data"}
+
+    five_dir = ("bullish" if b_5am["close"] > b_5am["open"]
+                else "bearish" if b_5am["close"] < b_5am["open"]
+                else "doji")
+    m15s = b_5am.get("m15s") or []
+
+    # Split 5AM M15 sub-candles: first half = London Lunch (5–7 AM EST),
+    # second half = NY Open lead-in (7–9 AM EST).
+    if len(m15s) >= 4:
+        half = len(m15s) // 2
+        lunch_lows  = [c["low"]  for c in m15s[:half]]
+        lunch_highs = [c["high"] for c in m15s[:half]]
+        lunch_low   = min(lunch_lows)  if lunch_lows  else None
+        lunch_high  = max(lunch_highs) if lunch_highs else None
+
+        # Bullish 5AM whose low is the bucket low AND was made in lunch half
+        if five_dir == "bullish" and lunch_low is not None and lunch_low == b_5am["low"]:
+            return {
+                "profile":   "london_lunch_low",
+                "label":     "London Lunch Low of the Day",
+                "direction": "bullish",
+            }
+        # Bearish 5AM whose high is the bucket high AND was made in lunch half
+        if five_dir == "bearish" and lunch_high is not None and lunch_high == b_5am["high"]:
+            return {
+                "profile":   "london_lunch_high",
+                "label":     "London Lunch High of the Day",
+                "direction": "bearish",
+            }
+
+    # Classify continuation vs reversal via the 9 AM EST H4 bucket (NY morning)
+    if b_ny:
+        ny_dir = ("bullish" if b_ny["close"] > b_ny["open"]
+                  else "bearish" if b_ny["close"] < b_ny["open"]
+                  else "doji")
+        if ny_dir != "doji" and five_dir != "doji":
+            if ny_dir == five_dir:
+                return {"profile": "ny_continuation", "label": "NY Continuation", "direction": ny_dir}
+            return {"profile": "ny_reversal", "label": "NY Reversal", "direction": ny_dir}
+
+    return {"profile": "pending", "label": "5AM formed, awaiting NY confirmation"}
+
+
+# Backwards-compat alias — older callers (audit scripts) may still import this.
 def detect_intraday_profile(
     buckets: dict[datetime, dict],
     session_anchor: datetime,
     crt_high: Optional[float],
     crt_low: Optional[float],
 ) -> dict:
-    """Detect intraday profile type for the current session.
-
-    Profiles (MADO spec):
-    1. Normal Protraction — London makes high/low of day
-    2. London Lunch Reversal — reversal during 5-7 AM NY
-    3. NY Continuation — NY session continues London direction
-
-    session_anchor = 1AM bucket start (for 1AM CRT) or 5AM bucket start (for 5AM CRT).
-    """
-    # For 1AM CRT: London = 1AM-5AM bucket, London Lunch = 5AM-9AM, NY = 9AM-13PM
-    # For 5AM CRT: London = 5AM bucket, London Lunch = 9AM, NY = 9AM-13PM
-    # We'll detect based on what data exists
-
-    b_london = buckets.get(session_anchor)
-    b_lunch = buckets.get(session_anchor + timedelta(hours=4))
-    b_ny = buckets.get(session_anchor + timedelta(hours=8))
-
-    if not b_london:
-        return {"profile": "unknown", "label": "Insufficient data"}
-
-    london_dir = "bullish" if b_london["close"] > b_london["open"] else "bearish"
-
-    # Check if London swept CRT range (manipulation)
-    london_swept_high = crt_high is not None and b_london["high"] > crt_high
-    london_swept_low = crt_low is not None and b_london["low"] < crt_low
-
-    if not b_lunch and not b_ny:
-        # Only London data — can't fully classify yet
-        if london_swept_high or london_swept_low:
-            return {"profile": "normal_protraction", "label": "Normal Protraction (forming)", "direction": london_dir}
-        return {"profile": "pending", "label": "Profile pending (London only)"}
-
-    if b_lunch:
-        lunch_dir = "bullish" if b_lunch["close"] > b_lunch["open"] else "bearish"
-        # Reversal during lunch
-        if lunch_dir != london_dir and (london_swept_high or london_swept_low):
-            return {"profile": "london_lunch_reversal", "label": "London Lunch Reversal", "direction": lunch_dir}
-
-    if b_ny:
-        ny_dir = "bullish" if b_ny["close"] > b_ny["open"] else "bearish"
-        if ny_dir == london_dir:
-            return {"profile": "ny_continuation", "label": "NY Continuation", "direction": ny_dir}
-        else:
-            return {"profile": "ny_reversal", "label": "NY Reversal", "direction": ny_dir}
-
-    if london_swept_high or london_swept_low:
-        return {"profile": "normal_protraction", "label": "Normal Protraction", "direction": london_dir}
-
-    return {"profile": "neutral", "label": f"London {london_dir}, awaiting confirmation"}
+    return detect_intraday_profile_1am(buckets, session_anchor, crt_high, crt_low)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

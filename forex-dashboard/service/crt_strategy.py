@@ -32,9 +32,11 @@ from crt_utils import (
     build_h4_buckets,
     classify_candle,
     detect_dol,
-    detect_intraday_profile,
+    detect_intraday_profile_1am,
+    detect_intraday_profile_5am,
     detect_order_blocks,
     detect_smt,
+    detect_smt_multi_session,
     key_time_status_split,
     ny_dt,
     ohlc_pattern,
@@ -221,8 +223,8 @@ def analyze_pair(
     key_time_window_sast = kt["sast_display"]
     active_kt_window = kt["active_window"]
 
-    # Intraday Profile
-    intraday = detect_intraday_profile(buckets, anchors["crt_1am"], crt_high, crt_low)
+    # Intraday Profile — 1AM strategy: Normal Protraction vs Delayed Protraction
+    intraday = detect_intraday_profile_1am(buckets, anchors["crt_1am"], crt_high, crt_low)
 
     # Order Blocks (M15 within the 1AM bucket range)
     ob_candles = b_1am["m15s"] if b_1am else m15_candles[-32:]
@@ -244,7 +246,7 @@ def analyze_pair(
     notes = []
     if profile_type in ("TYPE_1", "TYPE_2"):
         score += 3
-        notes.append(f"Profile {profile_type}")
+        notes.append(f"Market Profile {profile_type}")
     elif profile_type == "EXPANSION-OTHER":
         score += 1
         notes.append("1AM expansion (non-textbook profile)")
@@ -274,7 +276,7 @@ def analyze_pair(
     if entry_ob:
         score += 1
         notes.append(f"M15 OB ({entry_ob['type']})")
-    if intraday["profile"] in ("normal_protraction", "london_lunch_reversal"):
+    if intraday["profile"] in ("normal_protraction", "delayed_protraction"):
         score += 1
         notes.append(f"Intraday: {intraday['label']}")
 
@@ -425,14 +427,12 @@ def analyze_pair_5am(
     b_1am  = buckets.get(anchors["crt_1am"])
     b_5am  = buckets.get(anchor_5am)
 
-    # CRT range (CBDR + Asia high/low)
-    if b_cbdr and b_asia:
-        crt_high = max(b_cbdr["high"], b_asia["high"])
-        crt_low  = min(b_cbdr["low"],  b_asia["low"])
-    elif b_cbdr:
-        crt_high, crt_low = b_cbdr["high"], b_cbdr["low"]
-    elif b_asia:
-        crt_high, crt_low = b_asia["high"], b_asia["low"]
+    # CRT range — 5AM strategy uses THREE CRT candles: 5PM, 9PM AND 1AM
+    # (per MADO/@Im-speculator "5AM CRT" PDF, page 4)
+    crt_buckets = [b for b in (b_cbdr, b_asia, b_1am) if b]
+    if crt_buckets:
+        crt_high = max(b["high"] for b in crt_buckets)
+        crt_low  = min(b["low"]  for b in crt_buckets)
     else:
         crt_high = crt_low = None
 
@@ -488,23 +488,30 @@ def analyze_pair_5am(
             setup      = "SELL"
             entry_zone = {"side": "above_open", "level": c["open"]}
 
-    # SMT (EUR/USD ↔ GBP/USD on the 5AM candle)
+    # SMT — 5AM strategy: multi-session divergence
+    # (London=1AM vs LondonLunch=5AM vs NY=9AM bucket per PDF pages 14–16)
     smt = "NONE"
+    smt_session = None
     if b_5am and b_1am and smt_partner_buckets:
-        smt = detect_smt(
-            b_5am, b_1am,
-            smt_partner_buckets.get("5am"),
-            smt_partner_buckets.get("1am"),
-        )
+        b_ny = buckets.get(anchor_5am + timedelta(hours=4))
+        self_sessions = {"london": b_1am, "london_lunch": b_5am, "ny": b_ny}
+        partner_sessions = {
+            "london":        smt_partner_buckets.get("1am"),
+            "london_lunch":  smt_partner_buckets.get("5am"),
+            "ny":            smt_partner_buckets.get("ny"),
+        }
+        smt_result = detect_smt_multi_session(self_sessions, partner_sessions)
+        smt = smt_result["smt"]
+        smt_session = smt_result["session_pair"]
 
-    # Key-time: NY Open kill zone
+    # Key-time: London Lunch + NY Open kill zone
     kt                   = key_time_status_split(now_ny, anchor_5am, KEY_TIME_WINDOWS_5AM)
     key_time_status      = kt["status"]
     key_time_window_sast = kt["sast_display"]
     active_kt_window     = kt["active_window"]
 
-    # Intraday profile (anchored at 5AM)
-    intraday = detect_intraday_profile(buckets, anchor_5am, crt_high, crt_low)
+    # Intraday profile — 5AM strategy: London Lunch Low / NY Continuation / NY Reversal
+    intraday = detect_intraday_profile_5am(buckets, anchor_5am, crt_high, crt_low)
 
     # Order blocks (M15 within 5AM bucket)
     ob_candles   = b_5am["m15s"] if b_5am else m15_candles[-32:]
@@ -555,9 +562,12 @@ def analyze_pair_5am(
     if entry_ob:
         score += 1
         notes.append(f"M15 OB ({entry_ob['type']})")
-    if intraday["profile"] in ("normal_protraction", "london_lunch_reversal"):
+    if intraday["profile"] in ("london_lunch_low", "london_lunch_high",
+                                "ny_continuation", "ny_reversal"):
         score += 1
         notes.append(f"Intraday: {intraday['label']}")
+    if smt_session:
+        notes.append(f"SMT session: {smt_session}")
 
     if score >= 9:
         grade = "A"
@@ -589,6 +599,7 @@ def analyze_pair_5am(
         "order_blocks":             order_blocks[:2],
         "entry_ob":                 entry_ob,
         "smt":                      smt,
+        "smt_session":              smt_session,
         "key_time_status":          key_time_status,
         "key_time_window_sast":     key_time_window_sast,
         "key_time_active_window":   active_kt_window,
@@ -619,6 +630,7 @@ def analyze_universe_5am(candles_by_pair: dict[str, dict]) -> dict:
             partner_buckets_by_sym[sym] = {
                 "5am": buckets.get(anchor_5am),
                 "1am": buckets.get(sess["crt_1am"]),
+                "ny":  buckets.get(anchor_5am + timedelta(hours=4)),
             }
             if session_used is None:
                 session_used = sess

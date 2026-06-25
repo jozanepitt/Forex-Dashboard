@@ -444,6 +444,63 @@ def alert_513_cross(pair: str, direction: str, price: float):
         log.info("alert sent: %s 5/13 cross %s @ %s", pair, direction, _fmt_price(price))
 
 
+def _build_crt_trade_plan(pair: str, row: dict, setup: str, candle_key: str) -> Optional[dict]:
+    """Build entry/SL/TP1/TP2 for a CRT setup per MADO PDF spec.
+
+    Strategy spec:
+      Entry = M15 OB mid (if available) else 1AM/5AM candle open ("buy below open / sell above").
+      SL    = beyond the OB extreme (or candle extreme as fallback), padded by 0.25× ATR-like buffer.
+      TP1   = entry ± risk × 2.0   (1:2 RR — strategy minimum, PDF pages 22 & 27)
+      TP2   = entry ± risk × 3.0   (1:3 RR — strategy preferred target)
+
+    Returns None if we lack the data to build a sane plan.
+    """
+    candle = row.get(candle_key) or {}
+    entry_zone = row.get("entry_zone") or {}
+    entry_ob = row.get("entry_ob")
+
+    candle_open  = candle.get("open")
+    candle_high  = candle.get("high")
+    candle_low   = candle.get("low")
+    if candle_open is None or candle_high is None or candle_low is None:
+        return None
+
+    # Entry — prefer OB mid (PDF page 17: "Entry Model = Model#1 / OB"); else candle open
+    if entry_ob and entry_ob.get("mid") is not None:
+        entry = float(entry_ob["mid"])
+        ob_high = entry_ob.get("high")
+        ob_low  = entry_ob.get("low")
+    else:
+        entry = float(entry_zone.get("level") or candle_open)
+        ob_high = ob_low = None
+
+    # SL — beyond the OB extreme (or candle extreme as a fallback)
+    try:
+        min_sl = instruments.min_sl_distance(pair, entry)
+    except Exception:
+        min_sl = 0.0
+
+    if setup == "BUY":
+        sl_anchor = ob_low if ob_low is not None else candle_low
+        sl = float(sl_anchor) - min_sl
+        if sl >= entry:
+            return None
+        risk = entry - sl
+        tp1 = entry + risk * 2.0
+        tp2 = entry + risk * 3.0
+    else:  # SELL
+        sl_anchor = ob_high if ob_high is not None else candle_high
+        sl = float(sl_anchor) + min_sl
+        if sl <= entry:
+            return None
+        risk = sl - entry
+        tp1 = entry - risk * 2.0
+        tp2 = entry - risk * 3.0
+
+    return {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "risk": risk,
+            "rr1": 2.0, "rr2": 3.0, "ob_used": entry_ob is not None}
+
+
 def alert_crt_setup(pair: str, row: dict):
     """Fire when a 1AM CRT scanner row reaches A/B grade in a tradeable key-time window.
 
@@ -506,14 +563,34 @@ def alert_crt_setup(pair: str, row: dict):
         "NONE":                       "—",
     }.get(smt_raw, smt_raw)
 
+    # Build trade plan (entry/SL/TP1@1:2/TP2@1:3 per MADO 1AM CRT PDF page 22)
+    plan = _build_crt_trade_plan(pair, row, setup, candle_key="candle_1am")
+    if plan:
+        plan_str = (
+            f"Entry `{_fmt_price(plan['entry'])}` · SL `{_fmt_price(plan['sl'])}`\n"
+            f"TP1 `{_fmt_price(plan['tp1'])}` (1:{plan['rr1']:.0f}) · "
+            f"TP2 `{_fmt_price(plan['tp2'])}` (1:{plan['rr2']:.0f})"
+        )
+        plan_source = "M15 OB" if plan["ob_used"] else "1AM open"
+    else:
+        plan_str = "—"
+        plan_source = "—"
+
+    # Intraday profile from new 1AM detector (normal_protraction / delayed_protraction)
+    intra = row.get("intraday_profile") or {}
+    intra_str = intra.get("label", "—") if isinstance(intra, dict) else "—"
+
     fields = [
         {"name": "Setup",        "value": f"**{setup}**",                                            "inline": True},
         {"name": "Grade",        "value": f"{grade_badge}**{grade} ({row.get('score', 0)}/10)**",    "inline": True},
         {"name": "Key Time",     "value": f"**{kt}** · {row.get('key_time_window_sast', '')}",       "inline": True},
-        {"name": "Entry",        "value": entry_str,                                                  "inline": True},
+        {"name": "Trade Plan",   "value": plan_str,                                                   "inline": False},
+        {"name": "Entry Source", "value": plan_source,                                                "inline": True},
+        {"name": "Entry Zone",   "value": entry_str,                                                  "inline": True},
         {"name": "1AM Candle",   "value": c1_str,                                                     "inline": True},
         {"name": "CRT H/L",      "value": crt_str,                                                    "inline": True},
-        {"name": "Profile",      "value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
+        {"name": "Market Profile","value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
+        {"name": "Intraday",     "value": intra_str,                                                  "inline": True},
         {"name": "DOL Bias",     "value": row.get("dol_bias", "?") or "—",                           "inline": True},
         {"name": "SMT",          "value": smt_label,                                                  "inline": True},
         {"name": "OHLC Pattern", "value": row.get("ohlc_pattern", "?"),                               "inline": True},
@@ -593,16 +670,38 @@ def alert_crt_5am_setup(pair: str, row: dict):
         "NONE":                       "—",
     }.get(smt_raw, smt_raw)
 
+    # Build trade plan (entry/SL/TP1@1:2/TP2@1:3 per MADO 5AM CRT PDF page 18)
+    plan = _build_crt_trade_plan(pair, row, setup, candle_key="candle_5am")
+    if plan:
+        plan_str = (
+            f"Entry `{_fmt_price(plan['entry'])}` · SL `{_fmt_price(plan['sl'])}`\n"
+            f"TP1 `{_fmt_price(plan['tp1'])}` (1:{plan['rr1']:.0f}) · "
+            f"TP2 `{_fmt_price(plan['tp2'])}` (1:{plan['rr2']:.0f})"
+        )
+        plan_source = "M15 OB" if plan["ob_used"] else "5AM open"
+    else:
+        plan_str = "—"
+        plan_source = "—"
+
+    # Intraday profile from new 5AM detector (london_lunch_low / ny_continuation / ny_reversal)
+    intra = row.get("intraday_profile") or {}
+    intra_str = intra.get("label", "—") if isinstance(intra, dict) else "—"
+    smt_sess  = row.get("smt_session")
+    smt_value = f"{smt_label} ({smt_sess})" if smt_sess and smt_label != "—" else smt_label
+
     fields = [
         {"name": "Setup",        "value": f"**{setup}**",                                              "inline": True},
         {"name": "Grade",        "value": f"{grade_badge}**{grade} ({row.get('score', 0)}/12)**",      "inline": True},
         {"name": "Key Time",     "value": f"**{kt}** · {row.get('key_time_window_sast', '')}",         "inline": True},
-        {"name": "Entry",        "value": entry_str,                                                    "inline": True},
+        {"name": "Trade Plan",   "value": plan_str,                                                     "inline": False},
+        {"name": "Entry Source", "value": plan_source,                                                  "inline": True},
+        {"name": "Entry Zone",   "value": entry_str,                                                    "inline": True},
         {"name": "5AM Candle",   "value": c5_str,                                                      "inline": True},
         {"name": "CRT H/L",      "value": crt_str,                                                     "inline": True},
-        {"name": "Profile",      "value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
+        {"name": "Market Profile","value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
+        {"name": "Intraday",     "value": intra_str,                                                    "inline": True},
         {"name": "DOL Bias",     "value": row.get("dol_bias", "?") or "—",                             "inline": True},
-        {"name": "SMT",          "value": smt_label,                                                    "inline": True},
+        {"name": "SMT",          "value": smt_value,                                                    "inline": True},
         {"name": "OHLC Pattern", "value": row.get("ohlc_pattern", "?"),                                 "inline": True},
     ]
 
