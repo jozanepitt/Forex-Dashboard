@@ -339,7 +339,9 @@ td.mono{font-family:var(--font-mono)}
 .tdi123-chart-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:4px}
 .tdi123-detail-btn{background:transparent;border:1px solid var(--border);color:var(--text-secondary);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:.7rem}
 .tdi123-detail-btn:hover{color:#ec4899;border-color:#ec4899}
-.tdi123-summary-tile{display:inline-block;padding:6px 12px;margin-right:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);font-size:.72rem}
+.tdi123-summary-tile{display:inline-block;padding:6px 12px;margin-right:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);font-size:.72rem;transition:all .2s}
+.tdi123-summary-tile:not(span){cursor:pointer}
+.tdi123-summary-tile:not(span):hover{background:var(--bg-elevated)}
 .tdi123-summary-tile b{color:#ec4899}
 #backtestView{display:none;padding:0 24px 24px}
 #backtestView.active{display:block}
@@ -4803,6 +4805,10 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
 // TDI Cycle 123 (Improvements-on-BTMM) — loader + renderer + chart overlay
 // ═════════════════════════════════════════════════════════════════════════════
 
+// TDI123 filter state
+let tdi123Filter = 'all'; // 'all', 'a', 'b', 'c'
+let tdi123Data = null;
+
 async function loadTdi123() {
   const tbody   = document.getElementById('tdi123TableBody');
   const summary = document.getElementById('tdi123Summary');
@@ -4819,6 +4825,8 @@ async function loadTdi123() {
     clearTimeout(tmr);
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
+    tdi123Data = data;
+    tdi123Filter = 'all';
     renderTdi123Table(data);
   } catch (err) {
     console.error('TDI123 load failed', err);
@@ -4865,25 +4873,42 @@ function renderTdi123Table(data) {
   const summary = document.getElementById('tdi123Summary');
   const pairs = data.pairs || [];
 
-  // Summary tiles
+  // Summary tiles (clickable filters)
+  const tileAll = tdi123Filter === 'all' ? 'style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+  const tileA = tdi123Filter === 'a' ? 'style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+  const tileB = tdi123Filter === 'b' ? 'style="background:var(--cyan-bg);border:1px solid var(--cyan-border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+
   summary.innerHTML =
-    `<span class="tdi123-summary-tile">🎯 <b>${pairs.length}</b> pairs scanned</span>` +
-    `<span class="tdi123-summary-tile" style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</span>` +
-    `<span class="tdi123-summary-tile" style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</span>` +
-    `<span class="tdi123-summary-tile" style="color:var(--green)">⭐ <b>${data.grade_a || 0}</b> Grade A</span>` +
-    `<span class="tdi123-summary-tile" style="color:var(--cyan)"><b>${data.grade_b || 0}</b> Grade B</span>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll}>🎯 <b>${pairs.length}</b> pairs scanned</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll} style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll} style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="a" ${tileA} style="color:var(--green)">⭐ <b>${data.grade_a || 0}</b> Grade A</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="b" ${tileB} style="color:var(--cyan)"><b>${data.grade_b || 0}</b> Grade B</button>` +
     `<span class="tdi123-summary-tile">${data.now_ny || ''}</span>` +
     ((data.stale_pairs && data.stale_pairs.length)
         ? `<span class="tdi123-summary-tile" style="color:var(--yellow)">stale: ${data.stale_pairs.join(', ')}</span>` : '');
 
+  // Wire up filter buttons
+  summary.querySelectorAll('[data-tdi123-filter]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      tdi123Filter = btn.dataset.tdi123Filter;
+      renderTdi123Table(tdi123Data);
+    });
+  });
+
   // Sort: A grades first, then B, then C, then NO-TRADE. Within grade by score desc.
   const gradeRank = {A: 0, B: 1, C: 2, 'NO-TRADE': 3, 'NO-DATA': 4};
-  const sorted = pairs.slice().sort((a, b) => {
+  let sorted = pairs.slice().sort((a, b) => {
     const ra = gradeRank[a.grade] ?? 5;
     const rb = gradeRank[b.grade] ?? 5;
     if (ra !== rb) return ra - rb;
     return (b.score || 0) - (a.score || 0);
   });
+
+  // Apply grade filter
+  if (tdi123Filter === 'a') sorted = sorted.filter(p => p.grade === 'A');
+  if (tdi123Filter === 'b') sorted = sorted.filter(p => p.grade === 'B');
 
   tbody.innerHTML = sorted.map(p => {
     const sym = p.symbol;
