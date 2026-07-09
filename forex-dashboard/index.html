@@ -328,8 +328,19 @@ td.mono{font-family:var(--font-mono)}
 .trend-footer{padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;margin-top:14px;font-size:.78rem;color:var(--text-secondary);line-height:1.6}
 /* Journal */
 .mode-tab[data-mode="snr-m15"].active{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)}
+.mode-tab[data-mode="tdi123"].active{background:rgba(236,72,153,.12);color:#ec4899;border:1px solid rgba(236,72,153,.3)}
 .mode-tab[data-mode="journal"].active{background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
 .mode-tab[data-mode="backtest"].active{background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
+/* TDI 123 detail modal chart */
+.tdi123-chart-modal .modal{max-width:1100px;width:95vw}
+.tdi123-chart-svg{width:100%;height:auto;display:block;background:var(--bg-card);border:1px solid var(--border);border-radius:6px}
+.tdi123-chart-legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.72rem;color:var(--text-secondary);margin:8px 0 16px;padding:8px 12px;background:var(--bg-card);border-radius:6px}
+.tdi123-chart-legend .swatch{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:4px}
+.tdi123-chart-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:4px}
+.tdi123-detail-btn{background:transparent;border:1px solid var(--border);color:var(--text-secondary);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:.7rem}
+.tdi123-detail-btn:hover{color:#ec4899;border-color:#ec4899}
+.tdi123-summary-tile{display:inline-block;padding:6px 12px;margin-right:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);font-size:.72rem}
+.tdi123-summary-tile b{color:#ec4899}
 #backtestView{display:none;padding:0 24px 24px}
 #backtestView.active{display:block}
 .bt-header{display:flex;align-items:center;gap:12px;margin:16px 0 14px;flex-wrap:wrap}
@@ -415,6 +426,7 @@ td.mono{font-family:var(--font-mono)}
   <button class="mode-tab" data-mode="crt">🕐 1AM CRT</button>
   <button class="mode-tab" data-mode="snr">🇲🇾 SNR Emperor</button>
   <button class="mode-tab" data-mode="snr-m15">⚡ M15 SNR</button>
+  <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
   <button class="mode-tab" data-mode="journal">📒 Journal</button>
   <button class="mode-tab" data-mode="backtest">📈 Backtest</button>
 </div>
@@ -790,6 +802,48 @@ td.mono{font-family:var(--font-mono)}
       <b>Setups:</b> 1 = High risk (50/50), 2 = Medium (rejection+refinement), 3 = Low (BO+QM pullback), 4 = Continuation.
       <b>Engulfing:</b> Perfect, Quasimodo, Hidden + PEZ (intact zone) / FEZ (broken zone).
       <b>X-Factor:</b> Trendline + SNR convergence = highest confluence.
+    </div>
+  </div>
+
+  <!-- ── TDI Cycle 123 (Improvements-on-BTMM) ────────────────────────────── -->
+  <div class="table-container" id="tdi123Container" style="display:none">
+    <div class="trend-controls">
+      <div class="trend-control-group" style="min-width:260px">
+        <label>🎯 TDI Cycle 123 — Peak Formation</label>
+        <div id="tdi123StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">FSO_TDI · 123 pattern · Divergence · BTMM L1/L2/L3 targets</div>
+      </div>
+      <button class="trend-refresh-btn" id="tdi123RefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="tdi123Meta">Improvements on BTMM: adds TDI-extreme + divergence + 123 geometry for objective entry timing</div>
+    </div>
+    <div class="trend-summary" id="tdi123Summary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table snr-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Price</th>
+          <th>Direction</th>
+          <th>P1</th>
+          <th>P2</th>
+          <th>P3</th>
+          <th>Divergence</th>
+          <th>TDI @ P3</th>
+          <th>H4 Bias</th>
+          <th>L1 (50)</th>
+          <th>L2 (200)</th>
+          <th>L3 (800)</th>
+          <th>Grade</th>
+          <th>Chart</th>
+        </tr>
+      </thead>
+      <tbody id="tdi123TableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>TDI Cycle 123 (StrictlyCorrect / Inducement Cycles):</b> This is the "improvements on old BTMM" scanner. Where classic BTMM
+      relies on subjective Level 1/2/3 templates and often mistimes entries, this scanner adds three objective filters:
+      (1) <b>FSO_TDI extreme</b> — baseline (RSI SMA-34, "yellow line") reaches ≤ 37 or ≥ 63 when point 3 forms;
+      (2) <b>123 Peak Formation geometry</b> — point 3 must retest point 1 within ±25 % of the 1→2 leg;
+      (3) <b>Divergence</b> between price 1→3 slope and TDI RSI 1→3 slope (mandatory).
+      Targets stay on the BTMM cascade: <b>L1 = 50 EMA</b>, <b>L2 = 200 EMA</b>, <b>L3 = 800 EMA</b>. Click <b>Chart</b> to see the 1/2/3 markers and divergence line overlaid on the H1 price + TDI subwindow.
     </div>
   </div>
 
@@ -4261,7 +4315,11 @@ function drawCandleChart(pair, candleCount = 120, aggregateFactor = 1) {
   });
 }
 
-function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+function closeModal() {
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.remove('active');
+  overlay.classList.remove('tdi123-chart-modal');
+}
 
 function updateSBTimer() {
   // BTMM_KILL_ZONES has exactly 3 zones indexed 0–2 — safe destructure
@@ -4701,7 +4759,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'crt' || mode === 'snr' || mode === 'snr-m15';
+    const isScanner = mode === 'crt' || mode === 'snr' || mode === 'snr-m15' || mode === 'tdi123';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -4724,10 +4782,12 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     const crtContainer    = document.getElementById('crtContainer');
     const snrContainer    = document.getElementById('snrContainer');
     const snrM15Container = document.getElementById('snrM15Container');
+    const tdi123Container = document.getElementById('tdi123Container');
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
     if (crtContainer)     crtContainer.style.display     = (mode === 'crt')       ? 'block' : 'none';
     if (snrContainer)     snrContainer.style.display     = (mode === 'snr')       ? 'block' : 'none';
     if (snrM15Container)  snrM15Container.style.display  = (mode === 'snr-m15')   ? 'block' : 'none';
+    if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
 
     // Load content for the active mode
     if (mode === 'indicator') render();           // BTMM dashboard
@@ -4735,8 +4795,379 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'crt')       loadCrt();
     if (mode === 'snr')       loadSnr();
     if (mode === 'snr-m15')   loadSnrM15();
+    if (mode === 'tdi123')    loadTdi123();
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TDI Cycle 123 (Improvements-on-BTMM) — loader + renderer + chart overlay
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function loadTdi123() {
+  const tbody   = document.getElementById('tdi123TableBody');
+  const summary = document.getElementById('tdi123Summary');
+  const btn     = document.getElementById('tdi123RefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Fetching H1/H4/D1 candles, running FSO_TDI + 123 detector…';
+  tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const ctl = new AbortController();
+    const tmr = setTimeout(() => ctl.abort(), 120000);
+    const resp = await fetch(`${baseUrl}/tdi123`, { signal: ctl.signal });
+    clearTimeout(tmr);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    renderTdi123Table(data);
+  } catch (err) {
+    console.error('TDI123 load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load TDI123 scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+document.getElementById('tdi123RefreshBtn')?.addEventListener('click', loadTdi123);
+
+function _tdi123FmtPrice(p, sym) {
+  if (p === undefined || p === null) return '—';
+  if (!sym) return Number(p).toFixed(5);
+  if (p > 5000) return Number(p).toFixed(1);
+  if (sym === 'XAU/USD') return Number(p).toFixed(2);
+  if (sym === 'XAG/USD') return Number(p).toFixed(3);
+  if (sym.includes('JPY')) return Number(p).toFixed(3);
+  return Number(p).toFixed(5);
+}
+
+function _tdi123GradeCell(g) {
+  const colorMap = {A:'var(--green)', B:'var(--cyan)', C:'var(--yellow)', 'NO-TRADE':'var(--text-muted)', 'NO-DATA':'var(--text-muted)'};
+  const c = colorMap[g] || 'var(--text-muted)';
+  const weight = (g === 'A' || g === 'B') ? 700 : 500;
+  return `<span style="color:${c};font-weight:${weight}">${g || '—'}</span>`;
+}
+
+function _tdi123DirCell(p) {
+  if (p.setup === 'BUY')  return '<span style="color:var(--green);font-weight:700">↑ BUY</span>';
+  if (p.setup === 'SELL') return '<span style="color:var(--red);font-weight:700">↓ SELL</span>';
+  return '<span style="color:var(--text-muted)">—</span>';
+}
+
+function _tdi123BadgeYN(val, label) {
+  if (val === true)  return `<span style="color:var(--green);font-weight:600">✓ ${label}</span>`;
+  if (val === false) return `<span style="color:var(--text-muted)">✗ ${label}</span>`;
+  return '<span style="color:var(--text-muted)">—</span>';
+}
+
+function renderTdi123Table(data) {
+  const tbody = document.getElementById('tdi123TableBody');
+  const summary = document.getElementById('tdi123Summary');
+  const pairs = data.pairs || [];
+
+  // Summary tiles
+  summary.innerHTML =
+    `<span class="tdi123-summary-tile">🎯 <b>${pairs.length}</b> pairs scanned</span>` +
+    `<span class="tdi123-summary-tile" style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</span>` +
+    `<span class="tdi123-summary-tile" style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</span>` +
+    `<span class="tdi123-summary-tile" style="color:var(--green)">⭐ <b>${data.grade_a || 0}</b> Grade A</span>` +
+    `<span class="tdi123-summary-tile" style="color:var(--cyan)"><b>${data.grade_b || 0}</b> Grade B</span>` +
+    `<span class="tdi123-summary-tile">${data.now_ny || ''}</span>` +
+    ((data.stale_pairs && data.stale_pairs.length)
+        ? `<span class="tdi123-summary-tile" style="color:var(--yellow)">stale: ${data.stale_pairs.join(', ')}</span>` : '');
+
+  // Sort: A grades first, then B, then C, then NO-TRADE. Within grade by score desc.
+  const gradeRank = {A: 0, B: 1, C: 2, 'NO-TRADE': 3, 'NO-DATA': 4};
+  const sorted = pairs.slice().sort((a, b) => {
+    const ra = gradeRank[a.grade] ?? 5;
+    const rb = gradeRank[b.grade] ?? 5;
+    if (ra !== rb) return ra - rb;
+    return (b.score || 0) - (a.score || 0);
+  });
+
+  tbody.innerHTML = sorted.map(p => {
+    const sym = p.symbol;
+    const pat = p.pattern || {};
+    const p1 = pat.p1 || {}, p2 = pat.p2 || {}, p3 = pat.p3 || {};
+    const div = p.divergence || {};
+    const ext = p.tdi_extreme || {};
+    const tgt = p.targets || {};
+
+    const htfLabel = p.htf_bias
+      ? (p.htf_aligned ? `<span style="color:var(--green);font-weight:600">${p.htf_bias} ✓</span>`
+                       : `<span style="color:var(--text-muted)">${p.htf_bias}</span>`)
+      : '<span style="color:var(--text-muted)">—</span>';
+
+    const tdiCell = (ext && ext.baseline_at_p3 !== undefined)
+      ? `<span style="color:${ext.strong ? 'var(--green)' : (ext.present ? 'var(--cyan)' : 'var(--text-muted)')};font-weight:${ext.strong ? 700 : 500}">
+           base ${ext.baseline_at_p3}<br>RSI ${ext.rsi_at_p3}
+         </span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+
+    const divCell = (div.rsi_at_p1 !== undefined)
+      ? `<span style="color:${div.present ? 'var(--green)' : 'var(--text-muted)'};font-weight:${div.present ? 600 : 500}">
+           ${div.rsi_at_p1} → ${div.rsi_at_p3} ${div.present ? '✓' : ''}
+         </span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+
+    const priceCell = `<code>${_tdi123FmtPrice(p.current_price, sym)}</code>`;
+
+    const l1 = tgt.L1 ? `<code>${_tdi123FmtPrice(tgt.L1, sym)}</code><br><span style="font-size:.65rem;color:var(--text-muted)">+${tgt.L1_pips || '?'} pips</span>` : '—';
+    const l2 = tgt.L2 ? `<code>${_tdi123FmtPrice(tgt.L2, sym)}</code><br><span style="font-size:.65rem;color:var(--text-muted)">+${tgt.L2_pips || '?'} pips</span>` : '—';
+    const l3 = tgt.L3 ? `<code>${_tdi123FmtPrice(tgt.L3, sym)}</code><br><span style="font-size:.65rem;color:var(--text-muted)">+${tgt.L3_pips || '?'} pips</span>` : '—';
+
+    const scoreBadge = (p.score !== undefined) ? `<span style="font-size:.65rem;color:var(--text-muted);display:block">score ${p.score}/15</span>` : '';
+
+    return `<tr>
+      <td><b>${sym}</b></td>
+      <td>${priceCell}</td>
+      <td>${_tdi123DirCell(p)}</td>
+      <td><code>${_tdi123FmtPrice(p1.price, sym)}</code></td>
+      <td><code>${_tdi123FmtPrice(p2.price, sym)}</code></td>
+      <td><code>${_tdi123FmtPrice(p3.price, sym)}</code></td>
+      <td>${divCell}</td>
+      <td>${tdiCell}</td>
+      <td>${htfLabel}</td>
+      <td>${l1}</td>
+      <td>${l2}</td>
+      <td>${l3}</td>
+      <td>${_tdi123GradeCell(p.grade)}${scoreBadge}</td>
+      <td><button class="tdi123-detail-btn" data-tdi123-sym="${sym}">📈 View</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">No results.</td></tr>';
+
+  tbody.querySelectorAll('button[data-tdi123-sym]').forEach(btn => {
+    btn.addEventListener('click', () => openTdi123Chart(btn.dataset.tdi123Sym));
+  });
+}
+
+// ── Detail chart modal ──────────────────────────────────────────────────────
+async function openTdi123Chart(symbol) {
+  const overlay = document.getElementById('modalOverlay');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  if (!overlay || !title || !body) return;
+
+  overlay.classList.add('tdi123-chart-modal');
+  overlay.classList.add('active');
+  title.textContent = `${symbol} — TDI Cycle 123`;
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading H1 candles + TDI series…</div>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const encoded = encodeURIComponent(symbol);
+    const resp = await fetch(`${baseUrl}/tdi123/detail?symbol=${encoded}`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    body.innerHTML = renderTdi123ChartSvg(data);
+  } catch (err) {
+    body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${err.message}</div>`;
+  }
+}
+
+function renderTdi123ChartSvg(data) {
+  const candles = data.candles || [];
+  const row = data.row || {};
+  const tdi = data.tdi || {};
+  const sym = data.symbol;
+  if (!candles.length) return '<div style="padding:24px;color:var(--text-muted)">No candles available.</div>';
+
+  const pat = row.pattern || {};
+  const p1 = pat.p1, p2 = pat.p2, p3 = pat.p3;
+
+  const W = 1000, H_price = 420, H_tdi = 180, gap = 24;
+  const H = H_price + H_tdi + gap + 40;
+  const margin = {top: 12, right: 60, bottom: 22, left: 12};
+  const chartW = W - margin.left - margin.right;
+
+  // ── Price pane ────────────────────────────────────────────────────
+  const hi = Math.max(...candles.map(c => c.high));
+  const lo = Math.min(...candles.map(c => c.low));
+  const pad = (hi - lo) * 0.05;
+  const yTop = hi + pad, yBot = lo - pad;
+  const priceY = v => margin.top + (yTop - v) / (yTop - yBot) * H_price;
+  const barW = chartW / candles.length;
+  const xAt = i => margin.left + i * barW + barW * 0.5;
+
+  const candleSvg = candles.map((c, i) => {
+    const x = xAt(i);
+    const bodyTop = priceY(Math.max(c.open, c.close));
+    const bodyBot = priceY(Math.min(c.open, c.close));
+    const wickTop = priceY(c.high);
+    const wickBot = priceY(c.low);
+    const bull = c.close >= c.open;
+    const col = bull ? '#00E676' : '#FF1744';
+    return `<line x1="${x}" x2="${x}" y1="${wickTop}" y2="${wickBot}" stroke="${col}" stroke-width="1"/>
+            <rect x="${x - barW * 0.35}" y="${bodyTop}" width="${barW * 0.7}" height="${Math.max(1, bodyBot - bodyTop)}" fill="${col}" fill-opacity="0.85"/>`;
+  }).join('');
+
+  const emaLine = (arr, colour) => {
+    if (!arr || !arr.length) return '';
+    const pts = arr.map((v, i) => (v === null || v === undefined) ? null : `${xAt(i).toFixed(1)},${priceY(v).toFixed(1)}`)
+                   .filter(Boolean).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${colour}" stroke-width="1.4" stroke-opacity="0.9"/>`;
+  };
+
+  const emaSvg =
+    emaLine(data.ema50, '#3b82f6') +
+    emaLine(data.ema200, '#111827') +
+    emaLine(data.ema800, '#ec4899');
+
+  const priceAxisRight = W - margin.right + 8;
+  const priceAxis = [yTop, yTop - (yTop - yBot) * 0.25, yTop - (yTop - yBot) * 0.5, yTop - (yTop - yBot) * 0.75, yBot]
+    .map(v => `<text x="${priceAxisRight}" y="${priceY(v) + 3}" font-size="9" fill="#666">${_tdi123FmtPrice(v, sym)}</text>`)
+    .join('');
+
+  // ── 1/2/3 markers + divergence line ──────────────────────────────
+  let markerSvg = '';
+  let divPriceSvg = '';
+  const drawMarker = (pt, label, colour) => {
+    if (!pt || pt.idx === undefined || pt.idx < 0 || pt.idx >= candles.length) return '';
+    const x = xAt(pt.idx);
+    const y = priceY(pt.price);
+    const above = label === '2';
+    return `<circle cx="${x}" cy="${y}" r="9" fill="${colour}" stroke="white" stroke-width="1.5"/>
+            <text x="${x}" y="${y + 4}" font-size="11" fill="white" font-weight="700" text-anchor="middle">${label}</text>
+            <text x="${x}" y="${above ? y - 14 : y + 20}" font-size="9" fill="${colour}" text-anchor="middle">${_tdi123FmtPrice(pt.price, sym)}</text>`;
+  };
+  const setupColour = row.direction === 'bullish' ? '#00E676' : '#FF1744';
+  markerSvg += drawMarker(p1, '1', setupColour);
+  markerSvg += drawMarker(p2, '2', '#FFD93D');
+  markerSvg += drawMarker(p3, '3', setupColour);
+
+  if (p1 && p3 && p1.idx !== undefined && p3.idx !== undefined) {
+    divPriceSvg = `<line x1="${xAt(p1.idx)}" y1="${priceY(p1.price)}" x2="${xAt(p3.idx)}" y2="${priceY(p3.price)}"
+                     stroke="#ec4899" stroke-width="1.2" stroke-dasharray="4,3"/>`;
+  }
+
+  // Target lines (L1/L2/L3) — dashed horizontals at the EMA levels
+  const tgt = row.targets || {};
+  const targetLine = (v, colour, label) => {
+    if (v === null || v === undefined) return '';
+    const y = priceY(v);
+    if (y < margin.top || y > margin.top + H_price) return '';
+    return `<line x1="${margin.left}" x2="${margin.left + chartW}" y1="${y}" y2="${y}"
+              stroke="${colour}" stroke-width="0.8" stroke-dasharray="2,4" stroke-opacity="0.7"/>
+            <text x="${margin.left + chartW - 34}" y="${y - 3}" font-size="9" fill="${colour}">${label}</text>`;
+  };
+  const targetSvg = targetLine(tgt.L1, '#3b82f6', 'L1 (50)')
+                  + targetLine(tgt.L2, '#111827', 'L2 (200)')
+                  + targetLine(tgt.L3, '#ec4899', 'L3 (800)');
+
+  // ── TDI pane ─────────────────────────────────────────────────────
+  const rsiArr = tdi.rsi || [];
+  const baselineArr = tdi.baseline || [];
+  const fastArr = tdi.fast || [];
+  const slowArr = tdi.slow || [];
+
+  const tdiTop = margin.top + H_price + gap;
+  const tdiBot = tdiTop + H_tdi;
+  const tdiY = v => tdiTop + (100 - v) / 100 * H_tdi;
+
+  // OB / OS zones
+  const obZoneY1 = tdiY(68);
+  const obZoneY2 = tdiY(63);
+  const osZoneY1 = tdiY(37);
+  const osZoneY2 = tdiY(32);
+  const zoneSvg =
+    `<rect x="${margin.left}" y="${obZoneY1}" width="${chartW}" height="${obZoneY2 - obZoneY1}" fill="#FF1744" fill-opacity="0.10"/>` +
+    `<rect x="${margin.left}" y="${osZoneY1}" width="${chartW}" height="${osZoneY2 - osZoneY1}" fill="#00E676" fill-opacity="0.10"/>` +
+    `<line x1="${margin.left}" x2="${margin.left + chartW}" y1="${tdiY(50)}" y2="${tdiY(50)}"
+       stroke="#666" stroke-width="0.7" stroke-dasharray="2,3"/>`;
+
+  const tdiLine = (arr, colour, width) => {
+    if (!arr.length) return '';
+    const start = Math.max(0, arr.length - candles.length);
+    const slice = arr.slice(start);
+    const pts = slice.map((v, i) => `${xAt(i).toFixed(1)},${tdiY(v).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${colour}" stroke-width="${width}" stroke-opacity="0.95"/>`;
+  };
+  const tdiSvg =
+    tdiLine(baselineArr, '#FFD93D', 2.0) +   // yellow baseline
+    tdiLine(rsiArr, '#000000', 1.1) +        // rsi black
+    tdiLine(fastArr, '#FF1744', 1.2) +       // fast red
+    tdiLine(slowArr, '#00C853', 1.2);        // slow green
+
+  // TDI 1/2/3 markers (RSI values at p1/p2/p3)
+  const tdiMarker = (pt, label, colour) => {
+    if (!pt || pt.idx === undefined || pt.idx >= rsiArr.length) return '';
+    const x = xAt(pt.idx);
+    const y = tdiY(rsiArr[pt.idx]);
+    return `<circle cx="${x}" cy="${y}" r="6" fill="${colour}" stroke="white" stroke-width="1"/>
+            <text x="${x}" y="${y + 3}" font-size="8" fill="white" font-weight="700" text-anchor="middle">${label}</text>`;
+  };
+  const tdiMarkerSvg = drawIfPattern(p1, p3, () =>
+    tdiMarker(p1, '1', setupColour) + tdiMarker(p2, '2', '#FFD93D') + tdiMarker(p3, '3', setupColour));
+
+  const tdiDivSvg = (p1 && p3 && p1.idx !== undefined && p3.idx !== undefined && rsiArr.length > p3.idx)
+    ? `<line x1="${xAt(p1.idx)}" y1="${tdiY(rsiArr[p1.idx])}" x2="${xAt(p3.idx)}" y2="${tdiY(rsiArr[p3.idx])}"
+           stroke="#ec4899" stroke-width="1.2" stroke-dasharray="4,3"/>`
+    : '';
+
+  const tdiAxis = [0, 32, 50, 68, 100].map(v =>
+    `<text x="${priceAxisRight}" y="${tdiY(v) + 3}" font-size="9" fill="#666">${v}</text>`).join('');
+
+  // ── Notes badge on the price pane ─────────────────────────────────
+  const notesBadge = row.notes
+    ? `<text x="${margin.left + 8}" y="${margin.top + 14}" font-size="10" fill="#333">${(row.setup || '—')}  ·  grade ${row.grade || '—'}  ·  ${row.notes}</text>`
+    : '';
+
+  const legend = `
+    <div class="tdi123-chart-legend">
+      <span><span class="swatch" style="background:#3b82f6"></span>50 EMA (L1)</span>
+      <span><span class="swatch" style="background:#111827"></span>200 EMA (L2)</span>
+      <span><span class="swatch" style="background:#ec4899"></span>800 EMA (L3)</span>
+      <span><span class="dot" style="background:${setupColour}"></span>Point 1 / 3</span>
+      <span><span class="dot" style="background:#FFD93D"></span>Point 2</span>
+      <span><span class="swatch" style="background:#ec4899"></span>Divergence 1→3</span>
+      <span><span class="swatch" style="background:#FFD93D;height:3px"></span>TDI baseline (yellow)</span>
+      <span><span class="swatch" style="background:#000"></span>TDI RSI</span>
+      <span><span class="swatch" style="background:#FF1744"></span>TDI fast</span>
+      <span><span class="swatch" style="background:#00C853"></span>TDI slow</span>
+    </div>`;
+
+  const svg = `<svg class="tdi123-chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="${margin.left}" y="${margin.top}" width="${chartW}" height="${H_price}" fill="none" stroke="#333" stroke-opacity="0.15"/>
+    ${targetSvg}
+    ${candleSvg}
+    ${emaSvg}
+    ${divPriceSvg}
+    ${markerSvg}
+    ${priceAxis}
+    ${notesBadge}
+    <rect x="${margin.left}" y="${tdiTop}" width="${chartW}" height="${H_tdi}" fill="none" stroke="#333" stroke-opacity="0.15"/>
+    ${zoneSvg}
+    ${tdiSvg}
+    ${tdiDivSvg}
+    ${tdiMarkerSvg}
+    ${tdiAxis}
+    <text x="${margin.left + 8}" y="${tdiTop + 12}" font-size="10" fill="#666">FSO_TDI (RSI 13, Signal 2, BB 34/1.6185, Baseline 34)</text>
+  </svg>`;
+
+  const setupSummary = row.setup && row.setup !== 'NO-TRADE'
+    ? `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-card);border-left:3px solid ${setupColour};border-radius:6px">
+         <b style="color:${setupColour}">${row.setup}</b> · grade <b>${row.grade}</b> · score ${row.score}/15
+         · notes: ${row.notes || '—'}
+         · Entry <code>${_tdi123FmtPrice((row.trade_plan||{}).entry, sym)}</code>
+         · SL <code>${_tdi123FmtPrice((row.trade_plan||{}).sl, sym)}</code>
+         (${(row.trade_plan||{}).sl_pips || '?'} pips)
+         · L1 <code>${_tdi123FmtPrice(tgt.L1, sym)}</code>
+         · L2 <code>${_tdi123FmtPrice(tgt.L2, sym)}</code>
+         · L3 <code>${_tdi123FmtPrice(tgt.L3, sym)}</code>
+       </div>`
+    : `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-card);border-left:3px solid var(--text-muted);border-radius:6px">
+         No live 123 setup for this pair. Chart shows current H1 structure + TDI state.
+       </div>`;
+
+  return setupSummary + legend + svg;
+}
+
+// Small helper — avoids inline arrow-function noise when we conditionally
+// draw pattern markers.
+function drawIfPattern(p1, p3, fn) {
+  if (!p1 || !p3 || p1.idx === undefined || p3.idx === undefined) return '';
+  return fn();
+}
 
 // ── 1AM CRT loader ──────────────────────────────────────────────────────────
 async function loadCrt() {

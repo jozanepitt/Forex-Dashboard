@@ -13,7 +13,7 @@ import instruments
 from config import (
     DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY, CRT_GRADE_A_ONLY,
     CRT_5AM_GRADE_A_ONLY, ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
-    SNR_M15_EMS_GATE_ENABLED,
+    SNR_M15_EMS_GATE_ENABLED, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
 )
 
 log = logging.getLogger("alerts")
@@ -1140,3 +1140,122 @@ def evaluate_pair(pair_symbol: str, signal: str, score: float,
     # Rule 5 — ADR > 85% consumed (warning only — always fires regardless of confidence)
     if adr_consumed > 85 and kz:
         alert_adr_exhausted(pair_symbol, adr_consumed)
+
+
+# ── TDI Cycle 123 (Peak Formation reversal) ──────────────────────────────────
+
+def alert_tdi123_setup(pair: str, row: dict):
+    """Fire when the TDI Cycle 123 scanner signals a tradeable setup.
+
+    Gates:
+      - Alerts globally enabled (TDI123_ALERTS_ENABLED)
+      - Grade A (or A+B when TDI123_GRADE_A_ONLY=false)
+      - Signal cross confirmed (required — un-crossed patterns are still-forming)
+      - R:R sanity on trade plan
+      - Reuses SNR distance + trend quality filters — 123 is a reversal setup
+        so trend-gate applies the same way.
+    """
+    if not TDI123_ALERTS_ENABLED:
+        return
+
+    setup = row.get("setup")
+    grade = row.get("grade")
+    if setup not in ("BUY", "SELL"):
+        return
+
+    allowed_grades = ("A",) if TDI123_GRADE_A_ONLY else ("A", "B")
+    if grade not in allowed_grades:
+        return
+
+    # Confirmation gate: signal cross must have fired
+    if not (row.get("signal_cross") or {}).get("present"):
+        log.debug("TDI123 SUPPRESSED %s: signal cross not confirmed", pair)
+        return
+
+    plan = row.get("trade_plan") or {}
+    entry = plan.get("entry")
+    sl = plan.get("sl")
+    tp1 = plan.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("TDI123 SUPPRESSED %s: incomplete trade plan", pair)
+        return
+
+    direction_rr = "buy" if setup == "BUY" else "sell"
+    if not _check_rr(entry, sl, tp1, direction_rr, min_rr=0.8, symbol=pair):
+        log.warning("TDI123 alert BLOCKED for %s: bad R:R", pair)
+        return
+
+    passed_q, q_reason = _passes_quality_filters(pair, setup, entry)
+    if not passed_q:
+        log.info("TDI123 FILTERED %s %s: %s", pair, setup, q_reason)
+        return
+
+    rule = f"tdi123_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    grade_badge = "⭐ " if grade == "A" else ""
+    colour = 0xFFD700 if grade == "A" else (_COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"])
+
+    pattern = row.get("pattern") or {}
+    tdi_extreme = row.get("tdi_extreme") or {}
+    div = row.get("divergence") or {}
+    targets = row.get("targets") or {}
+
+    tp2 = plan.get("tp2")
+    tp3 = plan.get("tp3")
+    sl_pips = plan.get("sl_pips") or 0
+    tp1_pips = targets.get("L1_pips") or 0
+    tp2_pips = targets.get("L2_pips") or 0
+    tp3_pips = targets.get("L3_pips") or 0
+    rr1 = plan.get("rr1") or 0
+
+    fields = [
+        {"name": "Direction",    "value": f"**{'📈 BUY' if setup == 'BUY' else '📉 SELL'}**",   "inline": True},
+        {"name": "Grade",        "value": f"{grade_badge}**{grade} ({row.get('score', 0)}/15)**", "inline": True},
+        {"name": "Setup",        "value": "**123 Peak Formation**",                              "inline": True},
+        {"name": "🎯 Entry",       "value": f"`{_fmt_price(entry, pair)}`",                                  "inline": True},
+        {"name": "🛑 Stop Loss",   "value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",                 "inline": True},
+        {"name": "Risk:Reward",   "value": f"**1 : {rr1:.1f}**",                                            "inline": True},
+        {"name": "✅ L1 (50 EMA)", "value": f"`{_fmt_price(tp1, pair)}`  (+{tp1_pips} pips)",              "inline": True},
+    ]
+    if tp2:
+        fields.append({"name": "🎯 L2 (200 EMA)", "value": f"`{_fmt_price(tp2, pair)}`  (+{tp2_pips} pips)", "inline": True})
+    if tp3:
+        fields.append({"name": "🎯 L3 (800 EMA)", "value": f"`{_fmt_price(tp3, pair)}`  (+{tp3_pips} pips)", "inline": True})
+    if not tp2 and not tp3:
+        fields.append({"name": "​", "value": "​", "inline": True})
+
+    p1 = pattern.get("p1", {})
+    p2 = pattern.get("p2", {})
+    p3 = pattern.get("p3", {})
+    fields += [
+        {"name": "123 Pattern",
+         "value": f"1 `{_fmt_price(p1.get('price'), pair)}` → 2 `{_fmt_price(p2.get('price'), pair)}` → 3 `{_fmt_price(p3.get('price'), pair)}`  ({pattern.get('leg1_range_pips', 0)} pips leg-1)",
+         "inline": False},
+        {"name": "TDI at P3",
+         "value": (f"baseline `{tdi_extreme.get('baseline_at_p3', 0)}` · RSI `{tdi_extreme.get('rsi_at_p3', 0)}`"
+                   + (" ✅ extreme" if tdi_extreme.get('present') else " (not extreme)")),
+         "inline": True},
+        {"name": "Divergence",
+         "value": (f"RSI {div.get('rsi_at_p1', 0)} → {div.get('rsi_at_p3', 0)} "
+                   + ("✅" if div.get("present") else "❌")),
+         "inline": True},
+        {"name": "H4 Bias",
+         "value": (str(row.get("htf_bias") or "n/a").capitalize()
+                   + (" ✅" if row.get("htf_aligned") else " (unaligned)")),
+         "inline": True},
+    ]
+
+    embed = {
+        "title":       f"{arrow} {grade_badge}{pair} — TDI Cycle 123 {setup}",
+        "description": row.get("notes") or "TDI Cycle 123 Peak Formation — improvements-on-BTMM setup.",
+        "color":       colour,
+        "fields":      fields,
+        "footer":      {"text": f"TDI Cycle 123 · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("TDI123 alert sent: %s %s grade=%s score=%d",
+                 pair, setup, grade, row.get("score", 0))

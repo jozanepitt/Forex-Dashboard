@@ -77,6 +77,12 @@ CRT_5AM_GRADE_A_ONLY = os.environ.get("CRT_5AM_GRADE_A_ONLY", "false").lower() i
 ALERTS_DISTANCE_FILTER_PIPS = float(os.environ.get("ALERTS_DISTANCE_FILTER_PIPS", "50"))
 ALERTS_TREND_FILTER_ENABLED = os.environ.get("ALERTS_TREND_FILTER_ENABLED", "true").lower() in ("1", "true", "yes")
 
+# TDI Cycle 123 — improvements-on-BTMM scanner (FSO_TDI + 123 Peak + divergence).
+# Grade gating same convention as CRT: default A + B both sent. Set "true" to
+# restrict to Grade A only if signal volume gets noisy.
+TDI123_ALERTS_ENABLED = os.environ.get("TDI123_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+TDI123_GRADE_A_ONLY = os.environ.get("TDI123_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+
 # EMS gate for M15 SNR signals — based on "The Alchemist EMS Trinity" + MSNR
 # ALCHEMIST notes. When True, an M15 SNR alert only fires if the higher
 # timeframe (H4) storyline agrees in direction AND price shows a liquidity

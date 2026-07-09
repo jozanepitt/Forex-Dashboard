@@ -91,7 +91,8 @@ def refresh_all():
             time.sleep(FANOUT_DELAY_SECS)
         try:
             _fetch_guarded(sym, DEFAULT_INTERVAL)          # M15
-            _fetch_guarded(sym, "1h", limit=200)           # H1 — M15 SNR scanner (~8 days)
+            _fetch_guarded(sym, "1h", limit=400)           # H1 — TDI123 primary + M15 SNR context
+            _fetch_guarded(sym, "4h", limit=200)           # H4 — TDI123 HTF bias
             _fetch_guarded(sym, "1day", limit=60)          # daily — SNR-H4 scanner
             updated += 1
         except Exception as e:
@@ -141,6 +142,12 @@ def refresh_all():
         _run_snr_m15_alerts()
     except Exception as e:
         log.warning("SNR-M15 alerts failed: %s", e)
+
+    # Run TDI Cycle 123 scanner (improvements-on-BTMM) + Discord alerts
+    try:
+        _run_tdi123_alerts()
+    except Exception as e:
+        log.warning("TDI123 alerts failed: %s", e)
 
     # Notify dashboard subscribers via WebSocket. Late import keeps scheduler importable
     # standalone (e.g. for tests) without pulling Flask-SocketIO into the import graph.
@@ -287,6 +294,26 @@ def _run_snr_m15_alerts():
             )
         except Exception as e:
             log.debug("SNR-M15 alert eval failed for %s: %s", sym, e)
+
+
+def _run_tdi123_alerts():
+    """Run the TDI Cycle 123 scanner and fire Discord alerts for confirmed setups."""
+    import cache
+    import tdi_cycle_123
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in tdi_cycle_123.TDI123_UNIVERSE:
+        candles_by_pair[sym] = {
+            "1h": cache.read_candles(sym, "1h", limit=400),
+            "4h": cache.read_candles(sym, "4h", limit=200),
+            "1d": cache.read_candles(sym, "1day", limit=60),
+        }
+    result = tdi_cycle_123.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        try:
+            alerts.alert_tdi123_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("TDI123 alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 _stall_warned = False

@@ -17,6 +17,7 @@ import cache
 import crt_strategy
 import snr_strategy
 import snr_m15_strategy
+import tdi_cycle_123
 import fetcher
 import scheduler
 from providers import forexfactory
@@ -258,6 +259,103 @@ def snr_m15():
     _SNR_M15_CACHE["payload"] = result
     _SNR_M15_CACHE["ts"] = now
     return jsonify(result)
+
+
+# ── TDI Cycle 123 endpoint ──────────────────────────────────────────────────
+# Improvements-on-BTMM scanner: FSO_TDI + 123 Peak Formation + divergence.
+_TDI123_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_TDI123_TTL_SECS = 180  # 3-min cache — H1 primary TF, so slightly fresher than SNR/CRT
+
+
+@app.get("/tdi123")
+def tdi123():
+    """TDI Cycle 123 Reversal scanner across the universe.
+
+    Fetches H1 (primary), H4 (HTF bias), and D1 (context). Reuses the same
+    parallel-fetch pattern as /snr so per-symbol IPC to MT5 is serialised inside
+    the client but symbols are fetched concurrently.
+    """
+    import time as _t
+    from concurrent.futures import ThreadPoolExecutor
+
+    now = _t.time()
+    if _TDI123_CACHE["payload"] is not None and (now - _TDI123_CACHE["ts"]) < _TDI123_TTL_SECS:
+        return jsonify(_TDI123_CACHE["payload"])
+
+    universe = tdi_cycle_123.TDI123_UNIVERSE
+    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("1h", "4h", "1day")]
+
+    def _fetch(job):
+        sym, iv = job
+        limits = {"1h": 400, "4h": 200, "1day": 60}
+        bars, stale = fetcher.get_candles(sym, iv, limit=limits[iv])
+        return sym, iv, bars, stale
+
+    candles_by_pair: dict[str, dict] = {sym: {"1h": [], "4h": [], "1d": []} for sym in universe}
+    stale_set: set[str] = set()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sym, iv, bars, stale in pool.map(_fetch, jobs):
+            key = {"1h": "1h", "4h": "4h", "1day": "1d"}[iv]
+            candles_by_pair[sym][key] = bars
+            if stale:
+                stale_set.add(sym)
+
+    result = tdi_cycle_123.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _TDI123_CACHE["payload"] = result
+    _TDI123_CACHE["ts"] = now
+    return jsonify(result)
+
+
+@app.get("/tdi123/detail")
+def tdi123_detail():
+    """Per-pair detail for the TDI Cycle 123 chart overlay.
+
+    Returns the raw H1 candles + full TDI series + swing markers + pattern points
+    the frontend needs to draw 1/2/3 markers and the divergence line.
+    """
+    symbol = request.args.get("symbol", "").upper().replace("_", "/")
+    if not symbol:
+        return jsonify({"error": "symbol required"}), 400
+    if "/" not in symbol and len(symbol) == 6:
+        symbol = f"{symbol[:3]}/{symbol[3:]}"
+
+    h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=400)
+    h4_bars, _ = fetcher.get_candles(symbol, "4h", limit=200)
+    d1_bars, _ = fetcher.get_candles(symbol, "1day", limit=60)
+
+    row = tdi_cycle_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars, d1_candles=d1_bars)
+
+    # Build TDI + baseline series for chart overlay
+    from btmm_core import _rsi, _sma
+    closes = [b["close"] for b in h1_bars]
+    rsi_series = _rsi(closes, 13) if len(closes) >= 14 else [50.0] * len(closes)
+    fast_arr = _sma(rsi_series, 2)
+    slow_arr = _sma(rsi_series, 7)
+    baseline = tdi_cycle_123._baseline_series(rsi_series, 34)
+
+    # EMAs for the price pane
+    from btmm_core import calc_ema
+    ema50 = calc_ema(closes, 50) if len(closes) >= 50 else [None] * len(closes)
+    ema200 = calc_ema(closes, 200) if len(closes) >= 200 else [None] * len(closes)
+    ema800 = calc_ema(closes, 800) if len(closes) >= 800 else [None] * len(closes)
+
+    return jsonify({
+        "symbol": symbol,
+        "stale": h1_stale,
+        "row": row,
+        "candles": h1_bars,
+        "ema50": ema50,
+        "ema200": ema200,
+        "ema800": ema800,
+        "tdi": {
+            "rsi": rsi_series,
+            "fast": fast_arr,
+            "slow": slow_arr,
+            "baseline": baseline,
+        },
+    })
 
 
 @app.get("/alerts/config")
