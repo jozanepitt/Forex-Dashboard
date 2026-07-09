@@ -1144,6 +1144,24 @@ def evaluate_pair(pair_symbol: str, signal: str, score: float,
 
 # ── TDI Cycle 123 (Peak Formation reversal) ──────────────────────────────────
 
+def _should_alert_tdi123(row: dict) -> bool:
+    """Determine if TDI123 setup meets quality threshold for alerting.
+
+    Gold standard: Grade A always, or Grade B only if divergence + H4 aligned + R:R >= 1.0
+    """
+    grade = row.get("grade")
+    if grade == "A":
+        return True
+
+    if grade == "B":
+        div_present = row.get("divergence", {}).get("present", False)
+        htf_aligned = row.get("htf_aligned", False)
+        rr = row.get("trade_plan", {}).get("rr1", 0)
+        return div_present and htf_aligned and rr >= 1.0
+
+    return False
+
+
 def alert_tdi123_setup(pair: str, row: dict):
     """Fire when the TDI Cycle 123 scanner signals a tradeable setup.
 
@@ -1163,8 +1181,9 @@ def alert_tdi123_setup(pair: str, row: dict):
     if setup not in ("BUY", "SELL"):
         return
 
-    allowed_grades = ("A",) if TDI123_GRADE_A_ONLY else ("A", "B")
-    if grade not in allowed_grades:
+    # Apply quality filter: Grade A always, Grade B only with divergence + H4 aligned + R:R >= 1.0
+    if not _should_alert_tdi123(row):
+        log.debug("TDI123 FILTERED %s: grade %s does not meet quality threshold", pair, grade)
         return
 
     # Confirmation gate: signal cross must have fired
