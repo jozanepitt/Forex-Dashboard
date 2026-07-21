@@ -287,7 +287,10 @@ def tdi123():
 
     def _fetch(job):
         sym, iv = job
-        limits = {"1h": 400, "4h": 200, "1day": 60}
+        # H1 needs >=800 bars for a real EMA-800 (calc_ema falls back to a flat
+        # line at current price otherwise) — match DEFAULT_BACKFILL so it's
+        # actually converged, not just past the bare minimum.
+        limits = {"1h": DEFAULT_BACKFILL, "4h": 200, "1day": 60}
         bars, stale = fetcher.get_candles(sym, iv, limit=limits[iv])
         return sym, iv, bars, stale
 
@@ -308,12 +311,21 @@ def tdi123():
     return jsonify(result)
 
 
+TDI123_CHART_DISPLAY_BARS = 400  # candles actually drawn on the chart (readability + payload size)
+
+
 @app.get("/tdi123/detail")
 def tdi123_detail():
     """Per-pair detail for the TDI Cycle 123 chart overlay.
 
     Returns the raw H1 candles + full TDI series + swing markers + pattern points
     the frontend needs to draw 1/2/3 markers and the divergence line.
+
+    Pattern/EMA detection runs on the FULL DEFAULT_BACKFILL history (so EMA-800
+    is a real converged average, not the calc_ema() flat-line fallback), but the
+    chart only ever displays the most recent TDI123_CHART_DISPLAY_BARS candles —
+    so every per-bar array (and the p1/p2/p3 pattern indices) is sliced down to
+    that display window before being sent to the frontend.
     """
     symbol = request.args.get("symbol", "").upper().replace("_", "/")
     if not symbol:
@@ -321,13 +333,13 @@ def tdi123_detail():
     if "/" not in symbol and len(symbol) == 6:
         symbol = f"{symbol[:3]}/{symbol[3:]}"
 
-    h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=400)
-    h4_bars, _ = fetcher.get_candles(symbol, "4h", limit=200)
-    d1_bars, _ = fetcher.get_candles(symbol, "1day", limit=60)
+    h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=DEFAULT_BACKFILL)
+    h4_bars, h4_stale = fetcher.get_candles(symbol, "4h", limit=200)
+    d1_bars, d1_stale = fetcher.get_candles(symbol, "1day", limit=60)
 
     row = tdi_cycle_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars, d1_candles=d1_bars)
 
-    # Build TDI + baseline series for chart overlay
+    # Build TDI + baseline series for chart overlay (full history, for accuracy)
     from btmm_core import _rsi, _sma
     closes = [b["close"] for b in h1_bars]
     rsi_series = _rsi(closes, 13) if len(closes) >= 14 else [50.0] * len(closes)
@@ -335,25 +347,54 @@ def tdi123_detail():
     slow_arr = _sma(rsi_series, 7)
     baseline = tdi_cycle_123._baseline_series(rsi_series, 34)
 
-    # EMAs for the price pane
+    # EMAs for the price pane (full history, so EMA-800 actually converges).
+    # Convergence thresholds (seed influence < 1%) match tdi_cycle_123._ema_targets
+    # and BTMM's own ema200Warm/ema800Warm standard elsewhere in index.html —
+    # below these, calc_ema() is either flat-lined at current price (below its
+    # period) or too seed-biased to draw as if it were a real average.
     from btmm_core import calc_ema
     ema50 = calc_ema(closes, 50) if len(closes) >= 50 else [None] * len(closes)
-    ema200 = calc_ema(closes, 200) if len(closes) >= 200 else [None] * len(closes)
-    ema800 = calc_ema(closes, 800) if len(closes) >= 800 else [None] * len(closes)
+    ema200 = calc_ema(closes, 200) if len(closes) >= 300 else [None] * len(closes)
+    ema800 = calc_ema(closes, 800) if len(closes) >= 2400 else [None] * len(closes)
+
+    # Slice everything down to the display window. Guard against a pattern
+    # swing landing before the window (shouldn't happen — p1/p2/p3 are always
+    # among the most recent swings — but widen the window rather than emit an
+    # out-of-range index if it ever does).
+    display_n = TDI123_CHART_DISPLAY_BARS
+    pattern = (row.get("pattern") or {})
+    swing_idxs = [pattern[k]["idx"] for k in ("p1", "p2", "p3") if k in pattern]
+    if swing_idxs:
+        min_swing_idx = min(swing_idxs)
+        display_n = max(display_n, len(h1_bars) - min_swing_idx + 5)
+    display_n = min(display_n, len(h1_bars))
+    offset = len(h1_bars) - display_n
+
+    if offset > 0 and pattern:
+        row = dict(row)
+        row["pattern"] = dict(pattern)
+        for k in ("p1", "p2", "p3"):
+            if k in pattern:
+                pt = dict(pattern[k])
+                pt["idx"] = pt["idx"] - offset
+                row["pattern"][k] = pt
+
+    def _tail(arr):
+        return arr[offset:] if offset > 0 else arr
 
     return jsonify({
         "symbol": symbol,
-        "stale": h1_stale,
+        "stale": bool(h1_stale or h4_stale or d1_stale),
         "row": row,
-        "candles": h1_bars,
-        "ema50": ema50,
-        "ema200": ema200,
-        "ema800": ema800,
+        "candles": _tail(h1_bars),
+        "ema50": _tail(ema50),
+        "ema200": _tail(ema200),
+        "ema800": _tail(ema800),
         "tdi": {
-            "rsi": rsi_series,
-            "fast": fast_arr,
-            "slow": slow_arr,
-            "baseline": baseline,
+            "rsi": _tail(rsi_series),
+            "fast": _tail(fast_arr),
+            "slow": _tail(slow_arr),
+            "baseline": _tail(baseline),
         },
     })
 

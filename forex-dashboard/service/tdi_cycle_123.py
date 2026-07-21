@@ -61,8 +61,9 @@ SWING_RIGHT = 2
 # 123 geometry (in pips relative to point-1 → point-2 range)
 # Point 3 must land within ±POINT3_TOLERANCE of point 1 for a valid retest.
 POINT3_TOLERANCE_PCT = 0.25   # 25 % of the 1→2 leg
-# Point 2 must retrace at least this fraction of leg 1
-POINT2_MIN_RETRACE_PCT = 0.30
+# Minimum size of the 1→2 leg, in pips — filters out noise-sized "swings"
+# that would otherwise qualify as a valid pattern on a quiet H1 candle run.
+MIN_LEG1_PIPS = 8.0
 
 # Divergence slope threshold — how much the two 1→3 slopes must differ.
 # 0 = any divergence; higher = require stronger divergence.
@@ -144,26 +145,19 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
                 if leg1_range == 0:
                     continue
 
-                # Retrace check: p2 must move at least POINT2_MIN_RETRACE_PCT
-                # (already true by fractal definition, but be explicit)
-                retrace_ok = leg1_range > POINT2_MIN_RETRACE_PCT * pip
-                if not retrace_ok:
+                # Minimum leg-1 size — filters out noise-sized swings that
+                # would otherwise pass the fractal definition on a quiet run.
+                if leg1_range < MIN_LEG1_PIPS * pip:
                     continue
 
                 # Geometry: point 3 must be within tolerance of point 1
-                # (equal, marginal break, or shallow miss).
+                # (equal, marginal break, or shallow miss). This is the only
+                # geometry gate — p3 landing anywhere within ±tolerance of p1
+                # on either side is accepted by design (a marginal break past
+                # p1 still counts as a valid retest).
                 tolerance = POINT3_TOLERANCE_PCT * leg1_range
                 dist_p1_p3 = abs(p3["price"] - p1["price"])
                 if dist_p1_p3 > tolerance:
-                    continue
-
-                # Direction correctness — point 3 in the same "extreme" territory as p1
-                if is_bullish:
-                    # Bullish: p3 is a low, should be near or slightly above/below p1's low
-                    valid = p3["price"] <= p1["price"] + tolerance and p3["price"] >= p1["price"] - tolerance
-                else:
-                    valid = p3["price"] >= p1["price"] - tolerance and p3["price"] <= p1["price"] + tolerance
-                if not valid:
                     continue
 
                 return {
@@ -305,17 +299,26 @@ def _ema_targets(closes: list[float], direction: str,
     """Return TP1/TP2/TP3 based on BTMM 50/200/800 EMA cascade in the
     appropriate direction. When an EMA is on the wrong side of price it's
     skipped, and we fall back to leg-1-multiple targets so a valid setup
-    against a strongly trending EMA structure still gets a plan."""
+    against a strongly trending EMA structure still gets a plan.
+
+    `projected` is True only when ALL THREE EMAs failed the directional
+    filter and every target came from the leg-1 fallback instead — callers
+    (and the UI) must not label those values "EMA" when this is True."""
     if len(closes) < 50:
         return {"tp1": None, "tp2": None, "tp3": None,
-                "ema50": None, "ema200": None, "ema800": None}
+                "ema50": None, "ema200": None, "ema800": None,
+                "projected": False}
 
+    # Convergence thresholds (seed influence < 1%) — same standard already
+    # used for BTMM's own EMA-200/800 "warm" flags elsewhere in index.html.
+    # Below these, calc_ema() is either flat-lined at current_price (below
+    # its period) or too seed-biased to trust as a real cascade target.
     e50 = ema_last(closes, 50)
-    e200 = ema_last(closes, 200)
-    e800 = ema_last(closes, 800)
+    e200 = ema_last(closes, 200) if len(closes) >= 300 else None
+    e800 = ema_last(closes, 800) if len(closes) >= 2400 else None
 
     is_bullish = (direction == "bullish")
-    candidates = [e50, e200, e800]
+    candidates = [v for v in (e50, e200, e800) if v is not None]
 
     if is_bullish:
         targets = sorted([t for t in candidates if t > current_price])
@@ -325,15 +328,18 @@ def _ema_targets(closes: list[float], direction: str,
     # Fallback: if no valid EMA targets, project 1×/2×/3× the leg-1 range
     # (StrictlyCorrect chart notes show measured moves off the p3 pivot when
     # EMAs are far away or invalid). Only when leg1_range is meaningful.
+    projected = False
     if not targets and leg1_range > 0:
         sign = 1 if is_bullish else -1
         targets = [current_price + sign * leg1_range * m for m in (1.0, 2.0, 3.0)]
+        projected = True
 
     tp1 = targets[0] if len(targets) >= 1 else None
     tp2 = targets[1] if len(targets) >= 2 else None
     tp3 = targets[2] if len(targets) >= 3 else None
     return {"tp1": tp1, "tp2": tp2, "tp3": tp3,
-            "ema50": e50, "ema200": e200, "ema800": e800}
+            "ema50": e50, "ema200": e200, "ema800": e800,
+            "projected": projected}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -527,6 +533,7 @@ def analyze_pair(
             "ema50": targets["ema50"],
             "ema200": targets["ema200"],
             "ema800": targets["ema800"],
+            "projected": targets["projected"],
         },
         "trade_plan": {
             "entry": entry,

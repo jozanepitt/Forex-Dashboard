@@ -20,7 +20,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import alerts
 import fetcher
 from btmm_core import active_kill_zone
-from config import BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
+from config import BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_BACKFILL, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
 
 log = logging.getLogger("scheduler")
 
@@ -91,7 +91,7 @@ def refresh_all():
             time.sleep(FANOUT_DELAY_SECS)
         try:
             _fetch_guarded(sym, DEFAULT_INTERVAL)          # M15
-            _fetch_guarded(sym, "1h", limit=400)           # H1 — TDI123 primary + M15 SNR context
+            _fetch_guarded(sym, "1h", limit=DEFAULT_BACKFILL)  # H1 — TDI123 primary (needs >=800 for real EMA-800) + M15 SNR context
             _fetch_guarded(sym, "4h", limit=200)           # H4 — TDI123 HTF bias
             _fetch_guarded(sym, "1day", limit=60)          # daily — SNR-H4 scanner
             updated += 1
@@ -304,7 +304,7 @@ def _run_tdi123_alerts():
     candles_by_pair: dict[str, dict] = {}
     for sym in tdi_cycle_123.TDI123_UNIVERSE:
         candles_by_pair[sym] = {
-            "1h": cache.read_candles(sym, "1h", limit=400),
+            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
             "4h": cache.read_candles(sym, "4h", limit=200),
             "1d": cache.read_candles(sym, "1day", limit=60),
         }
