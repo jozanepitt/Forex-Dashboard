@@ -1259,7 +1259,9 @@ def alert_tdi123_setup(pair: str, row: dict):
          "inline": True},
         {"name": "Divergence",
          "value": (f"RSI {div.get('rsi_at_p1', 0)} → {div.get('rsi_at_p3', 0)} "
-                   + ("✅" if div.get("present") else "❌")),
+                   + ("✅ regular" if div.get("strong")
+                      else "✅ equal-level" if div.get("present")
+                      else "❌ none")),
          "inline": True},
         {"name": "H4 Bias",
          "value": (str(row.get("htf_bias") or "n/a").capitalize()

@@ -6,7 +6,9 @@ Cycles / StrictlyCorrect material:
   * Point 1 = initial swing extreme
   * Point 2 = counter-move (must pull back through midline)
   * Point 3 = failed retest of point 1's zone (equal, marginal, or shallow miss)
-  * Divergence between price 1→3 slope and TDI RSI 1→3 slope is REQUIRED
+  * Regular divergence 1→3: price reaches an equal-or-more-extreme level while
+    the TDI RSI reaches a less-extreme one. Scored, not mandatory — a shallow
+    -miss retest is still valid geometry, it just earns no divergence points.
   * TDI baseline (RSI SMA-34, "yellow line") must be at an extreme when point 3 forms
     - Long: baseline ≤ 37,  RSI < 32 (oversold)
     - Short: baseline ≥ 63,  RSI > 68 (overbought)
@@ -65,9 +67,28 @@ POINT3_TOLERANCE_PCT = 0.25   # 25 % of the 1→2 leg
 # that would otherwise qualify as a valid pattern on a quiet H1 candle run.
 MIN_LEG1_PIPS = 8.0
 
-# Divergence slope threshold — how much the two 1→3 slopes must differ.
-# 0 = any divergence; higher = require stronger divergence.
-DIVERGENCE_MIN_SLOPE_RATIO = 0.15
+# ── Divergence gates ─────────────────────────────────────────────────────────
+# Regular divergence requires price to reach an EQUAL-or-MORE-extreme level at
+# p3 while the oscillator reaches a LESS-extreme one. If price falls short of
+# p1's extreme by more than this fraction of leg 1, the two series are moving
+# the SAME way (a shallow-miss retest) — that is confirmation, not divergence.
+DIVERGENCE_EQUAL_TOLERANCE_PCT = 0.05   # 5 % of leg 1 still counts as "equal"
+
+# Minimum RSI travel (points) between p1 and p3 before it's called divergence.
+DIVERGENCE_MIN_RSI_DELTA = 2.0
+
+# The oscillator's own peak rarely lands on the exact bar of the price swing,
+# so read the RSI extreme from a small window centred on the swing index —
+# this mirrors how the divergence line is drawn across TDI peaks/troughs.
+DIVERGENCE_RSI_WINDOW = 2
+
+# A signal cross older than this many bars is treated as stale.
+SIGNAL_CROSS_MAX_AGE = 20
+
+# Minimum EMA-to-EMA spread (excluding spot price), as a fraction of price,
+# before the cascade counts as a "strong trend" for the divergence-ambiguity check.
+# Ranges have all EMAs converged <0.05%; real trends show 0.08%+ separation.
+TREND_STACK_MIN_SPAN_PCT = 0.0005   # 0.05 % — ~8 pips on EUR/AUD at 1.64
 
 
 def _pip_size(price: float, symbol: Optional[str] = None) -> float:
@@ -128,7 +149,11 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
     # Look at the last 6 swings — pattern must sit in the recent structure.
     recent = swings[-6:]
 
-    # Try every (a, b, c) triple in chronological order.
+    # Collect every valid triple, then pick the freshest. Returning the first
+    # match would hand back the OLDEST pattern in the window and hide a live
+    # setup behind one that already played out.
+    candidates: list[dict] = []
+
     for a in range(len(recent) - 2):
         for b in range(a + 1, len(recent) - 1):
             for c in range(b + 1, len(recent)):
@@ -160,7 +185,7 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
                 if dist_p1_p3 > tolerance:
                     continue
 
-                return {
+                candidates.append({
                     "direction": "bullish" if is_bullish else "bearish",
                     "p1": p1,
                     "p2": p2,
@@ -168,53 +193,99 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
                     "leg1_range": leg1_range,
                     "leg1_range_pips": leg1_range / pip,
                     "tolerance_pips": tolerance / pip,
-                }
-    return None
+                })
+
+    if not candidates:
+        return None
+
+    # Freshest p3 wins; on a tie prefer the larger leg 1 (the more meaningful
+    # structure of the two).
+    candidates.sort(key=lambda c: (c["p3"]["idx"], c["leg1_range"]), reverse=True)
+    return candidates[0]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. Divergence check — price 1→3 vs TDI RSI 1→3
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _rsi_extreme_at(rsi_series: list[float], idx: int, want_low: bool,
+                    window: int = DIVERGENCE_RSI_WINDOW) -> float:
+    """Read the RSI local extreme in a small window centred on `idx`.
+
+    The TDI peak that the divergence line is drawn from is often a bar or two
+    off the price swing, so anchoring on the exact index understates the
+    oscillator's actual high/low.
+    """
+    lo = max(0, idx - window)
+    hi = min(len(rsi_series), idx + window + 1)
+    seg = rsi_series[lo:hi]
+    if not seg:
+        return rsi_series[idx]
+    return min(seg) if want_low else max(seg)
+
+
 def _check_divergence(pattern: dict, rsi_series: list[float]) -> dict:
-    """Compare price direction (p1→p3) with TDI RSI direction (p1→p3).
+    """Compare price extreme (p1→p3) with the TDI RSI extreme (p1→p3).
 
-    The two series live on different scales (price ~ 1e-5 for FX, RSI 0-100),
-    so we compare DIRECTIONS + normalised magnitudes, not raw slopes.
+    Regular divergence — the only kind the 123 cycle trades — needs the two
+    series to DISAGREE at point 3:
 
-    Bullish divergence: price makes a lower / equal low at p3 while RSI makes a
-    HIGHER low at p3.
-    Bearish divergence: price makes a higher / equal high at p3 while RSI makes
-    a LOWER high at p3.
+      Bullish: price makes an equal-or-LOWER low at p3 while RSI makes a
+               HIGHER low.
+      Bearish: price makes an equal-or-HIGHER high at p3 while RSI makes a
+               LOWER high.
+
+    If price falls short of p1's extreme by more than the equal-tolerance, both
+    series are moving the same way. That is a shallow-miss retest — valid 123
+    geometry, but it is confirmation, not divergence, and scores no points here.
+
+    `strong` marks the textbook case where price genuinely exceeded p1's
+    extreme (the "1 → 3" trendline in the StrictlyCorrect chart notes).
     """
     p1, p3 = pattern["p1"], pattern["p3"]
     if p1["idx"] >= len(rsi_series) or p3["idx"] >= len(rsi_series):
-        return {"present": False, "reason": "index out of RSI series"}
+        return {"present": False, "strong": False,
+                "reason": "index out of RSI series"}
 
-    rsi_p1 = rsi_series[p1["idx"]]
-    rsi_p3 = rsi_series[p3["idx"]]
+    is_bullish = (pattern["direction"] == "bullish")
+
+    # Bullish setup pivots on lows, so compare RSI troughs; bearish on peaks.
+    rsi_p1 = _rsi_extreme_at(rsi_series, p1["idx"], want_low=is_bullish)
+    rsi_p3 = _rsi_extreme_at(rsi_series, p3["idx"], want_low=is_bullish)
+
     price_delta = p3["price"] - p1["price"]
     rsi_delta = rsi_p3 - rsi_p1
 
-    # Normalise price delta to the leg-1 range so we can measure "flat vs moved"
-    # without mixing scales.
+    # Normalise price delta to the leg-1 range so "how far past p1" is
+    # comparable across pairs without mixing price and RSI scales.
     leg1 = pattern.get("leg1_range", 0) or 1e-12
-    price_move_ratio = price_delta / leg1  # ~0 = flat, negative = new low, positive = new high
+    price_move_ratio = price_delta / leg1
+    tol = DIVERGENCE_EQUAL_TOLERANCE_PCT
 
-    is_bullish = (pattern["direction"] == "bullish")
-    # Direction must be opposite (or price flat + RSI meaningfully moved)
     if is_bullish:
-        direction_ok = rsi_delta > 0 and price_move_ratio <= DIVERGENCE_MIN_SLOPE_RATIO
-        # Require RSI to have travelled at least ~2 pts to filter noise
-        magnitude_ok = rsi_delta >= 2.0
+        # price at or below p1 (allowing a small "equal low" tolerance)
+        price_ok = price_move_ratio <= tol
+        # RSI clearly higher
+        rsi_ok = rsi_delta >= DIVERGENCE_MIN_RSI_DELTA
+        strong = price_move_ratio < 0 and rsi_ok
     else:
-        direction_ok = rsi_delta < 0 and price_move_ratio >= -DIVERGENCE_MIN_SLOPE_RATIO
-        magnitude_ok = rsi_delta <= -2.0
+        price_ok = price_move_ratio >= -tol
+        rsi_ok = rsi_delta <= -DIVERGENCE_MIN_RSI_DELTA
+        strong = price_move_ratio > 0 and rsi_ok
 
-    divergence = bool(direction_ok and magnitude_ok)
+    divergence = bool(price_ok and rsi_ok)
+
+    if divergence:
+        reason = "regular divergence" if strong else "equal-level divergence"
+    elif rsi_ok:
+        reason = "price failed to reach p1 extreme — confirmation, not divergence"
+    else:
+        reason = "RSI did not diverge"
 
     return {
         "present": divergence,
+        "strong": bool(divergence and strong),
+        "reason": reason,
         "price_move_ratio": price_move_ratio,
         "rsi_delta": rsi_delta,
         "rsi_at_p1": rsi_p1,
@@ -273,21 +344,38 @@ def _check_signal_cross(pattern: dict, fast_arr: list[float],
 
     Bullish setup wants fast > slow (green over red).
     Bearish setup wants fast < slow.
+
+    The cross must still be IN EFFECT on the latest bar. Taking the first cross
+    after p3 regardless of what happened since would confirm a setup whose
+    momentum has already crossed back — the PDF's own exit condition.
     """
     p3_idx = pattern["p3"]["idx"]
     if p3_idx >= len(fast_arr) - 1:
         return {"present": False, "reason": "no post-p3 bars"}
 
     is_bullish = (pattern["direction"] == "bullish")
-    post = list(zip(fast_arr[p3_idx:], slow_arr[p3_idx:]))
-    for i in range(1, len(post)):
-        prev_f, prev_s = post[i - 1]
-        cur_f, cur_s = post[i]
-        if is_bullish and prev_f <= prev_s and cur_f > cur_s:
-            return {"present": True, "cross_offset": i}
-        if not is_bullish and prev_f >= prev_s and cur_f < cur_s:
-            return {"present": True, "cross_offset": i}
-    return {"present": False}
+
+    # Momentum must currently sit on the confirmation side.
+    held = (fast_arr[-1] > slow_arr[-1]) if is_bullish else (fast_arr[-1] < slow_arr[-1])
+    if not held:
+        return {"present": False, "reason": "signal crossed back — momentum lost"}
+
+    # Walk backwards to the most recent cross so the age is the live one.
+    last_bar = len(fast_arr) - 1
+    for i in range(last_bar, p3_idx, -1):
+        prev_f, prev_s = fast_arr[i - 1], slow_arr[i - 1]
+        cur_f, cur_s = fast_arr[i], slow_arr[i]
+        crossed = (prev_f <= prev_s and cur_f > cur_s) if is_bullish \
+            else (prev_f >= prev_s and cur_f < cur_s)
+        if crossed:
+            age = last_bar - i
+            if age > SIGNAL_CROSS_MAX_AGE:
+                return {"present": False, "bars_since_cross": age,
+                        "reason": f"cross is {age} bars stale"}
+            return {"present": True, "bars_since_cross": age,
+                    "cross_offset": i - p3_idx}
+
+    return {"present": False, "reason": "no cross after p3"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -345,6 +433,41 @@ def _ema_targets(closes: list[float], direction: str,
 # ──────────────────────────────────────────────────────────────────────────────
 # 7. HTF direction — is H4 in the same direction as the H1 setup?
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _trend_regime(closes: list[float]) -> dict:
+    """Classify H1 trend strength from the 50/200/800 EMA cascade.
+
+    "Stacked" = price and every available EMA in strict cascade order, which is
+    the objective read of Davit's "strong trend" caveat on divergence.
+    """
+    if len(closes) < 300:
+        return {"stacked": False, "direction": None}
+
+    e50 = ema_last(closes, 50)
+    e200 = ema_last(closes, 200)
+    e800 = ema_last(closes, 800) if len(closes) >= 2400 else None
+    price = closes[-1]
+
+    chain = [price, e50, e200] + ([e800] if e800 is not None else [])
+
+    # Ordering alone is not enough: in a range the EMAs converge and separate
+    # only by noise, which would read as a strong cascade. Measure the spread
+    # across the EMAs THEMSELVES — spot price can sit far from a converged
+    # cluster at the top of a range and fake a wide span.
+    emas = chain[1:]
+    span = abs(emas[0] - emas[-1])
+    if price <= 0 or span / price < TREND_STACK_MIN_SPAN_PCT:
+        return {"stacked": False, "direction": None, "span_pct": span / price if price else 0.0}
+
+    bull = all(a > b for a, b in zip(chain, chain[1:]))
+    bear = all(a < b for a, b in zip(chain, chain[1:]))
+
+    if bull:
+        return {"stacked": True, "direction": "bullish", "span_pct": span / price}
+    if bear:
+        return {"stacked": True, "direction": "bearish", "span_pct": span / price}
+    return {"stacked": False, "direction": None, "span_pct": span / price}
+
 
 def _htf_bias(h4_bars: Optional[list[dict]]) -> Optional[str]:
     """Simple H4 bias from 50-EMA slope + price position."""
@@ -425,16 +548,32 @@ def analyze_pair(
 
     # 8. Scoring — 15 pts max
     #    3 base: pattern present
-    #    3: divergence
+    #    3: divergence (regular = 3, equal-level = 2)
     #    3: TDI extreme (strong = 3, present = 2)
     #    2: signal cross confirmation
     #    2: HTF (H4) alignment
     #    2: current price still near p3 (fresh, not stale)
+    # Davit, "Pivot Trading with TDI" p.9: "When the market is in a strong trend
+    # in either direction, oscillators do not function well ... Any signs of
+    # divergence during a strong trend would be ambiguous at best." A 123 fired
+    # against a fully-stacked EMA cascade is exactly that case, so the
+    # divergence still counts but no longer carries a setup on its own.
+    trend = _trend_regime(closes)
+    div_ambiguous = bool(
+        div["present"] and trend["stacked"] and trend["direction"] != direction
+    )
+
     score = 3
     notes = ["123 geometry ok"]
-    if div["present"]:
+    if div_ambiguous:
+        score += 1
+        notes.append(f"divergence vs stacked {trend['direction']} EMAs — ambiguous")
+    elif div.get("strong"):
         score += 3
-        notes.append("divergence present")
+        notes.append("regular divergence (price beyond p1)")
+    elif div["present"]:
+        score += 2
+        notes.append("equal-level divergence")
     if extreme.get("strong"):
         score += 3
         notes.append("TDI baseline + RSI both extreme")
@@ -505,9 +644,15 @@ def analyze_pair(
         },
         "divergence": {
             "present": div["present"],
+            "strong": div.get("strong", False) and not div_ambiguous,
+            "ambiguous": div_ambiguous,
+            "reason": ("counter-trend divergence against a stacked "
+                       f"{trend['direction']} EMA cascade — unreliable per Davit p.9"
+                       if div_ambiguous else div.get("reason", "")),
             "rsi_at_p1": round(div.get("rsi_at_p1", 0), 1),
             "rsi_at_p3": round(div.get("rsi_at_p3", 0), 1),
         },
+        "trend_regime": trend,
         "tdi_extreme": {
             "present": extreme["present"],
             "strong": extreme.get("strong", False),
