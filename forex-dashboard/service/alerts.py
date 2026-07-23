@@ -15,7 +15,9 @@ from config import (
     CRT_5AM_GRADE_A_ONLY, ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
     SNR_M15_EMS_GATE_ENABLED, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
+    TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN,
 )
+from providers import forexfactory
 
 log = logging.getLogger("alerts")
 
@@ -1145,6 +1147,28 @@ def evaluate_pair(pair_symbol: str, signal: str, score: float,
 
 # ── TDI Cycle 123 (Peak Formation reversal) ──────────────────────────────────
 
+# Indices don't carry a slash-separated currency pair; map the ones we watch to
+# the currency whose high-impact news actually moves them.
+_INDEX_CCY = {"DE30": "EUR", "GER40": "EUR", "US30": "USD", "USTEC": "USD",
+              "NAS100": "USD", "SPX500": "USD", "UK100": "GBP", "JP225": "JPY"}
+
+
+def _pair_currencies(pair: str) -> set[str]:
+    """The currency codes exposed by a symbol: {EUR, USD} for EUR/USD, {XAU, USD}
+    for XAU/USD, {USD} for USTEC. Used to match against the news blocklist."""
+    if "/" in pair:
+        a, b = pair.split("/", 1)
+        return {a.strip().upper(), b.strip().upper()}
+    p = pair.strip().upper()
+    return {_INDEX_CCY.get(p, p)}
+
+
+def _news_blocks_pair(pair: str, blocked_currencies: set[str]) -> bool:
+    """True if either of the pair's currencies has a high-impact event pending.
+    Pure (blocklist injected) so it's unit-testable without network/clock."""
+    return bool(_pair_currencies(pair) & (blocked_currencies or set()))
+
+
 def _should_alert_tdi123(row: dict) -> bool:
     """Determine if TDI123 setup meets quality threshold for alerting.
 
@@ -1228,6 +1252,20 @@ def alert_tdi123_setup(pair: str, row: dict):
     if not passed_q:
         log.info("TDI123 FILTERED %s %s: %s", pair, setup, q_reason)
         return
+
+    # News gate: suppress if either of the pair's currencies has a high-impact
+    # event within the window. Fails open — a feed error never blocks a trade.
+    if TDI123_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(TDI123_NEWS_WINDOW_MIN, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("TDI123 news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            hit = _pair_currencies(pair) & blocked
+            log.info("TDI123 SUPPRESSED %s: high-impact news within %dm (%s)",
+                     pair, TDI123_NEWS_WINDOW_MIN, ",".join(sorted(hit)))
+            return
 
     rule = f"tdi123_{setup.lower()}_{grade}"
     if _is_throttled(pair, rule):

@@ -16,7 +16,27 @@ deterministic and independent of any data provider.
 from __future__ import annotations
 
 import tdi_cycle_123 as t
-from alerts import _should_alert_tdi123
+from alerts import _should_alert_tdi123, _pair_currencies, _news_blocks_pair
+
+
+# ──────────────────────────────────────────────────────────────────────
+# News filter helpers (pure — blocklist injected, no network/clock)
+# ──────────────────────────────────────────────────────────────────────
+
+def test_pair_currencies_fx_metal_index():
+    assert _pair_currencies("EUR/USD") == {"EUR", "USD"}
+    assert _pair_currencies("XAU/USD") == {"XAU", "USD"}
+    assert _pair_currencies("USTEC") == {"USD"}   # index -> its driving currency
+    assert _pair_currencies("DE30") == {"EUR"}
+
+
+def test_news_blocks_when_either_currency_hit():
+    assert _news_blocks_pair("EUR/USD", {"USD"}) is True     # quote currency
+    assert _news_blocks_pair("EUR/USD", {"EUR"}) is True     # base currency
+    assert _news_blocks_pair("EUR/USD", {"GBP"}) is False    # unrelated
+    assert _news_blocks_pair("USTEC", {"USD"}) is True       # index via map
+    assert _news_blocks_pair("EUR/USD", set()) is False      # empty blocklist
+    assert _news_blocks_pair("GBP/JPY", None) is False       # None fails open
 
 
 # ──────────────────────────────────────────────────────────────────────

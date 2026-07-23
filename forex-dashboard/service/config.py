@@ -93,6 +93,13 @@ TDI123_GRADE_A_ONLY = os.environ.get("TDI123_GRADE_A_ONLY", "false").lower() in 
 #   future adaptive-TARGET tweak rather than a filter. Enable via env if desired.
 TDI123_SESSION_FILTER = os.environ.get("TDI123_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
 TDI123_ADR_FILTER = os.environ.get("TDI123_ADR_FILTER", "false").lower() in ("1", "true", "yes")
+# NEWS (default ON): suppress a signal when either of the pair's currencies has a
+# high-impact ForexFactory event within ±window minutes. Doctrine: "avoid trading
+# during major news — price action is unpredictable" — a release drives a wick
+# that blows through the ATR stop regardless of setup quality. Live-only (the FF
+# feed is current-week), so it can't be backtested retrospectively.
+TDI123_NEWS_FILTER = os.environ.get("TDI123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
 
 # EMS gate for M15 SNR signals — based on "The Alchemist EMS Trinity" + MSNR
 # ALCHEMIST notes. When True, an M15 SNR alert only fires if the higher
