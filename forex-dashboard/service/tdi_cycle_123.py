@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -591,6 +591,60 @@ def _location(price: float, direction: str, pivots: Optional[dict]) -> dict:
             "zone": zone, "loc_ratio": round(loc, 3)}
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 7d. Session + ADR context (Tier-1 timing filters)
+# ──────────────────────────────────────────────────────────────────────────────
+# A 60-day winner/loser walk found the two strongest, most robust separators:
+#   • Session: the Asian dead-zone (22:00-07:00 UTC) lost -0.83R over 33 signals
+#     (6% win), while the London+NY block 07:00-16:00 carried the positive
+#     buckets. Matches BTMM: Accumulation is Asian; the Real-Money-Move that
+#     carries price to target runs in London/NY.
+#   • ADR reachability: 88% of signals had TP1 further than the day's REMAINING
+#     ADR — mechanically unreachable before the session dies. Matches Davit:
+#     "late entries = stupid money; ADR already consumed = no-trade."
+SESSION_ACTIVE_START = 7    # UTC hour, inclusive (London open)
+SESSION_ACTIVE_END = 16     # UTC hour, exclusive (NY-open close)
+ADR_PERIOD_DAYS = 14
+
+
+def _session_label(ts_utc: int) -> str:
+    h = datetime.fromtimestamp(ts_utc, tz=timezone.utc).hour
+    if 7 <= h < 10:  return "London-open"
+    if 10 <= h < 13: return "London"
+    if 13 <= h < 16: return "NY-open"
+    if 16 <= h < 22: return "NY-afternoon"
+    return "Asian"
+
+
+def _in_active_session(ts_utc: int) -> bool:
+    h = datetime.fromtimestamp(ts_utc, tz=timezone.utc).hour
+    return SESSION_ACTIVE_START <= h < SESSION_ACTIVE_END
+
+
+def _adr_context(h1_candles: list[dict],
+                 d1_candles: Optional[list[dict]]) -> Optional[dict]:
+    """ADR from the last 14 COMPLETED daily candles + today's range consumed.
+
+    (btmm_core.calc_adr assumes 96×15-min bars/day, so it can't be used on H1 —
+    we derive ADR straight from the daily series instead.) All values in price.
+    """
+    if not d1_candles or len(d1_candles) < ADR_PERIOD_DAYS + 1:
+        return None
+    today = datetime.fromtimestamp(h1_candles[-1]["ts_utc"], tz=timezone.utc).date()
+    prior = [b for b in d1_candles
+             if datetime.fromtimestamp(b["ts_utc"], tz=timezone.utc).date() < today]
+    if len(prior) < ADR_PERIOD_DAYS:
+        return None
+    adr = sum(b["high"] - b["low"] for b in prior[-ADR_PERIOD_DAYS:]) / ADR_PERIOD_DAYS
+    if adr <= 0:
+        return None
+    todays = [b for b in h1_candles
+              if datetime.fromtimestamp(b["ts_utc"], tz=timezone.utc).date() == today]
+    trng = (max(b["high"] for b in todays) - min(b["low"] for b in todays)) if todays else 0.0
+    return {"adr": adr, "consumed_pct": min(100.0, trng / adr * 100),
+            "remaining": max(adr - trng, 0.0)}
+
+
 def _htf_bias(h4_bars: Optional[list[dict]]) -> Optional[str]:
     """Simple H4 bias from 50-EMA slope + price position."""
     if not h4_bars or len(h4_bars) < 60:
@@ -784,6 +838,20 @@ def analyze_pair(
             return None
         return round(abs(a - b) / pip, 1)
 
+    # 7d. Session + ADR timing context. `tp1_reachable` is True when the L1
+    # target sits within the day's remaining ADR (so a move can actually get
+    # there). None when ADR/daily data is unavailable — a None is treated as
+    # "unknown", never as a hard fail, so missing data can't silently kill a setup.
+    now_ts = h1_candles[-1]["ts_utc"]
+    session = _session_label(now_ts)
+    in_active_session = _in_active_session(now_ts)
+    adr_ctx = _adr_context(h1_candles, d1_candles)
+    tp1 = targets["tp1"]
+    if adr_ctx and entry is not None and tp1 is not None:
+        tp1_reachable = abs(tp1 - entry) <= adr_ctx["remaining"]
+    else:
+        tp1_reachable = None
+
     return {
         "symbol": symbol,
         "setup": setup,
@@ -815,6 +883,11 @@ def analyze_pair(
         "location_ok": location["ok"],
         "ema13": ema13,
         "ketchup_reclaimed": ketchup_reclaimed,
+        "session": session,
+        "in_active_session": in_active_session,
+        "adr_consumed_pct": round(adr_ctx["consumed_pct"], 0) if adr_ctx else None,
+        "adr_remaining_pips": _pips(0, adr_ctx["remaining"]) if adr_ctx else None,
+        "tp1_reachable": tp1_reachable,
         "trend_regime": trend,
         "tdi_extreme": {
             "present": extreme["present"],

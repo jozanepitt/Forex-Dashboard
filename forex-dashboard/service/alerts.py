@@ -14,6 +14,7 @@ from config import (
     DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, ALERTS_GRADE_A_ONLY, CRT_GRADE_A_ONLY,
     CRT_5AM_GRADE_A_ONLY, ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
     SNR_M15_EMS_GATE_ENABLED, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
+    TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
 )
 
 log = logging.getLogger("alerts")
@@ -1151,6 +1152,16 @@ def _should_alert_tdi123(row: dict) -> bool:
     """
     grade = row.get("grade")
     if grade not in ("A", "B"):
+        return False
+
+    # Tier-1 timing gates. SESSION (on by default, 60-day A/B: -0.40R → +0.25R):
+    # reject the Asian dead-zone; only fire in the London+NY block. ADR (off by
+    # default — as a hard gate it starved the strategy to a handful of trades):
+    # reject when TP1 is beyond the day's remaining range. A None flag means the
+    # data was unavailable — treated as "unknown", never a hard fail.
+    if TDI123_SESSION_FILTER and row.get("in_active_session") is False:
+        return False
+    if TDI123_ADR_FILTER and row.get("tp1_reachable") is False:
         return False
 
     # NOTE: the 13-EMA "ketchup reclaim" is deliberately NOT gated here. A clean

@@ -275,6 +275,65 @@ def test_signal_cross_rejected_after_crossing_back():
     assert cross["present"] is False
 
 
+def _ts(hour_utc, day=5):
+    import datetime as _dt
+    return int(_dt.datetime(2026, 1, day, hour_utc, 0, tzinfo=_dt.timezone.utc).timestamp())
+
+
+def test_session_labels_and_active_window():
+    assert t._session_label(_ts(8)) == "London-open"
+    assert t._session_label(_ts(11)) == "London"
+    assert t._session_label(_ts(14)) == "NY-open"
+    assert t._session_label(_ts(18)) == "NY-afternoon"
+    assert t._session_label(_ts(2)) == "Asian"
+    # active window = 07:00-16:00 UTC
+    assert t._in_active_session(_ts(7)) is True
+    assert t._in_active_session(_ts(15)) is True
+    assert t._in_active_session(_ts(16)) is False   # NY-open close, exclusive
+    assert t._in_active_session(_ts(3)) is False     # Asian dead-zone
+
+
+def test_adr_context_from_daily_candles():
+    import datetime as _dt
+    # 15 prior days each with a 0.1000 (1000-pip) range, then "today"
+    d1 = []
+    for k in range(15):
+        ts = int(_dt.datetime(2026, 1, 1 + k, 0, 0, tzinfo=_dt.timezone.utc).timestamp())
+        d1.append({"ts_utc": ts, "high": 1.1000, "low": 1.0000, "close": 1.0500})
+    today = _dt.datetime(2026, 1, 20, 12, 0, tzinfo=_dt.timezone.utc)
+    # today's H1 bars span a 0.0400 range so far -> 40% of the 0.1000 ADR
+    h1 = [{"ts_utc": int((today.replace(hour=h)).timestamp()),
+           "high": 1.0400, "low": 1.0000, "close": 1.0200} for h in range(9, 13)]
+    ctx = t._adr_context(h1, d1)
+    assert ctx is not None
+    assert abs(ctx["adr"] - 0.1) < 1e-9
+    assert abs(ctx["consumed_pct"] - 40.0) < 1e-6
+    assert abs(ctx["remaining"] - 0.06) < 1e-9
+
+
+def test_session_gate_blocks_asian_but_none_passes():
+    """Session filter blocks an out-of-session signal; missing data never blocks."""
+    assert _should_alert_tdi123({"grade": "A", "in_active_session": False}) is False
+    assert _should_alert_tdi123({"grade": "A", "in_active_session": True}) is True
+    assert _should_alert_tdi123({"grade": "A"}) is True   # no field -> not blocked
+
+
+def test_adr_gate_off_by_default():
+    """ADR filter is OFF by default (A/B showed it starved the strategy), so an
+    unreachable-TP1 signal is NOT blocked out of the box."""
+    assert _should_alert_tdi123({"grade": "A", "tp1_reachable": False}) is True
+
+
+def test_adr_gate_blocks_when_enabled(monkeypatch):
+    """When TDI123_ADR_FILTER is enabled, an unreachable TP1 is blocked; a None
+    (missing ADR data) still passes."""
+    import alerts
+    monkeypatch.setattr(alerts, "TDI123_ADR_FILTER", True)
+    assert alerts._should_alert_tdi123({"grade": "A", "tp1_reachable": False}) is False
+    assert alerts._should_alert_tdi123({"grade": "A", "tp1_reachable": True}) is True
+    assert alerts._should_alert_tdi123({"grade": "A"}) is True   # None -> not blocked
+
+
 def test_weekly_fib_pivots_levels():
     """Fib pivots project the prior week's range from P=(H+L+C)/3."""
     lv = t._weekly_fib_pivots((110.0, 100.0, 105.0))  # H,L,C -> P=105, range=10

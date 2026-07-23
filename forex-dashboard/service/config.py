@@ -82,6 +82,17 @@ ALERTS_TREND_FILTER_ENABLED = os.environ.get("ALERTS_TREND_FILTER_ENABLED", "tru
 # restrict to Grade A only if signal volume gets noisy.
 TDI123_ALERTS_ENABLED = os.environ.get("TDI123_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 TDI123_GRADE_A_ONLY = os.environ.get("TDI123_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+# Tier-1 timing filters (added 2026-07-23 after a 60-day winner/loser analysis).
+# SESSION (default ON): only fire in the active London+NY block (07:00-16:00 UTC).
+#   A clean 4-arm A/B flipped expectancy from -0.40R to +0.25R just by removing
+#   the Asian dead-zone (which lost -0.83R over 33 signals).
+# ADR (default OFF): skip when TP1 is further than the day's remaining ADR.
+#   The diagnosis is real (88% of signals are "unreachable") but as a HARD gate
+#   it's too aggressive — it cut the sample to 9 trades (2 when combined with
+#   session), starving the strategy. Kept available (fields still exposed) for a
+#   future adaptive-TARGET tweak rather than a filter. Enable via env if desired.
+TDI123_SESSION_FILTER = os.environ.get("TDI123_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
+TDI123_ADR_FILTER = os.environ.get("TDI123_ADR_FILTER", "false").lower() in ("1", "true", "yes")
 
 # EMS gate for M15 SNR signals — based on "The Alchemist EMS Trinity" + MSNR
 # ALCHEMIST notes. When True, an M15 SNR alert only fires if the higher

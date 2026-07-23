@@ -4977,6 +4977,17 @@ function renderTdi123Table(data) {
              style="font-size:.62rem;font-weight:600;color:${ketReady ? 'var(--green)' : 'var(--yellow)'}">
            ${ketReady ? '✓ entry ready' : '⏳ await ketchup'}</span>`;
 
+    // Session badge (Tier-1 gate): active London+NY block is tradeable; Asian /
+    // NY-afternoon are filtered out (60-day A/B flipped expectancy positive).
+    const inSess = p.in_active_session === true;
+    const sessBadge = (p.session === undefined) ? ''
+      : `<br><span title="Only the London+NY block (07:00-16:00 UTC) is traded — the Asian dead-zone lost -0.83R"
+             style="font-size:.62rem;font-weight:600;color:${inSess ? 'var(--green)' : 'var(--red)'}">
+           ${inSess ? '🕐 ' + p.session : '🚫 ' + p.session}</span>`
+        + (p.tp1_reachable === false
+           ? `<br><span title="TP1 is beyond the day's remaining ADR — target may be unreachable (info only, not gated)"
+                  style="font-size:.6rem;color:var(--yellow)">⚠ TP1 &gt; rem. ADR</span>` : '');
+
     const priceCell = `<code>${_tdi123FmtPrice(p.current_price, sym)}</code>`;
 
     // "projected" = all 3 EMAs were on the wrong side of price, so L1/L2/L3
@@ -4992,7 +5003,7 @@ function renderTdi123Table(data) {
     return `<tr>
       <td><b>${sym}</b></td>
       <td>${priceCell}</td>
-      <td>${_tdi123DirCell(p)}${ketchupBadge}</td>
+      <td>${_tdi123DirCell(p)}${ketchupBadge}${sessBadge}</td>
       <td><code>${_tdi123FmtPrice(p1.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p2.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p3.price, sym)}</code></td>
