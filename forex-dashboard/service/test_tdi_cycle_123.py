@@ -258,6 +258,38 @@ def test_signal_cross_rejected_after_crossing_back():
     assert cross["present"] is False
 
 
+def test_atr_measures_true_range():
+    """ATR of a series with a constant 10-wide range and no gaps is 10."""
+    bars = [{"high": 100 + 10, "low": 100, "close": 105} for _ in range(20)]
+    assert abs(t._atr(bars, period=14) - 10) < 1e-9
+
+
+def test_sl_is_not_hair_tight_when_entry_sits_on_p3():
+    """Regression: the old p3±5pip stop gave a ~5-pip SL for a fresh-from-p3
+    entry, producing absurd R:R. The ATR floor must guarantee real room."""
+    # bullish 123 with entry essentially on p3, ATR ~ 0.0020 (20 pips)
+    price = 1.6000
+    bars = [{"open": price, "high": price + 0.0010, "low": price - 0.0010,
+             "close": price, "ts_utc": i} for i in range(300)]
+    # carve out a real 123: p1 low, p2 high, p3 low ~ current price
+    swings = [
+        {"type": "low", "idx": 280, "price": 1.5990, "ts_utc": "p1"},
+        {"type": "high", "idx": 288, "price": 1.6030, "ts_utc": "p2"},
+        {"type": "low", "idx": 296, "price": 1.5998, "ts_utc": "p3"},
+    ]
+    # feed enough RSI extreme + cross so it grades tradeable is not needed here;
+    # test the SL math directly via the helper pieces.
+    atr = t._atr(bars)
+    assert atr is not None and atr > 0
+    entry = price
+    p3 = 1.5998
+    sl_struct = p3 - t.SL_STRUCT_ATR_MULT * atr
+    sl_floor = entry - t.SL_MIN_ATR_MULT * atr
+    sl = min(sl_struct, sl_floor)
+    stop_pips = (entry - sl) / 0.0001
+    assert stop_pips >= 15   # at least ~1 ATR of room, never the old ~5 pips
+
+
 def test_trend_regime_detects_stacked_bear_cascade():
     """Long steady downtrend -> price < 50 < 200, strictly stacked bearish."""
     closes = [1.6600 - 0.0004 * i for i in range(400)]

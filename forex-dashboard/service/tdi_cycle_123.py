@@ -91,6 +91,16 @@ DIVERGENCE_RSI_WINDOW = 2
 # A signal cross older than this many bars is treated as stale.
 SIGNAL_CROSS_MAX_AGE = 20
 
+# ── Stop-loss sizing (ATR-based structure stop) ──────────────────────────────
+# The old SL of "p3 ± 5 pips" produced hair-tight stops that get hunted (Davit,
+# BTMM: "20-30 pip hard SL = sucker move, too tight, will be hunted") and absurd
+# R:R when entry sat right on p3. Replace with an ATR structure stop: placed
+# beyond the p3 stop-hunt extreme, but never closer to entry than a floor so a
+# fresh-from-p3 entry still gets breathing room.
+ATR_PERIOD = 14
+SL_STRUCT_ATR_MULT = 0.5   # buffer beyond p3's wick
+SL_MIN_ATR_MULT = 1.0      # minimum stop distance from entry (anti-hunt floor)
+
 # Minimum EMA-to-EMA spread (excluding spot price), as a fraction of price,
 # before the cascade counts as a "strong trend" for the divergence-ambiguity check.
 # Ranges have all EMAs converged <0.05%; real trends show 0.08%+ separation.
@@ -99,6 +109,21 @@ TREND_STACK_MIN_SPAN_PCT = 0.0005   # 0.05 % — ~8 pips on EUR/AUD at 1.64
 
 def _pip_size(price: float, symbol: Optional[str] = None) -> float:
     return instruments.pip_size(symbol, price)
+
+
+def _atr(bars: list[dict], period: int = ATR_PERIOD) -> Optional[float]:
+    """Average True Range over the last `period` bars (SMA of true range).
+
+    Returns None if there aren't enough bars to measure.
+    """
+    if len(bars) < period + 1:
+        return None
+    trs = []
+    for i in range(len(bars) - period, len(bars)):
+        h, l = bars[i]["high"], bars[i]["low"]
+        prev_close = bars[i - 1]["close"]
+        trs.append(max(h - l, abs(h - prev_close), abs(l - prev_close)))
+    return sum(trs) / len(trs) if trs else None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -627,14 +652,21 @@ def analyze_pair(
     else:
         setup = "BUY" if direction == "bullish" else "SELL"
 
-    # Entry / SL / TPs
+    # Entry / SL / TPs — ATR structure stop (see SL_* constants).
     pip = _pip_size(price, symbol)
+    atr = _atr(h1_candles) or (pattern["leg1_range"] * 0.5)  # fallback if short
+    p3p = pattern["p3"]["price"]
     if setup == "BUY":
         entry = price
-        sl = pattern["p3"]["price"] - 5 * pip
+        # beyond p3's low, but never closer than the anti-hunt floor from entry
+        sl_struct = p3p - SL_STRUCT_ATR_MULT * atr
+        sl_floor = entry - SL_MIN_ATR_MULT * atr
+        sl = min(sl_struct, sl_floor)
     elif setup == "SELL":
         entry = price
-        sl = pattern["p3"]["price"] + 5 * pip
+        sl_struct = p3p + SL_STRUCT_ATR_MULT * atr
+        sl_floor = entry + SL_MIN_ATR_MULT * atr
+        sl = max(sl_struct, sl_floor)
     else:
         entry, sl = None, None
 
