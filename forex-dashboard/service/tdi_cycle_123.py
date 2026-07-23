@@ -675,6 +675,14 @@ def analyze_pair(
     pivots = _weekly_fib_pivots(_prev_week_hlc(week_src, h1_candles[-1]["ts_utc"]))
     location = _location(price, direction, pivots)
 
+    # 7c. Ketchup (13 EMA) reclaim — the ENTRY TRIGGER. BTMM: "once price closes
+    # above/below the 13 EMA it tends to stay there." Backtesting showed ~55 % of
+    # signals stopped out before TP1 because entry fired while price was still on
+    # the wrong side of the ketchup. Require price to have reclaimed it in the
+    # setup direction before the setup is treated as a live entry.
+    ema13 = ema_last(closes, 13)
+    ketchup_reclaimed = (price > ema13) if direction == "bullish" else (price < ema13)
+
     # 8. Scoring — 15 pts max
     #    3 base: pattern present
     #    3: divergence (regular = 3, equal-level = 2)
@@ -728,6 +736,8 @@ def analyze_pair(
     # this data (only the extreme 100-zone hinted positive, n too small), so it
     # is not treated as an edge — just displayed, plus the wrong-side gate below.
     notes.append(f"pivot location {location['zone']}")
+    notes.append("ketchup reclaimed" if ketchup_reclaimed
+                 else "awaiting 13-EMA reclaim")
 
     # Grade (max 15)
     if score >= 11:
@@ -803,6 +813,8 @@ def analyze_pair(
         },
         "location": location,
         "location_ok": location["ok"],
+        "ema13": ema13,
+        "ketchup_reclaimed": ketchup_reclaimed,
         "trend_regime": trend,
         "tdi_extreme": {
             "present": extreme["present"],

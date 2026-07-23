@@ -1150,18 +1150,25 @@ def _should_alert_tdi123(row: dict) -> bool:
     Gold standard: Grade A always, or Grade B only if divergence + H4 aligned + R:R >= 1.0
     """
     grade = row.get("grade")
+    if grade not in ("A", "B"):
+        return False
+
+    # NOTE: the 13-EMA "ketchup reclaim" is deliberately NOT gated here. A clean
+    # 30-day A/B test showed that waiting for the reclaim raised win rate
+    # (27→37 %) but wrecked R:R — entry chased price a median of 6 bars into the
+    # move while the stop stayed at p3 — so expectancy got worse (−0.09→−0.40R).
+    # It is surfaced as an informational badge (row["ketchup_reclaimed"]) for the
+    # trader to use at their discretion, not as an automated suppressor.
+
     if grade == "A":
         return True
 
-    if grade == "B":
-        div_present = row.get("divergence", {}).get("present", False)
-        htf_aligned = row.get("htf_aligned", False)
-        # rr1 is None when the trade plan has no TP1 target (no valid EMA/leg
-        # target) — treat that as failing the R:R gate, not a crash.
-        rr = (row.get("trade_plan") or {}).get("rr1") or 0
-        return div_present and htf_aligned and rr >= 1.0
-
-    return False
+    # Grade B: divergence + H4 aligned + R:R >= 1.0. rr1 is None when the trade
+    # plan has no TP1 target — treat that as failing the gate, not a crash.
+    div_present = row.get("divergence", {}).get("present", False)
+    htf_aligned = row.get("htf_aligned", False)
+    rr = (row.get("trade_plan") or {}).get("rr1") or 0
+    return div_present and htf_aligned and rr >= 1.0
 
 
 def alert_tdi123_setup(pair: str, row: dict):

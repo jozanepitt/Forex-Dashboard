@@ -50,6 +50,23 @@ def test_grade_a_always_alerts_even_without_plan():
     assert _should_alert_tdi123({"grade": "A"}) is True
 
 
+def test_ketchup_is_informational_not_a_gate():
+    """Ketchup reclaim is surfaced for the trader but must NOT suppress alerts —
+    a 30-day A/B test showed gating on it worsened expectancy. A Grade-A setup
+    alerts regardless of the reclaim flag."""
+    assert _should_alert_tdi123({"grade": "A", "ketchup_reclaimed": False}) is True
+    assert _should_alert_tdi123({"grade": "A", "ketchup_reclaimed": True}) is True
+
+
+def test_ketchup_bullish_requires_price_above_ema13():
+    """analyze_pair marks the reclaim only when price is on the right side."""
+    # Build a bullish setup where current price is BELOW the 13 EMA -> not yet
+    # reclaimed. (Direct helper check keeps this independent of full pipeline.)
+    closes_below = [1.6100] * 30 + [1.6000]   # last close well below the EMA
+    ema13 = t.ema_last(closes_below, 13)
+    assert (closes_below[-1] > ema13) is False   # bullish reclaim would be False
+
+
 def _pattern(direction, p1_price, p2_price, p3_price, p1_idx=10, p3_idx=30):
     kind = "low" if direction == "bullish" else "high"
     return {

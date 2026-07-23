@@ -4970,6 +4970,13 @@ function renderTdi123Table(data) {
     const locCell = `<span title="loc ratio ${loc.loc_ratio ?? '?'} of weekly range"
          style="color:${locStyle[0]};font-weight:${loc.ok ? 600 : 500}">${locStyle[1]}</span>`;
 
+    // Ketchup (13-EMA) entry trigger: ✓ ready to enter, or ⏳ still waiting.
+    const ketReady = p.ketchup_reclaimed === true;
+    const ketchupBadge = (p.ketchup_reclaimed === undefined) ? ''
+      : `<br><span title="BTMM entry trigger: price must reclaim the 13 EMA (ketchup) in-direction before entry"
+             style="font-size:.62rem;font-weight:600;color:${ketReady ? 'var(--green)' : 'var(--yellow)'}">
+           ${ketReady ? '✓ entry ready' : '⏳ await ketchup'}</span>`;
+
     const priceCell = `<code>${_tdi123FmtPrice(p.current_price, sym)}</code>`;
 
     // "projected" = all 3 EMAs were on the wrong side of price, so L1/L2/L3
@@ -4985,7 +4992,7 @@ function renderTdi123Table(data) {
     return `<tr>
       <td><b>${sym}</b></td>
       <td>${priceCell}</td>
-      <td>${_tdi123DirCell(p)}</td>
+      <td>${_tdi123DirCell(p)}${ketchupBadge}</td>
       <td><code>${_tdi123FmtPrice(p1.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p2.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p3.price, sym)}</code></td>
