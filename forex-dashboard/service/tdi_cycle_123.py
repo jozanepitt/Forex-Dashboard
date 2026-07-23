@@ -512,6 +512,85 @@ def _trend_regime(closes: list[float]) -> dict:
     return {"stacked": False, "direction": None, "span_pct": span / price}
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 7b. Weekly Fibonacci pivots + location filter (Davit, "Pivot Trading with TDI")
+# ──────────────────────────────────────────────────────────────────────────────
+# Davit is emphatic that LOCATION is a prerequisite, not a bonus: "TDI signals
+# are only valid when price is in a high-probability ZONE (61-100). A TDI cross
+# or bullish candle at 38 is still a sucker move." The levels are Fibonacci
+# projections of the PRIOR week's range from the weekly pivot P=(H+L+C)/3.
+# (ratio, doctrine tag) — tags follow Davit's 38/61/78/100/138 naming, not the
+# rounded percent (0.618 → "61", 0.786 → "78").
+FIB_PIVOT_LEVELS = ((0.382, 38), (0.618, 61), (0.786, 78), (1.0, 100), (1.382, 138))
+_WEEK_SECONDS = 7 * 86400
+_MONDAY_EPOCH = 4 * 86400   # 1970-01-05 00:00 UTC was a Monday
+
+
+def _prev_week_hlc(bars: list[dict], as_of_ts: int):
+    """High/Low/Close of the fully-completed week before `as_of_ts`.
+
+    Week = Monday 00:00 UTC → next Monday. Uses only bars strictly inside the
+    prior week, so there is no look-ahead into the current (forming) week.
+    """
+    cur_week_start = _MONDAY_EPOCH + \
+        ((as_of_ts - _MONDAY_EPOCH) // _WEEK_SECONDS) * _WEEK_SECONDS
+    prev_start = cur_week_start - _WEEK_SECONDS
+    seg = [b for b in bars if prev_start <= b["ts_utc"] < cur_week_start]
+    if not seg:
+        return None
+    return (max(b["high"] for b in seg),
+            min(b["low"] for b in seg),
+            seg[-1]["close"])
+
+
+def _weekly_fib_pivots(hlc) -> Optional[dict]:
+    """Fib pivot levels from a (High, Low, Close) tuple."""
+    if not hlc:
+        return None
+    H, L, C = hlc
+    rng = H - L
+    if rng <= 0:
+        return None
+    P = (H + L + C) / 3.0
+    lv = {"P": P, "range": rng}
+    for r, tag in FIB_PIVOT_LEVELS:
+        lv[f"R{tag}"] = P + r * rng
+        lv[f"S{tag}"] = P - r * rng
+    return lv
+
+
+def _location(price: float, direction: str, pivots: Optional[dict]) -> dict:
+    """Classify where price sits vs the weekly pivot, from the setup's view.
+
+    loc_ratio > 0 means price is in the REVERSAL zone for this setup — at
+    resistance for a bearish (sell) setup, at support for a bullish (buy) one.
+    A negative ratio means the setup is firing on the wrong side of the pivot.
+    `ok` follows Davit's rule: only the 61–100 band counts as high-probability.
+    """
+    if not pivots:
+        return {"quality": "unknown", "ok": False, "zone": None, "loc_ratio": None}
+    P, rng = pivots["P"], pivots["range"]
+    if direction == "bearish":      # sell at resistance → above pivot is good
+        loc, side = (price - P) / rng, "R"
+    else:                           # buy at support → below pivot is good
+        loc, side = (P - price) / rng, "S"
+
+    if loc >= 1.30:
+        q, zone = "extended", f"{side}138+"
+    elif loc >= 0.90:
+        q, zone = "prime", f"{side}100"
+    elif loc >= 0.55:
+        q, zone = "good", f"{side}61-78"
+    elif loc >= 0.30:
+        q, zone = "weak", f"{side}38"
+    elif loc >= -0.30:
+        q, zone = "poor", "mid-pivot"
+    else:
+        q, zone = "wrongside", "wrong-side"
+    return {"quality": q, "ok": q in ("good", "prime"),
+            "zone": zone, "loc_ratio": round(loc, 3)}
+
+
 def _htf_bias(h4_bars: Optional[list[dict]]) -> Optional[str]:
     """Simple H4 bias from 50-EMA slope + price position."""
     if not h4_bars or len(h4_bars) < 60:
@@ -589,6 +668,13 @@ def analyze_pair(
     htf = _htf_bias(h4_candles)
     htf_aligned = (htf == direction)
 
+    # 7b. Weekly-pivot location (Davit). Prefer daily candles for the weekly
+    # H/L/C; fall back to H1 when daily isn't supplied. No look-ahead — only the
+    # fully-completed prior week is used.
+    week_src = d1_candles if (d1_candles and len(d1_candles) >= 5) else h1_candles
+    pivots = _weekly_fib_pivots(_prev_week_hlc(week_src, h1_candles[-1]["ts_utc"]))
+    location = _location(price, direction, pivots)
+
     # 8. Scoring — 15 pts max
     #    3 base: pattern present
     #    3: divergence (regular = 3, equal-level = 2)
@@ -637,7 +723,13 @@ def analyze_pair(
         score += 2
         notes.append("fresh from p3")
 
-    # Grade
+    # Note the location for information, but do NOT add it to the score. A 30-day
+    # walk-forward found the 61–100 zone did not separate winners from losers on
+    # this data (only the extreme 100-zone hinted positive, n too small), so it
+    # is not treated as an edge — just displayed, plus the wrong-side gate below.
+    notes.append(f"pivot location {location['zone']}")
+
+    # Grade (max 15)
     if score >= 11:
         grade = "A"
     elif score >= 8:
@@ -646,6 +738,13 @@ def analyze_pair(
         grade = "C"
     else:
         grade = "NO-TRADE"
+
+    # Davit's location gate (kept as a filter, not a score): a clean TDI setup on
+    # the WRONG side of the weekly pivot — selling into support or buying into
+    # resistance — is a sucker move. Cap those to C so they can't present as A/B.
+    if location["quality"] in ("poor", "wrongside") and grade in ("A", "B"):
+        grade = "C"
+        notes.append("grade capped: poor pivot location")
 
     if grade == "NO-TRADE":
         setup = "NO-TRADE"
@@ -702,6 +801,8 @@ def analyze_pair(
             "rsi_at_p1": round(div.get("rsi_at_p1", 0), 1),
             "rsi_at_p3": round(div.get("rsi_at_p3", 0), 1),
         },
+        "location": location,
+        "location_ok": location["ok"],
         "trend_regime": trend,
         "tdi_extreme": {
             "present": extreme["present"],

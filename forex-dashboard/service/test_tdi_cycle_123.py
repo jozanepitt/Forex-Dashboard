@@ -258,6 +258,60 @@ def test_signal_cross_rejected_after_crossing_back():
     assert cross["present"] is False
 
 
+def test_weekly_fib_pivots_levels():
+    """Fib pivots project the prior week's range from P=(H+L+C)/3."""
+    lv = t._weekly_fib_pivots((110.0, 100.0, 105.0))  # H,L,C -> P=105, range=10
+    assert abs(lv["P"] - 105.0) < 1e-9
+    assert abs(lv["range"] - 10.0) < 1e-9
+    assert abs(lv["R61"] - (105.0 + 0.618 * 10)) < 1e-9
+    assert abs(lv["S100"] - (105.0 - 1.0 * 10)) < 1e-9
+
+
+def test_location_sell_at_resistance_is_good():
+    """A bearish setup with price up at R61–R100 is a high-probability zone."""
+    lv = t._weekly_fib_pivots((110.0, 100.0, 105.0))  # P=105, range=10
+    loc = t._location(105.0 + 0.7 * 10, "bearish", lv)   # price at R70
+    assert loc["quality"] in ("good", "prime")
+    assert loc["ok"] is True
+
+
+def test_location_buy_at_support_is_good():
+    lv = t._weekly_fib_pivots((110.0, 100.0, 105.0))
+    loc = t._location(105.0 - 0.7 * 10, "bullish", lv)   # price at S70
+    assert loc["quality"] in ("good", "prime")
+    assert loc["ok"] is True
+
+
+def test_location_wrong_side_flagged():
+    """A sell setup with price BELOW the pivot (at support) is the wrong side."""
+    lv = t._weekly_fib_pivots((110.0, 100.0, 105.0))
+    loc = t._location(105.0 - 0.7 * 10, "bearish", lv)   # sell but at support
+    assert loc["quality"] == "wrongside"
+    assert loc["ok"] is False
+
+
+def test_location_near_pivot_is_poor():
+    lv = t._weekly_fib_pivots((110.0, 100.0, 105.0))
+    loc = t._location(105.2, "bearish", lv)              # basically on the pivot
+    assert loc["quality"] == "poor"
+    assert loc["ok"] is False
+
+
+def test_prev_week_hlc_no_lookahead():
+    """_prev_week_hlc must only see the fully-completed prior week."""
+    # build 3 weeks of daily bars; ask for pivots as of week-3 -> gets week-2 H/L/C
+    day = 86400
+    base = t._MONDAY_EPOCH + 100 * 7 * day    # some Monday
+    bars = []
+    for wk, (hi, lo, cl) in enumerate([(10, 5, 8), (20, 15, 18), (30, 25, 28)]):
+        for d in range(5):
+            ts = base + wk * 7 * day + d * day
+            bars.append({"ts_utc": ts, "high": hi, "low": lo, "close": cl})
+    as_of = base + 2 * 7 * day + 2 * day      # mid week-3
+    hlc = t._prev_week_hlc(bars, as_of)
+    assert hlc == (20, 15, 18)                # week-2, not week-3
+
+
 def test_atr_measures_true_range():
     """ATR of a series with a constant 10-wide range and no gaps is 10."""
     bars = [{"high": 100 + 10, "low": 100, "close": 105} for _ in range(20)]

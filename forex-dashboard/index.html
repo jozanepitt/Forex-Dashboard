@@ -828,6 +828,7 @@ td.mono{font-family:var(--font-mono)}
           <th>P2</th>
           <th>P3</th>
           <th>Divergence</th>
+          <th>Location</th>
           <th>TDI @ P3</th>
           <th>H4 Bias</th>
           <th>L1 (50)</th>
@@ -837,7 +838,7 @@ td.mono{font-family:var(--font-mono)}
           <th>Chart</th>
         </tr>
       </thead>
-      <tbody id="tdi123TableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="tdi123TableBody"><tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>TDI Cycle 123 (StrictlyCorrect / Inducement Cycles):</b> This is the "improvements on old BTMM" scanner. Where classic BTMM
@@ -850,6 +851,10 @@ td.mono{font-family:var(--font-mono)}
       <b>✗ none</b> = price fell short of point 1, so price and TDI are agreeing — a shallow-miss retest, which is valid geometry but earns no divergence points.
       <b>⚠ vs trend</b> = real divergence, but fired against a fully-stacked EMA cascade (1 pt only). Per Davit's <i>Pivot Trading with TDI</i> p.9:
       "when the market is in a strong trend in either direction, oscillators do not function well … any signs of divergence during a strong trend would be ambiguous at best."
+      (4) <b>Weekly-pivot Location</b> — Fibonacci pivots (R/S 38/61/78/100/138) projected from the prior week's range. A sell wants resistance (R-zones), a buy wants support
+      (S-zones): <b>★</b> R/S 100, <b>✓</b> R/S 61–78, <b>~</b> R/S 38, <b>✗ mid-pivot</b> / <b>✗ wrong side</b> = low probability. <i>Note:</i> a 30-day backtest found the
+      61–100 zone did <b>not</b> separate winners from losers on this data, so location is shown for context but is <b>not scored as an edge</b> — the only hard rule is that a
+      <b>wrong-side</b> setup (selling into support / buying into resistance) is capped to Grade C.
       Targets stay on the BTMM cascade: <b>L1 = 50 EMA</b>, <b>L2 = 200 EMA</b>, <b>L3 = 800 EMA</b> — when an EMA sits on the wrong side of price it's skipped, and if all three are invalid the row falls back to 1×/2×/3× measured-move projections (flagged "≈ measured move" in the table, never shown as if they were real EMA hits). Click <b>Chart</b> to see the 1/2/3 markers and divergence line overlaid on the H1 price + TDI subwindow.
     </div>
   </div>
@@ -4951,6 +4956,20 @@ function renderTdi123Table(data) {
          </span>`
       : '<span style="color:var(--text-muted)">—</span>';
 
+    // Weekly-pivot location (Davit): 61-100 zone = high probability.
+    const loc = p.location || {};
+    const locStyle = {
+      prime:     ['var(--green)',       '★ ' + (loc.zone || '')],
+      good:      ['var(--green)',       '✓ ' + (loc.zone || '')],
+      weak:      ['var(--yellow)',      '~ ' + (loc.zone || '') + ' (38)'],
+      extended:  ['var(--yellow)',      '↗ ' + (loc.zone || '')],
+      poor:      ['var(--text-muted)',  '✗ mid-pivot'],
+      wrongside: ['var(--red)',         '✗ wrong side'],
+      unknown:   ['var(--text-muted)',  '—'],
+    }[loc.quality || 'unknown'] || ['var(--text-muted)', '—'];
+    const locCell = `<span title="loc ratio ${loc.loc_ratio ?? '?'} of weekly range"
+         style="color:${locStyle[0]};font-weight:${loc.ok ? 600 : 500}">${locStyle[1]}</span>`;
+
     const priceCell = `<code>${_tdi123FmtPrice(p.current_price, sym)}</code>`;
 
     // "projected" = all 3 EMAs were on the wrong side of price, so L1/L2/L3
@@ -4971,6 +4990,7 @@ function renderTdi123Table(data) {
       <td><code>${_tdi123FmtPrice(p2.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p3.price, sym)}</code></td>
       <td>${divCell}</td>
+      <td>${locCell}</td>
       <td>${tdiCell}</td>
       <td>${htfLabel}</td>
       <td>${l1}</td>
@@ -4979,7 +4999,7 @@ function renderTdi123Table(data) {
       <td>${_tdi123GradeCell(p.grade)}${scoreBadge}</td>
       <td><button class="tdi123-detail-btn" data-tdi123-sym="${sym}">📈 View</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">No results.</td></tr>';
+  }).join('') || '<tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">No results.</td></tr>';
 
   tbody.querySelectorAll('button[data-tdi123-sym]').forEach(btn => {
     btn.addEventListener('click', () => openTdi123Chart(btn.dataset.tdi123Sym));
