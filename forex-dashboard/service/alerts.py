@@ -1156,7 +1156,9 @@ def _should_alert_tdi123(row: dict) -> bool:
     if grade == "B":
         div_present = row.get("divergence", {}).get("present", False)
         htf_aligned = row.get("htf_aligned", False)
-        rr = row.get("trade_plan", {}).get("rr1", 0)
+        # rr1 is None when the trade plan has no TP1 target (no valid EMA/leg
+        # target) — treat that as failing the R:R gate, not a crash.
+        rr = (row.get("trade_plan") or {}).get("rr1") or 0
         return div_present and htf_aligned and rr >= 1.0
 
     return False

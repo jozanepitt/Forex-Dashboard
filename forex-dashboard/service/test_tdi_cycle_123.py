@@ -16,6 +16,38 @@ deterministic and independent of any data provider.
 from __future__ import annotations
 
 import tdi_cycle_123 as t
+from alerts import _should_alert_tdi123
+
+
+# ──────────────────────────────────────────────────────────────────────
+# _should_alert_tdi123 — must not crash on a None R:R
+# ──────────────────────────────────────────────────────────────────────
+
+def test_grade_b_with_none_rr_does_not_crash():
+    """A Grade-B row whose trade plan has no TP1 (rr1=None) must return False,
+    not raise. Regression: `None >= 1.0` threw TypeError in the live alert path.
+    """
+    row = {
+        "grade": "B",
+        "divergence": {"present": True},
+        "htf_aligned": True,
+        "trade_plan": {"rr1": None},
+    }
+    assert _should_alert_tdi123(row) is False
+
+
+def test_grade_b_with_good_rr_alerts():
+    row = {
+        "grade": "B",
+        "divergence": {"present": True},
+        "htf_aligned": True,
+        "trade_plan": {"rr1": 1.5},
+    }
+    assert _should_alert_tdi123(row) is True
+
+
+def test_grade_a_always_alerts_even_without_plan():
+    assert _should_alert_tdi123({"grade": "A"}) is True
 
 
 def _pattern(direction, p1_price, p2_price, p3_price, p1_idx=10, p3_idx=30):
