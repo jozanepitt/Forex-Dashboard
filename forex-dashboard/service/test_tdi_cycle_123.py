@@ -111,6 +111,76 @@ def test_rsi_extreme_read_from_window_not_exact_bar():
 # _find_123_pattern — freshness
 # ──────────────────────────────────────────────────────────────────────
 
+def _swings_123(p1_price, p2_price, p3_price, base_idx=180):
+    """Build exactly one low-high-low or high-low-high swing triple so
+    _find_123_pattern evaluates only this pattern (no competing triples)."""
+    t1 = "low" if p1_price < p2_price else "high"
+    t2 = "high" if t1 == "low" else "low"
+    return [
+        {"type": t1, "idx": base_idx, "price": p1_price, "ts_utc": "p1"},
+        {"type": t2, "idx": base_idx + 5, "price": p2_price, "ts_utc": "p2"},
+        {"type": t1, "idx": base_idx + 10, "price": p3_price, "ts_utc": "p3"},
+    ]
+
+
+def _bars(n=200, price=1.0):
+    return [{"close": price, "high": price, "low": price, "ts_utc": "x"}] * n
+
+
+# ──────────────────────────────────────────────────────────────────────
+# _find_123_pattern — asymmetric geometry (reference: TDI 123 Doc2)
+# ──────────────────────────────────────────────────────────────────────
+
+def test_bearish_overshoot_from_reference_gbpjpy_accepted():
+    """GBP/JPY H1 (image 1): p1=217.30 p2=216.35 p3=217.90.
+
+    Point 3 overshoots point 1 by ~63% of leg 1 (a stop-hunt). The old
+    symmetric ±25% gate rejected this canonical example; the asymmetric gate
+    must accept it.
+    """
+    swings = _swings_123(217.30, 216.35, 217.90)
+    pat = t._find_123_pattern(swings, _bars(price=217.0), symbol="GBP/JPY")
+    assert pat is not None
+    assert pat["direction"] == "bearish"
+    assert pat["p3_kind"] == "overshoot"
+    assert pat["p3_overshoot_pct"] > 0.25   # would have failed the old gate
+
+
+def test_bearish_overshoot_from_reference_eurjpy_accepted():
+    """EUR/JPY H1 (image 6): p1=185.30 p2=184.75 p3=185.47 — ~31% overshoot."""
+    swings = _swings_123(185.30, 184.75, 185.47)
+    pat = t._find_123_pattern(swings, _bars(price=185.0), symbol="EUR/JPY")
+    assert pat is not None
+    assert pat["direction"] == "bearish"
+    assert pat["p3_kind"] == "overshoot"
+
+
+def test_bullish_overshoot_lower_low_accepted():
+    """Mirror of the bearish case: bullish p3 makes a lower low (stop hunt)."""
+    swings = _swings_123(1.6000, 1.6050, 1.5975)   # p3 30% below p1
+    pat = t._find_123_pattern(swings, _bars(price=1.60), symbol="EUR/USD")
+    assert pat is not None
+    assert pat["direction"] == "bullish"
+    assert pat["p3_kind"] == "overshoot"
+
+
+def test_shortfall_beyond_tolerance_rejected():
+    """A p3 that falls far SHORT of p1 (not a real retest) is still rejected."""
+    # bearish: p1=1.6100 high, p2=1.6000 low, leg1=0.0100; p3 only back to
+    # 1.6050 = 50% short of p1, beyond the 25% shortfall bound.
+    swings = _swings_123(1.6100, 1.6000, 1.6050)
+    pat = t._find_123_pattern(swings, _bars(price=1.605), symbol="EUR/USD")
+    assert pat is None
+
+
+def test_overshoot_beyond_generous_bound_rejected():
+    """A p3 that overshoots p1 by more than the full generous bound is out."""
+    # bearish: leg1=0.0100, p3 = p1 + 0.0080 = 80% overshoot (> 65%)
+    swings = _swings_123(1.6100, 1.6000, 1.6180)
+    pat = t._find_123_pattern(swings, _bars(price=1.618), symbol="EUR/USD")
+    assert pat is None
+
+
 def test_returns_freshest_pattern_not_the_oldest():
     """Two valid 123s in the window -> the recent one wins.
 

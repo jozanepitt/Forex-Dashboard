@@ -60,9 +60,15 @@ TDI_OS_STRICT = 32.0      # RSI oversold
 SWING_LEFT = 2
 SWING_RIGHT = 2
 
-# 123 geometry (in pips relative to point-1 → point-2 range)
-# Point 3 must land within ±POINT3_TOLERANCE of point 1 for a valid retest.
-POINT3_TOLERANCE_PCT = 0.25   # 25 % of the 1→2 leg
+# 123 geometry — point 3's position relative to point 1, as a fraction of the
+# 1→2 leg. The tolerance is ASYMMETRIC, matching the reference charts (TDI 123
+# Doc2): the ideal setup is a stop-hunt where point 3 pushes a marginal-to-
+# moderate new extreme BEYOND point 1 (liquidity grab) while the TDI diverges.
+# Measured on the H1 examples, that overshoot runs ~15–65 % of leg 1
+# (EUR/JPY ≈31 %, GBP/JPY ≈63 %). A point 3 that falls SHORT of point 1 is a
+# shallow-miss retest and must stay much closer to count.
+POINT3_OVERSHOOT_PCT = 0.65   # p3 beyond p1 (stop hunt) — generous
+POINT3_SHORTFALL_PCT = 0.25   # p3 short of p1 (shallow miss) — tight
 # Minimum size of the 1→2 leg, in pips — filters out noise-sized "swings"
 # that would otherwise qualify as a valid pattern on a quiet H1 candle run.
 MIN_LEG1_PIPS = 8.0
@@ -175,15 +181,26 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
                 if leg1_range < MIN_LEG1_PIPS * pip:
                     continue
 
-                # Geometry: point 3 must be within tolerance of point 1
-                # (equal, marginal break, or shallow miss). This is the only
-                # geometry gate — p3 landing anywhere within ±tolerance of p1
-                # on either side is accepted by design (a marginal break past
-                # p1 still counts as a valid retest).
-                tolerance = POINT3_TOLERANCE_PCT * leg1_range
-                dist_p1_p3 = abs(p3["price"] - p1["price"])
-                if dist_p1_p3 > tolerance:
-                    continue
+                # Geometry: point 3 relative to point 1, ASYMMETRIC by design.
+                # `overshoot` > 0 means p3 pushed a new extreme BEYOND p1 (the
+                # stop-hunt / liquidity grab the reference charts favour); < 0
+                # means p3 fell SHORT of p1 (a shallow-miss retest). Overshoots
+                # get a generous bound; shortfalls must stay close.
+                if is_bullish:
+                    # bullish extreme is a LOW: beyond = lower = p3 < p1
+                    overshoot = p1["price"] - p3["price"]
+                else:
+                    # bearish extreme is a HIGH: beyond = higher = p3 > p1
+                    overshoot = p3["price"] - p1["price"]
+
+                if overshoot >= 0:
+                    if overshoot > POINT3_OVERSHOOT_PCT * leg1_range:
+                        continue
+                    p3_kind = "overshoot"
+                else:
+                    if -overshoot > POINT3_SHORTFALL_PCT * leg1_range:
+                        continue
+                    p3_kind = "shortfall"
 
                 candidates.append({
                     "direction": "bullish" if is_bullish else "bearish",
@@ -192,7 +209,8 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
                     "p3": p3,
                     "leg1_range": leg1_range,
                     "leg1_range_pips": leg1_range / pip,
-                    "tolerance_pips": tolerance / pip,
+                    "p3_kind": p3_kind,
+                    "p3_overshoot_pct": round(overshoot / leg1_range, 3),
                 })
 
     if not candidates:
