@@ -100,6 +100,10 @@ TDI123_ADR_FILTER = os.environ.get("TDI123_ADR_FILTER", "false").lower() in ("1"
 # feed is current-week), so it can't be backtested retrospectively.
 TDI123_NEWS_FILTER = os.environ.get("TDI123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
+# JOURNAL (default ON): log every fired alert to the trades table and auto-resolve
+# its outcome (win at TP1 / loss at SL) from cached candles each refresh, so the
+# dashboard builds a REAL track record instead of relying on backtests.
+TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # EMS gate for M15 SNR signals — based on "The Alchemist EMS Trinity" + MSNR
 # ALCHEMIST notes. When True, an M15 SNR alert only fires if the higher

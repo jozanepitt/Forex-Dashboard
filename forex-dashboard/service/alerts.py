@@ -15,7 +15,7 @@ from config import (
     CRT_5AM_GRADE_A_ONLY, ALERTS_DISTANCE_FILTER_PIPS, ALERTS_TREND_FILTER_ENABLED,
     SNR_M15_EMS_GATE_ENABLED, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
-    TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN,
+    TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
 )
 from providers import forexfactory
 
@@ -1338,3 +1338,27 @@ def alert_tdi123_setup(pair: str, row: dict):
         _mark_sent(pair, rule)
         log.info("TDI123 alert sent: %s %s grade=%s score=%d",
                  pair, setup, grade, row.get("score", 0))
+        # Journal the fired signal so its real outcome can be tracked later.
+        if TDI123_JOURNAL_ENABLED:
+            try:
+                import cache
+                loc = row.get("location") or {}
+                dv = row.get("divergence") or {}
+                gates = {
+                    "grade": grade, "score": row.get("score"),
+                    "session": row.get("session"),
+                    "in_active_session": row.get("in_active_session"),
+                    "divergence": ("strong" if dv.get("strong")
+                                   else "equal" if dv.get("present") else "none"),
+                    "location": loc.get("zone"),
+                    "adr_consumed_pct": row.get("adr_consumed_pct"),
+                    "tp1_reachable": row.get("tp1_reachable"),
+                    "htf_aligned": row.get("htf_aligned"),
+                }
+                cache.open_trade(
+                    pair=pair, direction=setup, entry=entry, sl=sl, tp1=tp1, tp2=tp2,
+                    setup="TDI123", signal=rule, signal_score=row.get("score"),
+                    gates_json=json.dumps(gates), notes=(row.get("notes") or "")[:300],
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("TDI123 journal open failed for %s: %s", pair, e)

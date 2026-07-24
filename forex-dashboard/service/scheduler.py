@@ -315,6 +315,16 @@ def _run_tdi123_alerts():
         except Exception as e:
             log.debug("TDI123 alert eval failed for %s: %s", row.get("symbol"), e)
 
+    # Resolve previously-journaled signals against the candles that have printed
+    # since, so the dashboard accumulates a REAL win/loss record over time.
+    try:
+        from config import TDI123_JOURNAL_ENABLED
+        if TDI123_JOURNAL_ENABLED:
+            import trade_tracker
+            trade_tracker.resolve_open_trades()
+    except Exception as e:  # noqa: BLE001
+        log.debug("TDI123 journal resolve failed: %s", e)
+
 
 _stall_warned = False
 
