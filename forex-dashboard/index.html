@@ -470,9 +470,13 @@ td.mono{font-family:var(--font-mono)}
 <!-- ── Journal View ─────────────────────────────────────────────────── -->
 <div id="journalView">
   <div class="journal-header">
-    <h2 style="margin:0;font-size:1rem;color:var(--text-primary)">📒 Trade Journal</h2>
+    <div>
+      <h2 style="margin:0;font-size:1rem;color:var(--text-primary)">📒 Trade Journal</h2>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px">Auto-tracked record of fired signals — win at TP1 / loss at SL, resolved from live candles. This is the real evidence; let it accumulate before trusting it.</div>
+    </div>
     <div style="display:flex;gap:8px;align-items:center">
       <select id="journalSetupFilter" style="background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:5px 8px;font-size:.75rem">
+        <option value="TDI123" selected>TDI 123 (auto)</option>
         <option value="">All Setups</option>
         <option value="safety">Safety Trade</option>
         <option value="trade22">22 Trade</option>
@@ -491,14 +495,19 @@ td.mono{font-family:var(--font-mono)}
     <div class="jstat"><div class="jstat-label">Avg Win</div><div class="jstat-value" id="jAvgWin" style="color:var(--green)">—</div></div>
     <div class="jstat"><div class="jstat-label">Avg Loss</div><div class="jstat-value" id="jAvgLoss" style="color:var(--red)">—</div></div>
   </div>
+  <!-- By pair class — the key finding: indices vs FX behave very differently -->
+  <div id="journalByClass" style="display:none;margin-bottom:16px">
+    <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">By instrument class (closed trades) — backtests showed indices strongly outperform FX; watch whether the live record agrees:</div>
+    <div id="journalByClassGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px"></div>
+  </div>
   <div class="journal-table-wrap">
     <table class="journal-table">
       <thead><tr>
-        <th>#</th><th>Pair</th><th>Dir</th><th>Setup</th>
+        <th>#</th><th>Pair</th><th>Dir</th><th>Context</th>
         <th>Entry</th><th>SL</th><th>TP1</th><th>Exit</th>
         <th>P&L (pips)</th><th>Result</th><th>Opened</th><th>Action</th>
       </tr></thead>
-      <tbody id="journalTableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">No trades yet — log your first trade from a pair card.</td></tr></tbody>
+      <tbody id="journalTableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">No trades yet — signals will appear here as they fire and resolve.</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -4617,31 +4626,88 @@ function renderJournalStats(s) {
   if (wrEl && s.win_rate != null) wrEl.style.color = s.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
 }
 
+// Format a price by magnitude (indices/JPY need fewer decimals than FX).
+function _jFmt(v) {
+  if (v == null) return '—';
+  return Math.abs(v) >= 100 ? v.toFixed(2) : v.toFixed(5);
+}
+// A journaled trade's direction may be BUY/SELL (auto) or bullish/bearish (manual).
+function _jIsLong(dir) { return /buy|bull|long/i.test(dir || ''); }
+// Classify an instrument the same way the backtest did.
+function _jClass(pair) {
+  if (pair === 'XAU/USD' || pair === 'XAG/USD') return 'metal';
+  if (['DE30','US30','USTEC','NAS100','GER40'].includes(pair)) return 'index';
+  if (['EUR/USD','GBP/USD','USD/JPY','USD/CHF','USD/CAD','AUD/USD','NZD/USD'].includes(pair)) return 'fx-major';
+  return 'fx-cross';
+}
+
+function renderJournalByClass(trades) {
+  const wrap = document.getElementById('journalByClass');
+  const grid = document.getElementById('journalByClassGrid');
+  if (!wrap || !grid) return;
+  const closed = trades.filter(t => t.result && t.result !== 'open');
+  if (!closed.length) { wrap.style.display = 'none'; return; }
+  const groups = {};
+  closed.forEach(t => {
+    const c = _jClass(t.pair);
+    (groups[c] = groups[c] || []).push(t);
+  });
+  const order = ['index','fx-major','fx-cross','metal'];
+  grid.innerHTML = order.filter(c => groups[c]).map(c => {
+    const rs = groups[c];
+    const wins = rs.filter(t => t.result === 'win').length;
+    const wr = Math.round(wins / rs.length * 100);
+    const pl = rs.reduce((a, t) => a + (t.pl_pips || 0), 0);
+    const col = pl > 0 ? 'var(--green)' : pl < 0 ? 'var(--red)' : 'var(--text-secondary)';
+    return `<div class="jstat">
+      <div class="jstat-label">${c} · ${rs.length} trades</div>
+      <div class="jstat-value" style="color:${col};font-size:1rem">${wr}% win</div>
+      <div style="font-size:.68rem;color:${col}">${pl >= 0 ? '+' : ''}${pl.toFixed(0)} pips</div>
+    </div>`;
+  }).join('');
+  wrap.style.display = 'block';
+}
+
 function renderJournalTable(trades) {
   const tbody = document.getElementById('journalTableBody');
+  renderJournalByClass(trades);
   if (!trades.length) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">No trades yet — log your first trade from a pair card.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">No trades yet — signals will appear here as they fire and resolve.</td></tr>';
     return;
   }
-  const SETUP_LABELS = { safety: 'Safety', trade22: '22 Trade', bounce5050: '50/50', threeDrive: '3-Drive', manual: 'Manual' };
+  const SETUP_LABELS = { safety: 'Safety', trade22: '22 Trade', bounce5050: '50/50', threeDrive: '3-Drive', manual: 'Manual', TDI123: 'TDI 123' };
   tbody.innerHTML = trades.map((t, i) => {
     const dt = new Date(t.ts_open * 1000).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' });
+    const result = t.result || 'open';
     const pl = t.pl_pips != null ? `<span style="color:${t.pl_pips >= 0 ? 'var(--green)' : 'var(--red)'}">` +
       (t.pl_pips >= 0 ? '+' : '') + t.pl_pips + '</span>' : '—';
-    const actionBtn = t.result === 'open'
+    const isLong = _jIsLong(t.direction);
+    // Context from the gates snapshot captured when the signal fired.
+    let ctx = SETUP_LABELS[t.setup] || t.setup || '—';
+    try {
+      const g = t.gates_json ? JSON.parse(t.gates_json) : null;
+      if (g) {
+        const bits = [];
+        if (g.grade) bits.push('g' + g.grade);
+        if (g.session) bits.push(g.session);
+        if (g.divergence && g.divergence !== 'none') bits.push('div:' + g.divergence);
+        ctx = `<span title="${(t.setup || '') + ' — ' + bits.join(' · ')}">${bits.join(' · ') || ctx}</span>`;
+      }
+    } catch (e) { /* leave ctx as the setup label */ }
+    const actionBtn = result === 'open'
       ? `<button class="btn-close-trade" onclick="openCloseTradeModal(${t.id})">Close</button>`
       : '';
     return `<tr>
       <td style="color:var(--text-muted)">${trades.length - i}</td>
       <td style="font-weight:700">${t.pair}</td>
-      <td style="color:${t.direction === 'bullish' ? 'var(--green)' : 'var(--red)'}">${t.direction === 'bullish' ? '↑ Long' : '↓ Short'}</td>
-      <td><span style="font-size:.7rem;color:var(--text-secondary)">${SETUP_LABELS[t.setup] || t.setup || '—'}</span></td>
-      <td class="mono">${t.entry?.toFixed(5) ?? '—'}</td>
-      <td class="mono" style="color:var(--red)">${t.sl?.toFixed(5) ?? '—'}</td>
-      <td class="mono" style="color:var(--green)">${t.tp1?.toFixed(5) ?? '—'}</td>
-      <td class="mono">${t.exit_price?.toFixed(5) ?? '—'}</td>
+      <td style="color:${isLong ? 'var(--green)' : 'var(--red)'}">${isLong ? '↑ Long' : '↓ Short'}</td>
+      <td style="font-size:.7rem;color:var(--text-secondary)">${ctx}</td>
+      <td class="mono">${_jFmt(t.entry)}</td>
+      <td class="mono" style="color:var(--red)">${_jFmt(t.sl)}</td>
+      <td class="mono" style="color:var(--green)">${_jFmt(t.tp1)}</td>
+      <td class="mono">${_jFmt(t.exit_price)}</td>
       <td class="mono">${pl}</td>
-      <td><span class="jtag ${t.result}">${t.result.toUpperCase()}</span></td>
+      <td><span class="jtag ${result}">${result.toUpperCase()}</span></td>
       <td style="color:var(--text-muted);font-size:.7rem">${dt}</td>
       <td>${actionBtn}</td>
     </tr>`;
