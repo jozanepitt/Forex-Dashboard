@@ -72,6 +72,43 @@ KEY_TIME_WINDOWS_5AM = [
 M15_PER_H4 = 16
 
 
+def _crt_setup_from_sweep(candle: Optional[dict], crt_high, crt_low) -> str:
+    """CRT setup direction from a real range SWEEP + close back inside.
+
+    The defining CRT event is a liquidity grab: the setup candle takes out one
+    side of the 5PM/9PM range then closes back INSIDE. Direction follows the side
+    swept — swept LOW (reclaimed) -> BUY toward the high; swept HIGH -> SELL.
+    Requires a clean single-side sweep; no sweep, or both sides taken, -> NO-TRADE.
+
+    This replaces deriving BUY/SELL from `ohlc_pattern`, which on a still-forming
+    candle degenerated into "which way has price drifted so far" and could flip
+    as the candle completed.
+    """
+    if not candle:
+        return "NO-TRADE"
+    swept_low = crt_low is not None and candle["low"] < crt_low and candle["close"] > crt_low
+    swept_high = crt_high is not None and candle["high"] > crt_high and candle["close"] < crt_high
+    if swept_low and not swept_high:
+        return "BUY"
+    if swept_high and not swept_low:
+        return "SELL"
+    return "NO-TRADE"
+
+
+def _smt_confluence_score(setup: str, smt: str) -> int:
+    """SMT confluence points — credited ONLY when the divergence AGREES with the
+    trade direction (a BUY must not score for bearish divergence)."""
+    if setup == "BUY" and smt == "BULLISH-DIVERGENCE":
+        return 2
+    if setup == "SELL" and smt == "BEARISH-DIVERGENCE":
+        return 2
+    if setup == "BUY" and smt == "BULLISH-DIVERGENCE-PARTNER":
+        return 1
+    if setup == "SELL" and smt == "BEARISH-DIVERGENCE-PARTNER":
+        return 1
+    return 0
+
+
 def session_anchors_now(now_ny: Optional[datetime] = None) -> dict:
     if now_ny is None:
         now_ny = datetime.now(NY)
@@ -200,12 +237,14 @@ def analyze_pair(
             "open": c["open"], "high": c["high"], "low": c["low"], "close": c["close"],
             "direction": "bullish" if c["close"] > c["open"] else "bearish" if c["close"] < c["open"] else "doji",
         }
-        ohlc = ohlc_pattern(b_1am)
-        if ohlc == "OLHC":
-            setup = "BUY"
+        ohlc = ohlc_pattern(b_1am)   # kept for display only
+        # Setup REQUIRES a real range sweep + close back inside (not the OHLC
+        # sub-candle order, which degenerates to drift-direction on a forming
+        # candle). Direction comes from the side swept.
+        setup = _crt_setup_from_sweep(b_1am, crt_high, crt_low)
+        if setup == "BUY":
             entry_zone = {"side": "below_open", "level": c["open"]}
-        elif ohlc == "OHLC":
-            setup = "SELL"
+        elif setup == "SELL":
             entry_zone = {"side": "above_open", "level": c["open"]}
 
     # SMT
@@ -262,12 +301,10 @@ def analyze_pair(
     if setup == "SELL" and crt_high is not None and b_1am and b_1am["high"] > crt_high:
         score += 1
         notes.append("Swept CRT high")
-    if smt in ("BULLISH-DIVERGENCE", "BEARISH-DIVERGENCE"):
-        score += 2
-        notes.append(f"SMT {smt}")
-    elif smt.endswith("-PARTNER"):
-        score += 1
-        notes.append(f"SMT (partner-led) {smt}")
+    smt_pts = _smt_confluence_score(setup, smt)
+    if smt_pts:
+        score += smt_pts
+        notes.append(f"SMT {smt}" if smt_pts == 2 else f"SMT (partner-led) {smt}")
     if key_time_status == "ACTIVE":
         score += 2
         notes.append(f"In key-time: {active_kt_window}")
@@ -480,12 +517,12 @@ def analyze_pair_5am(
             "close":     c["close"],
             "direction": "bullish" if c["close"] > c["open"] else "bearish" if c["close"] < c["open"] else "doji",
         }
-        ohlc = ohlc_pattern(b_5am)
-        if ohlc == "OLHC":
-            setup      = "BUY"
+        ohlc = ohlc_pattern(b_5am)   # kept for display only
+        # Setup REQUIRES a real range sweep + close back inside (see 1AM path).
+        setup = _crt_setup_from_sweep(b_5am, crt_high, crt_low)
+        if setup == "BUY":
             entry_zone = {"side": "below_open", "level": c["open"]}
-        elif ohlc == "OHLC":
-            setup      = "SELL"
+        elif setup == "SELL":
             entry_zone = {"side": "above_open", "level": c["open"]}
 
     # SMT — 5AM strategy: multi-session divergence
@@ -547,12 +584,10 @@ def analyze_pair_5am(
     if setup == "SELL" and crt_high is not None and b_5am and b_5am["high"] > crt_high:
         score += 1
         notes.append("5AM swept CRT high")
-    if smt in ("BULLISH-DIVERGENCE", "BEARISH-DIVERGENCE"):
-        score += 2
-        notes.append(f"SMT {smt}")
-    elif smt.endswith("-PARTNER"):
-        score += 1
-        notes.append(f"SMT (partner-led) {smt}")
+    smt_pts = _smt_confluence_score(setup, smt)
+    if smt_pts:
+        score += smt_pts
+        notes.append(f"SMT {smt}" if smt_pts == 2 else f"SMT (partner-led) {smt}")
     if key_time_status == "ACTIVE":
         score += 2
         notes.append(f"In key-time: {active_kt_window}")
