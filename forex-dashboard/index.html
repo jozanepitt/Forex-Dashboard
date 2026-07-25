@@ -1362,12 +1362,21 @@ function detectSharkFin(closes, tdi) {
 
   const last = rsi.length - 1;
 
+  // fastArr (SMA-2) and slowArr (SMA-7) have DIFFERENT lengths — the fast array
+  // is ~5 elements longer. Their LAST elements align to the same (latest) bar,
+  // so the signal index for a given rsi index i is i-off. Reading signal[i]
+  // directly compared bars ~5 apart and left signal[i] undefined near the
+  // current bar, so the cross-back that defines a Shark Fin was never detected.
+  const off = rsi.length - signal.length;
+  const sig = (i) => { const j = i - off; return (j >= 0 && j < signal.length) ? signal[j] : undefined; };
+
   // Shark Fin Short: RSI spiked above upper band, then crossed back below signal line
   let wasAbove = false;
   let crossDown = false;
   for (let i = Math.max(0, last - 10); i < last; i++) {
     if (rsi[i] > upper) wasAbove = true;
-    if (wasAbove && rsi[i] < signal[i] && rsi[i+1] >= signal[i+1]) crossDown = true;
+    const s0 = sig(i), s1 = sig(i + 1);
+    if (wasAbove && s0 !== undefined && s1 !== undefined && rsi[i] < s0 && rsi[i+1] >= s1) crossDown = true;
   }
 
   // Shark Fin Long: RSI spiked below lower band, then crossed back above signal line
@@ -1375,7 +1384,8 @@ function detectSharkFin(closes, tdi) {
   let crossUp = false;
   for (let i = Math.max(0, last - 10); i < last; i++) {
     if (rsi[i] < lower) wasBelow = true;
-    if (wasBelow && rsi[i] > signal[i] && rsi[i+1] <= signal[i+1]) crossUp = true;
+    const s0 = sig(i), s1 = sig(i + 1);
+    if (wasBelow && s0 !== undefined && s1 !== undefined && rsi[i] > s0 && rsi[i+1] <= s1) crossUp = true;
   }
 
   if (crossDown) {

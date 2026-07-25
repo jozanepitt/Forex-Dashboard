@@ -11,9 +11,19 @@ import instruments
 # ── EMA ───────────────────────────────────────────────────────────────────────
 
 def calc_ema(closes: list[float], period: int) -> list[float]:
-    if len(closes) < period:
-        return [closes[-1]] * len(closes)
+    if not closes:
+        return []
     k = 2.0 / (period + 1)
+    if len(closes) < period:
+        # Fewer bars than the period: seed the recursion at the first close and
+        # smooth forward. Must NOT flat-line at closes[-1] — doing so made the
+        # 800-EMA exactly equal the current price, so `price > e800` was always
+        # False and every setup was forced BEARISH whenever <800 bars were
+        # cached (with the confidence bug, that zeroed out A+ alerting).
+        out = [closes[0]]
+        for v in closes[1:]:
+            out.append(v * k + out[-1] * (1 - k))
+        return out
     out = [sum(closes[:period]) / period]
     for v in closes[period:]:
         out.append(v * k + out[-1] * (1 - k))
@@ -23,6 +33,35 @@ def calc_ema(closes: list[float], period: int) -> list[float]:
 
 def ema_last(closes: list[float], period: int) -> float:
     return calc_ema(closes, period)[-1]
+
+
+# ── BTMM confidence (directional factors only) ────────────────────────────────
+
+def _btmm_direction_factors(stack: dict, tdi: dict, setup_bullish: bool,
+                            mw: dict, tdi_div: dict) -> list[int]:
+    """Five DIRECTIONAL BTMM votes, each -1 / 0 / +1.
+
+    Deliberately excludes ADR consumption, AMD phase and kill-zone: those are
+    timing/quality gates (applied elsewhere) and are NOT bull/bear signals.
+    Including them — especially kz, which could only ever vote bullish — made
+    the confidence count structurally biased toward buys.
+    """
+    ema_f = 1 if stack.get("score", 0) >= 2 else (-1 if stack.get("score", 0) <= -2 else 0)
+    tdi_f = 1 if tdi.get("bullish") else (-1 if tdi.get("bearish") else 0)
+    bias_f = 1 if setup_bullish else -1                       # price vs 800 EMA
+    mw_f = 1 if (mw.get("detected") and mw.get("pattern") == "W") else \
+           (-1 if (mw.get("detected") and mw.get("pattern") == "M") else 0)
+    div_f = 1 if (tdi_div.get("detected") and tdi_div.get("direction") == "bullish") else \
+            (-1 if (tdi_div.get("detected") and tdi_div.get("direction") == "bearish") else 0)
+    return [ema_f, tdi_f, bias_f, mw_f, div_f]
+
+
+def _classify_confidence(bullish_count: int, bearish_count: int) -> str:
+    if bullish_count >= 4 or bearish_count >= 4:
+        return "high"
+    if bullish_count >= 2 or bearish_count >= 2:
+        return "medium"
+    return "low"
 
 
 def _sma(values: list[float], period: int) -> list[float]:
@@ -427,25 +466,54 @@ def detect_straightaway(bars: list[dict], lookback: int = 6, min_run: int = 3) -
 # ── HOD / LOD proximity ───────────────────────────────────────────────────────
 
 def detect_hod_lod(bars: list[dict], threshold_pips: int = 15,
-                   symbol: Optional[str] = None) -> dict:
+                   symbol: Optional[str] = None, away_pips: int = 20) -> dict:
     """
-    Detect proximity to the High of Day or Low of Day.
-    HOD/LOD breaks in Distribution phase are BTMM continuation signals.
+    Detect a valid RETEST of the High/Low of Day (a BTMM sell/buy location).
+
+    Two corrections over the naive version:
+      * The day is the current UTC trading day, not a rolling 96-bar window
+        (which straddled two sessions and overstated ADR/day-range).
+      * `at_hod`/`at_lod` require a RETEST: price must have pulled away from the
+        extreme by `away_pips` earlier in the day and now returned to it. A fresh
+        breakout push straight to a new HOD/LOD is the Manipulation trap
+        (doctrine §2/§15: "do NOT trade the breakout"), not a setup — proximity
+        alone must not qualify.
     """
     if len(bars) < 10:
         return {"at_hod": False, "at_lod": False, "hod": 0.0, "lod": 0.0,
+                "retest_hod": False, "retest_lod": False,
                 "pips_from_hod": 999, "pips_from_lod": 999}
 
-    day = bars[-96:] if len(bars) >= 96 else bars
-    hod = max(b["high"] for b in day)
-    lod = min(b["low"]  for b in day)
+    from datetime import datetime, timezone
+    last_day = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc).date()
+    day = [b for b in bars
+           if datetime.fromtimestamp(b["ts_utc"], tz=timezone.utc).date() == last_day]
+    if len(day) < 3:                       # too early in the day — fall back
+        day = bars[-96:] if len(bars) >= 96 else bars
+
+    hod_idx = max(range(len(day)), key=lambda i: day[i]["high"])
+    lod_idx = min(range(len(day)), key=lambda i: day[i]["low"])
+    hod = day[hod_idx]["high"]
+    lod = day[lod_idx]["low"]
     cur = bars[-1]["close"]
     pip = instruments.pip_size(symbol, cur)
     thr = threshold_pips * pip
+    away = away_pips * pip
+
+    # A retest requires price to have pulled at least `away` off the extreme
+    # AFTER it was set, then returned. Checking bars only after the HOD/LOD bar
+    # is what distinguishes a genuine retest from a fresh breakout push (in a
+    # straight run-up, earlier bars are trivially far below the new HOD).
+    after_hod = day[hod_idx + 1:]
+    after_lod = day[lod_idx + 1:]
+    pulled_from_hod = any((hod - x["low"]) >= away for x in after_hod)
+    pulled_from_lod = any((x["high"] - lod) >= away for x in after_lod)
 
     return {
-        "at_hod":        abs(cur - hod) <= thr,
-        "at_lod":        abs(cur - lod) <= thr,
+        "at_hod":        abs(cur - hod) <= thr and pulled_from_hod,
+        "at_lod":        abs(cur - lod) <= thr and pulled_from_lod,
+        "retest_hod":    pulled_from_hod,
+        "retest_lod":    pulled_from_lod,
         "hod":           hod,
         "lod":           lod,
         "pips_from_hod": round(abs(cur - hod) / pip),
@@ -784,19 +852,16 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
 
     cross_513 = detect_513_cross(closes)
 
-    # ── Confidence classification (mirrors frontend logic) ───────────────────
-    # 5 BTMM factors: EMA stack, TDI, ADR headroom, AMD phase, Kill zone
-    # Count how many align bullish vs bearish. 4+ aligned = High confidence.
-    ema_factor  = 1 if stack["score"] >= 2 else (-1 if stack["score"] <= -2 else 0)
-    tdi_factor  = 1 if tdi["bullish"] else (-1 if tdi["bearish"] else 0)
-    adr_factor  = 1 if adr_c < 50 else (-1 if adr_c > 80 else 0)
-    amd_factor  = 1 if amd["phase"] in ("Manipulation",) else (-1 if amd["phase"] == "Distribution" else 0)
-    kz_factor   = 1 if kz else 0
-    btmm_factors = [ema_factor, tdi_factor, adr_factor, amd_factor, kz_factor]
+    # ── Confidence classification ────────────────────────────────────────────
+    # Count how many DIRECTIONAL signals agree. Only genuinely directional
+    # factors vote — ADR consumption, AMD phase and kill-zone are timing/quality
+    # gates, not bull/bear signals, and previously biased the count: kz_factor
+    # could only ever vote bullish, so a healthy bearish setup could never reach
+    # "high" confidence (it needed ADR 80-100% consumed — the worst entry).
+    btmm_factors = _btmm_direction_factors(stack, tdi, setup_bullish, mw, tdi_div)
     bullish_count = sum(1 for f in btmm_factors if f > 0)
     bearish_count = sum(1 for f in btmm_factors if f < 0)
-    confidence = "high" if (bullish_count >= 4 or bearish_count >= 4) else \
-                 "medium" if (bullish_count >= 2 or bearish_count >= 2) else "low"
+    confidence = _classify_confidence(bullish_count, bearish_count)
 
     return {
         "signal":          signal,
