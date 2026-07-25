@@ -226,19 +226,35 @@ def _mark_levels(daily_candles: list[dict], lookback: int = 60,
 
 
 def _deduplicate_levels(levels: list[dict], tolerance: float) -> list[dict]:
-    """Merge levels within tolerance — keep the freshest / most recent."""
+    """Merge near-equal levels of the SAME TYPE — keep the freshest.
+
+    Support and resistance are deduped separately: a support and a resistance
+    near the same price are different structures (e.g. a polarity RBS/SBR flip
+    level right where price is deciding), and merging across type by recency
+    silently erased one of them — deleting a valid zone or opposing roadblock.
+    """
     if not levels:
         return []
-    levels.sort(key=lambda l: l["price"])
-    deduped = [levels[0]]
-    for lvl in levels[1:]:
-        if abs(lvl["price"] - deduped[-1]["price"]) < tolerance:
-            # Keep the more recent one
-            if lvl["formed_idx"] > deduped[-1]["formed_idx"]:
-                deduped[-1] = lvl
-        else:
-            deduped.append(lvl)
-    return deduped
+
+    def _dedupe_group(group: list[dict]) -> list[dict]:
+        group = sorted(group, key=lambda l: l["price"])
+        out = [group[0]]
+        for lvl in group[1:]:
+            if abs(lvl["price"] - out[-1]["price"]) < tolerance:
+                if lvl["formed_idx"] > out[-1]["formed_idx"]:
+                    out[-1] = lvl
+            else:
+                out.append(lvl)
+        return out
+
+    result: list[dict] = []
+    for typ in ("support", "resistance"):
+        grp = [l for l in levels if l.get("type") == typ]
+        if grp:
+            result += _dedupe_group(grp)
+    # preserve any levels with an unexpected/None type rather than dropping them
+    result += [l for l in levels if l.get("type") not in ("support", "resistance")]
+    return result
 
 
 # ──────────────────────────────────────────────────────────────────────────────

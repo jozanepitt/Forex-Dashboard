@@ -264,7 +264,11 @@ def _passes_quality_filters(pair: str, direction: str, entry_price: float) -> tu
                     if dist_pips > ALERTS_DISTANCE_FILTER_PIPS:
                         return (False, f"distance {dist_pips:.0f} pips > {ALERTS_DISTANCE_FILTER_PIPS:.0f} (stale)")
         except Exception as e:
-            log.debug("distance filter skipped for %s: %s", pair, e)
+            # FAIL CLOSED: this is a loss-avoidance gate (SNR is a reversal
+            # strategy — with-trend/stale signals lose). If we cannot verify the
+            # signal is safe, suppress it rather than fire unchecked.
+            log.warning("SNR distance filter unavailable for %s (failing closed): %s", pair, e)
+            return (False, "distance filter unavailable")
 
     # --- H1-trend gate -----------------------------------------------------
     if ALERTS_TREND_FILTER_ENABLED:
@@ -272,10 +276,12 @@ def _passes_quality_filters(pair: str, direction: str, entry_price: float) -> tu
             h1 = cache.read_candles(pair, "1h", limit=30)
             if len(h1) >= 20:
                 closes = [b["close"] for b in h1]
-                # EMA20 (over the last 20 H1 bars)
+                # EMA20 (over the last 20 H1 bars). Seed at closes[0] then start
+                # the recursion at closes[1:] — iterating the full list re-applied
+                # closes[0] twice, skewing the trend classification slightly.
                 k = 2 / 21
                 ema = closes[0]
-                for c in closes:
+                for c in closes[1:]:
                     ema = c * k + ema * (1 - k)
                 last = closes[-1]
                 diff_pct = (last - ema) / ema * 100 if ema else 0
@@ -290,7 +296,10 @@ def _passes_quality_filters(pair: str, direction: str, entry_price: float) -> tu
                 if h1_trend == "bearish" and direction_l in ("sell", "bearish"):
                     return (False, "with H1 bearish trend (counter-trend only)")
         except Exception as e:
-            log.debug("trend filter skipped for %s: %s", pair, e)
+            # FAIL CLOSED (see distance gate) — don't fire a reversal signal we
+            # couldn't confirm is counter-trend.
+            log.warning("SNR trend filter unavailable for %s (failing closed): %s", pair, e)
+            return (False, "trend filter unavailable")
 
     return (True, "")
 
@@ -952,8 +961,13 @@ def alert_snr_m15_setup(pair: str, row: dict, h4_row: Optional[dict] = None,
 
     # EMS gate: HTF agreement + liquidity sweep + market structure shift.
     # Turns M15 into a precision refinement of the H4 bias instead of a
-    # standalone (noisy) signal. Skipped gracefully if context is unavailable.
-    if SNR_M15_EMS_GATE_ENABLED and m15_candles:
+    # standalone (noisy) signal. FAIL CLOSED when context is missing — skipping
+    # the gate on absent M15 data would fire exactly the unguarded standalone
+    # signal the gate exists to block.
+    if SNR_M15_EMS_GATE_ENABLED:
+        if not m15_candles:
+            log.warning("SNR-M15 EMS gate: no M15 context for %s — failing closed", pair)
+            return
         import snr_m15_strategy
         ems_ok, ems_reason = snr_m15_strategy.ems_gate(row, h4_row, m15_candles)
         if not ems_ok:
