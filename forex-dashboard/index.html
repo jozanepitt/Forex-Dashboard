@@ -5084,8 +5084,10 @@ function renderTdi123Table(data) {
     // Timeframe badge: this row IS an H1 setup or an M15 setup (each with its
     // own P1/P2/P3/targets/grade) — never a hybrid, so p.timeframe is authoritative.
     const rowTf = p.timeframe || 'H1';
-    const timeframeColor = rowTf === 'M15' ? 'var(--cyan)' : 'var(--blue)';
-    const timeframeCell = `<span style="font-size:.7rem;font-weight:600;color:${timeframeColor};background:var(--text-muted);background-opacity:0.1;padding:2px 4px;border-radius:2px">[${rowTf}]</span>`;
+    const timeframeColor  = rowTf === 'M15' ? 'var(--cyan)'    : 'var(--blue)';
+    const timeframeBg     = rowTf === 'M15' ? 'var(--cyan-bg)' : 'var(--blue-bg)';
+    const timeframeBorder = rowTf === 'M15' ? 'var(--cyan-border)' : 'var(--blue-border)';
+    const timeframeCell = `<span style="font-size:.7rem;font-weight:700;color:${timeframeColor};background:${timeframeBg};border:1px solid ${timeframeBorder};padding:2px 6px;border-radius:4px;white-space:nowrap">${rowTf}</span>`;
 
     // Entry-timeframe's own EMA-cascade trend (H1's for an H1 row, M15's for
     // an M15 row) — distinct from the Bias TF column, which is the NEXT
