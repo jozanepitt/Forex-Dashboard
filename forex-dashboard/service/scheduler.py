@@ -90,8 +90,8 @@ def refresh_all():
         if i > 0:
             time.sleep(FANOUT_DELAY_SECS)
         try:
-            _fetch_guarded(sym, DEFAULT_INTERVAL)          # M15
-            _fetch_guarded(sym, "1h", limit=DEFAULT_BACKFILL)  # H1 — TDI123 primary (needs >=800 for real EMA-800) + M15 SNR context
+            _fetch_guarded(sym, DEFAULT_INTERVAL, limit=DEFAULT_BACKFILL)  # M15 — TDI123 M15 pattern detection
+            _fetch_guarded(sym, "1h", limit=DEFAULT_BACKFILL)  # H1 — TDI123 primary (needs >=800 for real EMA-800)
             _fetch_guarded(sym, "4h", limit=200)           # H4 — TDI123 HTF bias
             _fetch_guarded(sym, "1day", limit=60)          # daily — SNR-H4 scanner
             updated += 1
@@ -307,6 +307,7 @@ def _run_tdi123_alerts():
             "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
             "4h": cache.read_candles(sym, "4h", limit=200),
             "1d": cache.read_candles(sym, "1day", limit=60),
+            "m15": cache.read_candles(sym, "15m", limit=DEFAULT_BACKFILL),
         }
     result = tdi_cycle_123.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):

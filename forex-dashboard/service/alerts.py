@@ -1376,3 +1376,54 @@ def alert_tdi123_setup(pair: str, row: dict):
                 )
             except Exception as e:  # noqa: BLE001
                 log.warning("TDI123 journal open failed for %s: %s", pair, e)
+
+    # M15 alert: if M15 setup exists, fire alert for M15 Grade A or Grade B
+    m15_setup = row.get("m15")
+    if m15_setup and TDI123_ALERTS_ENABLED:
+        m15_grade = m15_setup.get("grade")
+        m15_setup_type = m15_setup.get("setup")
+        if m15_grade in ("A", "B") and m15_setup_type in ("BUY", "SELL"):
+            # M15 Grade A always alert, M15 Grade B already has all 3 confluence enforced
+            m15_rule = f"tdi123_m15_{m15_setup_type.lower()}_{m15_grade}"
+            if not _is_throttled(pair, m15_rule):
+                m15_entry = (m15_setup.get("targets") or {}).get("entry") or m15_setup.get("current_price")
+                m15_targets = m15_setup.get("targets") or {}
+                m15_tp1 = m15_targets.get("tp1")
+                m15_tp2 = m15_targets.get("tp2")
+                m15_tp3 = m15_targets.get("tp3")
+
+                m15_arrow = "📈" if m15_setup_type == "BUY" else "📉"
+                m15_grade_badge = "⭐ " if m15_grade == "A" else ""
+                m15_colour = 0xFFD700 if m15_grade == "A" else (_COLOURS["strong_buy"] if m15_setup_type == "BUY" else _COLOURS["strong_sell"])
+
+                m15_fields = [
+                    {"name": "Timeframe", "value": "**[M15] Entry Signal**", "inline": True},
+                    {"name": "Direction", "value": f"**{'📈 BUY' if m15_setup_type == 'BUY' else '📉 SELL'}**", "inline": True},
+                    {"name": "Grade", "value": f"{m15_grade_badge}**{m15_grade}**", "inline": True},
+                    {"name": "🎯 Entry", "value": f"`{_fmt_price(m15_entry, pair)}`", "inline": True},
+                    {"name": "H1 Trend", "value": f"**{(m15_setup.get('h1_trend') or 'unknown').capitalize()}**", "inline": True},
+                ]
+                if m15_tp1:
+                    m15_fields.append({"name": "✅ L1", "value": f"`{_fmt_price(m15_tp1, pair)}`", "inline": True})
+                if m15_tp2:
+                    m15_fields.append({"name": "🎯 L2", "value": f"`{_fmt_price(m15_tp2, pair)}`", "inline": True})
+                if m15_tp3:
+                    m15_fields.append({"name": "🎯 L3", "value": f"`{_fmt_price(m15_tp3, pair)}`", "inline": True})
+
+                m15_div = m15_setup.get("divergence") or {}
+                m15_tdi = m15_setup.get("tdi_extreme") or {}
+                m15_fields.append({"name": "Setup", "value": (f"Divergence: {'✅' if m15_div.get('present') else '❌'} | "
+                                                              f"TDI Extreme: {'✅' if m15_tdi.get('present') else '❌'} | "
+                                                              f"Signal Cross: {'✅' if (m15_setup.get('signal_cross') or {}).get('present') else '❌'}"),
+                                   "inline": False})
+
+                m15_embed = {
+                    "title":       f"{m15_arrow} {m15_grade_badge}{pair} — TDI Cycle 123 [M15] {m15_setup_type}",
+                    "description": "M15 entry signal detected (faster timeframe entry)",
+                    "color":       m15_colour,
+                    "fields":      m15_fields,
+                    "footer":      {"text": f"TDI Cycle 123 M15 · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+                }
+                if _post_discord(m15_embed):
+                    _mark_sent(pair, m15_rule)
+                    log.info("TDI123 M15 alert sent: %s %s grade=%s", pair, m15_setup_type, m15_grade)

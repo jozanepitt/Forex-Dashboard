@@ -5066,6 +5066,21 @@ function renderTdi123Table(data) {
 
     const priceCell = `<code>${_tdi123FmtPrice(p.current_price, sym)}</code>`;
 
+    // Timeframe badge: [M15] if M15 result exists, otherwise [H1]
+    const timeframeLabel = p.m15 ? '[M15]' : '[H1]';
+    const timeframeColor = p.m15 ? 'var(--cyan)' : 'var(--blue)';
+    const timeframeCell = `<span style="font-size:.7rem;font-weight:600;color:${timeframeColor};background:var(--text-muted);background-opacity:0.1;padding:2px 4px;border-radius:2px">${timeframeLabel}</span>`;
+
+    // H1 trend bias: show direction from H1 trend_regime
+    const h1Trend = (p.trend_regime || {}).direction || null;
+    const h1TrendLabel = h1Trend === 'bullish' ? '↑ Bullish'
+                       : h1Trend === 'bearish' ? '↓ Bearish'
+                       : '— Neutral';
+    const h1TrendColor = h1Trend === 'bullish' ? 'var(--green)'
+                       : h1Trend === 'bearish' ? 'var(--red)'
+                       : 'var(--text-muted)';
+    const h1TrendCell = `<span style="color:${h1TrendColor};font-weight:600">${h1TrendLabel}</span>`;
+
     // "projected" = all 3 EMAs were on the wrong side of price, so L1/L2/L3
     // are 1x/2x/3x leg-1 measured-move multiples, NOT real EMA hits — flag
     // this so it's never mistaken for the 50/200/800 EMA cascade.
@@ -5078,8 +5093,10 @@ function renderTdi123Table(data) {
 
     return `<tr>
       <td><b>${sym}</b></td>
+      <td>${timeframeCell}</td>
       <td>${priceCell}</td>
       <td>${_tdi123DirCell(p)}${ketchupBadge}${sessBadge}</td>
+      <td>${h1TrendCell}</td>
       <td><code>${_tdi123FmtPrice(p1.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p2.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p3.price, sym)}</code></td>
@@ -5093,7 +5110,7 @@ function renderTdi123Table(data) {
       <td>${_tdi123GradeCell(p.grade)}${scoreBadge}</td>
       <td><button class="tdi123-detail-btn" data-tdi123-sym="${sym}">📈 View</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">No results.</td></tr>';
+  }).join('') || '<tr><td colspan="17" style="text-align:center;color:var(--text-muted);padding:24px">No results.</td></tr>';
 
   tbody.querySelectorAll('button[data-tdi123-sym]').forEach(btn => {
     btn.addEventListener('click', () => openTdi123Chart(btn.dataset.tdi123Sym));
@@ -5110,7 +5127,7 @@ async function openTdi123Chart(symbol) {
   overlay.classList.add('tdi123-chart-modal');
   overlay.classList.add('active');
   title.textContent = `${symbol} — TDI Cycle 123`;
-  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading H1 candles + TDI series…</div>';
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading candles + TDI series…</div>';
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
@@ -5118,6 +5135,9 @@ async function openTdi123Chart(symbol) {
     const resp = await fetch(`${baseUrl}/tdi123/detail?symbol=${encoded}`);
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
+    // Update title to show timeframe
+    const timeframeLabel = data.row?.m15 ? '[M15]' : '[H1]';
+    title.textContent = `${symbol} — TDI Cycle 123 ${timeframeLabel}`;
     body.innerHTML = renderTdi123ChartSvg(data);
   } catch (err) {
     body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${err.message}</div>`;

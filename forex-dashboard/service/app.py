@@ -283,24 +283,27 @@ def tdi123():
         return jsonify(_TDI123_CACHE["payload"])
 
     universe = tdi_cycle_123.TDI123_UNIVERSE
-    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("1h", "4h", "1day")]
+    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe
+                                   for iv in ("1h", "4h", "1day", "15min")]
 
     def _fetch(job):
         sym, iv = job
         # H1 needs >=800 bars for a real EMA-800 (calc_ema falls back to a flat
         # line at current price otherwise) — match DEFAULT_BACKFILL so it's
         # actually converged, not just past the bare minimum.
-        limits = {"1h": DEFAULT_BACKFILL, "4h": 200, "1day": 60}
+        # M15 also needs deep history for accurate EMA convergence.
+        limits = {"1h": DEFAULT_BACKFILL, "4h": 200, "1day": 60, "15min": DEFAULT_BACKFILL}
         bars, stale = fetcher.get_candles(sym, iv, limit=limits[iv])
         return sym, iv, bars, stale
 
-    candles_by_pair: dict[str, dict] = {sym: {"1h": [], "4h": [], "1d": []} for sym in universe}
+    candles_by_pair: dict[str, dict] = {sym: {"1h": [], "4h": [], "1d": [], "m15": []}
+                                        for sym in universe}
     stale_set: set[str] = set()
     with ThreadPoolExecutor(max_workers=8) as pool:
         for sym, iv, bars, stale in pool.map(_fetch, jobs):
-            key = {"1h": "1h", "4h": "4h", "1day": "1d"}[iv]
+            key = {"1h": "1h", "4h": "4h", "1day": "1d", "15min": "m15"}[iv]
             candles_by_pair[sym][key] = bars
-            if stale:
+            if stale and iv == "1h":  # only flag stale if H1 is stale (primary timeframe)
                 stale_set.add(sym)
 
     result = tdi_cycle_123.analyze_universe(candles_by_pair)
@@ -336,8 +339,9 @@ def tdi123_detail():
     h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=DEFAULT_BACKFILL)
     h4_bars, h4_stale = fetcher.get_candles(symbol, "4h", limit=200)
     d1_bars, d1_stale = fetcher.get_candles(symbol, "1day", limit=60)
+    m15_bars, m15_stale = fetcher.get_candles(symbol, "15min", limit=DEFAULT_BACKFILL)
 
-    row = tdi_cycle_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars, d1_candles=d1_bars)
+    row = tdi_cycle_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars, d1_candles=d1_bars, m15_candles=m15_bars)
 
     # Build TDI + baseline series for chart overlay (full history, for accuracy)
     from btmm_core import _rsi, _sma

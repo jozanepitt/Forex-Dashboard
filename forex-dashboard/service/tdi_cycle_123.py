@@ -661,6 +661,150 @@ def _htf_bias(h4_bars: Optional[list[dict]]) -> Optional[str]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 8. M15 pattern analysis (simplified: Grade A always alert, Grade B only if
+#    all 3 confluence present; uses H1 trend for direction bias)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _analyze_m15_pattern(
+    symbol: str,
+    m15_candles: list[dict],
+    h1_trend: dict,
+) -> Optional[dict]:
+    """Analyze M15 for 123 patterns. Returns setup or None.
+
+    M15 Grade B gate: only alert if ALL 3 confluence points present.
+    M15 Grade A: alert on strong signal.
+    Uses H1 trend (from _trend_regime) to filter for aligned direction.
+    """
+    if not m15_candles or len(m15_candles) < 100:
+        return None
+
+    closes = [b["close"] for b in m15_candles]
+    price = closes[-1]
+
+    # TDI series
+    from btmm_core import _rsi, _sma
+    rsi_series = _rsi(closes, 13)
+    fast_arr = _sma(rsi_series, 2)
+    slow_arr = _sma(rsi_series, 7)
+    baseline_series = _baseline_series(rsi_series, 34)
+
+    # Swings
+    swings = _find_swings(m15_candles)
+    if len(swings) < 3:
+        return None
+
+    # 123 geometry
+    pattern = _find_123_pattern(swings, m15_candles, symbol=symbol)
+    if not pattern:
+        return None
+
+    direction = pattern["direction"]
+
+    # Divergence
+    div = _check_divergence(pattern, rsi_series)
+
+    # TDI extreme
+    extreme = _check_tdi_extreme(pattern, rsi_series, baseline_series)
+
+    # Signal cross
+    cross = _check_signal_cross(pattern, fast_arr, slow_arr)
+
+    # M15 Grade B gate: require ALL 3 confluence (div + extreme + signal cross)
+    confluence_count = (
+        (1 if div["present"] else 0) +
+        (1 if extreme["present"] else 0) +
+        (1 if cross["present"] else 0)
+    )
+
+    # Scoring for M15 (simplified: max 8 pts)
+    score = 3  # base pattern
+    notes = ["M15 123 geometry ok"]
+
+    if div.get("strong"):
+        score += 2
+        notes.append("regular divergence")
+    elif div["present"]:
+        score += 1
+        notes.append("equal-level divergence")
+
+    if extreme.get("strong"):
+        score += 2
+        notes.append("TDI extreme strong")
+    elif extreme["present"]:
+        score += 1
+        notes.append("TDI extreme")
+
+    if cross["present"]:
+        score += 1
+        notes.append("signal cross")
+
+    # H1 trend alignment bonus
+    h1_aligned = (h1_trend.get("direction") == direction)
+    if h1_aligned:
+        score += 1
+        notes.append("H1 trend aligned")
+
+    # M15 Grade gating
+    if confluence_count < 3:
+        # Grade B requires all 3; below that is not alertable on M15
+        if score >= 7:
+            grade = "B-partial"  # for info only, won't trigger alert
+        else:
+            return None  # not enough confluence for M15
+    elif score >= 7:
+        grade = "B"
+    else:
+        grade = "B-weak"
+
+    if score >= 6:
+        grade = "A" if score >= 8 else "B"
+    elif confluence_count == 3:
+        grade = "B"
+    else:
+        return None
+
+    # Only return if Grade A or Grade B with all 3 confluence
+    if grade not in ("A", "B"):
+        return None
+
+    setup = "BUY" if direction == "bullish" else "SELL"
+
+    # Targets
+    targets = _ema_targets(closes, direction, price,
+                           leg1_range=pattern.get("leg1_range", 0.0))
+
+    return {
+        "timeframe": "M15",
+        "symbol": symbol,
+        "setup": setup,
+        "grade": grade,
+        "score": score,
+        "notes": "; ".join(notes),
+        "current_price": price,
+        "direction": direction,
+        "pattern": {
+            "p1": {"idx": pattern["p1"]["idx"], "price": pattern["p1"]["price"]},
+            "p2": {"idx": pattern["p2"]["idx"], "price": pattern["p2"]["price"]},
+            "p3": {"idx": pattern["p3"]["idx"], "price": pattern["p3"]["price"]},
+            "leg1_range_pips": round(pattern["leg1_range_pips"], 1),
+        },
+        "divergence": {
+            "present": div["present"],
+            "strong": div.get("strong", False),
+        },
+        "tdi_extreme": {
+            "present": extreme["present"],
+            "strong": extreme.get("strong", False),
+        },
+        "signal_cross": {"present": cross["present"]},
+        "h1_trend": h1_trend.get("direction"),
+        "h1_trend_aligned": h1_aligned,
+        "targets": targets,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 8. Per-pair pipeline
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -669,8 +813,13 @@ def analyze_pair(
     h1_candles: list[dict],
     h4_candles: Optional[list[dict]] = None,
     d1_candles: Optional[list[dict]] = None,
+    m15_candles: Optional[list[dict]] = None,
 ) -> dict:
-    """Full pipeline for one pair on H1."""
+    """Full pipeline for one pair: H1 primary + M15 (if provided).
+
+    Returns H1 result as root, plus m15 sub-key if M15 analysis successful.
+    Both H1 and M15 results include 'timeframe' field for labeling.
+    """
     if not h1_candles or len(h1_candles) < 100:
         return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-DATA",
                 "reason": "need ≥100 H1 candles", "score": 0}
@@ -852,7 +1001,7 @@ def analyze_pair(
     else:
         tp1_reachable = None
 
-    return {
+    h1_result = {
         "symbol": symbol,
         "setup": setup,
         "grade": grade,
@@ -926,14 +1075,23 @@ def analyze_pair(
             "rr1": (_pips(entry, targets["tp1"]) / _pips(entry, sl))
                    if (_pips(entry, sl) and _pips(entry, targets["tp1"])) else None,
         },
+        "timeframe": "H1",
     }
+
+    # M15 analysis (if provided)
+    if m15_candles:
+        m15_result = _analyze_m15_pattern(symbol, m15_candles, trend)
+        if m15_result:
+            h1_result["m15"] = m15_result
+
+    return h1_result
 
 
 def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
     """Run the TDI-cycle 123 pipeline for every pair in the universe.
 
-    `candles_by_pair[sym]` = {'1h': [...], '4h': [...], '1d': [...]}
-    Missing timeframes gracefully degrade (H4 bias / HTF alignment skipped).
+    `candles_by_pair[sym]` = {'1h': [...], '4h': [...], '1d': [...], 'm15': [...]}
+    Missing timeframes gracefully degrade (H4 bias / HTF alignment / M15 skipped).
     """
     now_ny = datetime.now(NY)
 
@@ -943,8 +1101,9 @@ def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
         h1 = bundles.get("1h") or bundles.get("h1") or []
         h4 = bundles.get("4h") or bundles.get("h4") or []
         d1 = bundles.get("1d") or bundles.get("d1") or []
+        m15 = bundles.get("m15") or bundles.get("M15") or []
         try:
-            row = analyze_pair(sym, h1, h4_candles=h4, d1_candles=d1)
+            row = analyze_pair(sym, h1, h4_candles=h4, d1_candles=d1, m15_candles=m15 or None)
         except Exception as e:  # noqa: BLE001
             log.exception("tdi_cycle_123 failed for %s: %s", sym, e)
             row = {"symbol": sym, "setup": "NO-TRADE", "grade": "NO-DATA",
