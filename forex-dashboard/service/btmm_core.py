@@ -3,6 +3,7 @@ BTMM core indicators ported from index.html JS.
 All functions take a list of bar dicts: {open, high, low, close, ts_utc}.
 """
 from __future__ import annotations
+import math
 from typing import Optional
 
 import instruments
@@ -649,6 +650,227 @@ def detect_3push_stop_hunt(bars: list[dict], lookback: int = 30) -> dict:
     return {"detected": False, "direction": None}
 
 
+# ── H1 resample (for 50/50 Bounce's higher-timeframe gate) ────────────────────
+
+def resample_to_h1(bars: list[dict]) -> dict:
+    """
+    Aggregate M15 bars into H1 closes and derive a trend from the EMA50/EMA200
+    stack. Exact port of the frontend's resampleToH1().
+    """
+    if not bars or len(bars) < 8:
+        return {"valid": False, "trend": "neutral", "ema50": 0.0, "ema200": 0.0, "candle_count": 0}
+
+    groups: dict[int, list[dict]] = {}
+    for b in bars:
+        groups.setdefault(b["ts_utc"] // 3600, []).append(b)
+
+    h1_closes = [groups[key][-1]["close"] for key in sorted(groups.keys())]
+    if len(h1_closes) < 10:
+        return {"valid": False, "trend": "neutral", "ema50": 0.0, "ema200": 0.0,
+                "candle_count": len(h1_closes)}
+
+    h1_ema50  = ema_last(h1_closes, 50)
+    h1_ema200 = ema_last(h1_closes, 200)
+    h1_price  = h1_closes[-1]
+
+    if h1_price > h1_ema50 > h1_ema200:
+        trend = "bullish"
+    elif h1_price < h1_ema50 < h1_ema200:
+        trend = "bearish"
+    else:
+        trend = "neutral"
+
+    return {"valid": True, "trend": trend, "ema50": h1_ema50, "ema200": h1_ema200,
+            "current_price": h1_price, "candle_count": len(h1_closes)}
+
+
+# ── Named BTMM setups (Safety Trade / 22 Trade / 50-50 Bounce / Three-Drive) ──
+# Ported from the frontend's detectSafetyTrade/detect22Trade/
+# detectFiftyFiftyBounce/detectThreeDrivePattern so these setups can actually
+# fire on Discord and be backtested — previously only "aplus" and a "safety"
+# proxy existed on the backend, so selecting the other three in the Backtest
+# tab always returned zero trades and they could never alert.
+
+def _gate_result(gates: list[dict], direction: str,
+                  entry: float, sl: float, tp1: float, tp2: float) -> dict:
+    """Shared confidence/active scoring — exact port of the frontend's _gateResult()."""
+    passed   = sum(1 for g in gates if g["pass"])
+    total    = len(gates)
+    required = math.ceil(total * 0.7)
+    active   = passed >= required and direction != "neutral"
+    if passed == total:
+        confidence = "high"
+    elif passed >= required + 1:
+        confidence = "medium"
+    elif passed >= required:
+        confidence = "low"
+    else:
+        confidence = "none"
+    return {
+        "active": active, "direction": direction, "gates": gates,
+        "gatesPassed": passed, "gatesTotal": total,
+        "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+        "confidence": confidence,
+    }
+
+
+def detect_22_trade(bars: list[dict], asian: dict, hunt: dict, hod_lod: dict,
+                     tdi: dict, symbol: Optional[str] = None) -> dict:
+    """
+    22 Trade — fires at 02:00 / 22:00 GMT (London prep + Asian open).
+    Fade the manipulation push that hunts stops at the session boundary.
+    """
+    from datetime import datetime, timezone
+    current_price = bars[-1]["close"]
+    pip = instruments.pip_size(symbol, current_price)
+    gmt_hour = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc).hour
+
+    in_window = (2 <= gmt_hour < 4) or (22 <= gmt_hour < 24)
+    asian_range_ok = bool(asian.get("valid")) and asian.get("range_pips", 0) >= 15
+    stop_hunt_active = bool(hunt.get("active"))
+
+    # detect_stop_hunt() already stores the FADE direction (bearish after an
+    # upside pierce, bullish after a downside pierce) — no inversion needed,
+    # unlike the frontend's raw 'up'/'down' hunt.direction.
+    direction = "neutral"
+    if stop_hunt_active:
+        direction = hunt.get("direction") or "neutral"
+    elif hod_lod.get("at_hod"):
+        direction = "bearish"
+    elif hod_lod.get("at_lod"):
+        direction = "bullish"
+
+    tdi_agrees = bool(tdi) and (
+        (direction == "bullish" and tdi["fast"] > tdi["slow"] and tdi["fast"] < 70) or
+        (direction == "bearish" and tdi["fast"] < tdi["slow"] and tdi["fast"] > 30)
+    )
+    hod_lod_fade = (
+        (direction == "bearish" and hod_lod.get("at_hod")) or
+        (direction == "bullish" and hod_lod.get("at_lod"))
+    )
+
+    gates = [
+        {"name": "22:00 or 02:00 GMT Window", "pass": in_window},
+        {"name": "Asian Range >= 15 pips",    "pass": asian_range_ok},
+        {"name": "Stop Hunt Detected",        "pass": stop_hunt_active},
+        {"name": "HOD/LOD Retest Fade",       "pass": hod_lod_fade},
+        {"name": "TDI Not At Extreme",        "pass": tdi_agrees},
+    ]
+
+    entry = sl = tp1 = tp2 = 0.0
+    if direction != "neutral" and asian_range_ok:
+        entry = current_price
+        if direction == "bearish":
+            hunt_extreme = bars[-1]["high"] if stop_hunt_active else asian["high"]
+            sl  = hunt_extreme + 5 * pip
+            tp1 = (asian["high"] + asian["low"]) / 2
+            tp2 = asian["low"]
+        else:
+            hunt_extreme = bars[-1]["low"] if stop_hunt_active else asian["low"]
+            sl  = hunt_extreme - 5 * pip
+            tp1 = (asian["high"] + asian["low"]) / 2
+            tp2 = asian["high"]
+
+    return _gate_result(gates, direction, entry, sl, tp1, tp2)
+
+
+def detect_fifty_fifty_bounce(bars: list[dict], stack: dict, level: dict, tdi_leg: dict,
+                               h1mtf: dict, symbol: Optional[str] = None) -> dict:
+    """
+    50/50 Bounce — mid-day reversal off the 50 EMA in the lull between London
+    close and NY open.
+    """
+    from datetime import datetime, timezone
+    current_price = bars[-1]["close"]
+    pip = instruments.pip_size(symbol, current_price)
+    e50 = stack["e50"]
+
+    direction = "neutral"
+    if h1mtf.get("valid") and h1mtf.get("trend") != "neutral":
+        direction = h1mtf["trend"]
+    elif tdi_leg.get("leg") == 1:
+        direction = tdi_leg["direction"]
+
+    dist50_pips   = abs(current_price - e50) / pip if e50 else 999
+    close_to_50   = dist50_pips <= 8
+    fresh_cross   = bool(level.get("level_i"))
+    tdi_first_leg = (tdi_leg.get("leg") == 1 and tdi_leg.get("confidence") != "low"
+                      and tdi_leg.get("direction") == direction)
+    h1_aligned    = bool(h1mtf.get("valid")) and h1mtf.get("trend") == direction
+
+    gmt_hour = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc).hour
+    in_lull  = (11 <= gmt_hour < 14) or (16 <= gmt_hour < 22)
+
+    gates = [
+        {"name": "Price <= 8 pips from EMA(50)", "pass": close_to_50},
+        {"name": "13/50 Cross Level I (fresh)",  "pass": fresh_cross},
+        {"name": "TDI 1st Leg Building",         "pass": tdi_first_leg},
+        {"name": "H1 MTF Aligned",               "pass": h1_aligned},
+        {"name": "Mid-Day Lull Window",          "pass": in_lull},
+    ]
+
+    entry = sl = tp1 = tp2 = 0.0
+    if direction != "neutral" and e50:
+        entry = current_price
+        risk  = instruments.min_sl_distance(symbol, entry)
+        if direction == "bullish":
+            sl  = e50 - risk
+            d   = max(abs(entry - sl), risk)
+            tp1 = entry + d * 1.5
+            tp2 = entry + d * 3
+        else:
+            sl  = e50 + risk
+            d   = max(abs(entry - sl), risk)
+            tp1 = entry - d * 1.5
+            tp2 = entry - d * 3
+
+    return _gate_result(gates, direction, entry, sl, tp1, tp2)
+
+
+def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw: dict,
+                                symbol: Optional[str] = None) -> dict:
+    """
+    Three-Drive — refinement of Shark Fin: three pushes into a TDI extreme with
+    diverging price. Reversal entry on 4th-push failure.
+
+    Mirrors the frontend's detectThreeDrivePattern() exactly, including its
+    inversion of the Shark Fin direction: shark['direction'] is the exhaustion
+    push's own side (e.g. 'bearish' = RSI spiked into overbought), and
+    Three-Drive trades the reversal AWAY from that push.
+    """
+    current_price = bars[-1]["close"]
+
+    mw_direction = ("bullish" if mw.get("pattern") == "W"
+                    else "bearish" if mw.get("pattern") == "M" else None)
+
+    direction = "neutral"
+    if mw.get("detected") and mw_direction:
+        direction = mw_direction
+    elif shark.get("detected") and shark.get("direction"):
+        direction = "bullish" if shark["direction"] == "bearish" else "bearish"
+
+    gates = [
+        {"name": "Shark Fin Active",         "pass": bool(shark.get("detected"))},
+        {"name": "TDI Divergence Confirmed", "pass": bool(tdi_div.get("detected"))},
+        {"name": "M/W Pattern Aligned",      "pass": bool(mw.get("detected")) and mw_direction == direction},
+    ]
+
+    entry = sl = tp1 = tp2 = 0.0
+    if direction != "neutral":
+        entry = current_price
+        risk  = instruments.min_sl_distance(symbol, entry)
+        if direction == "bullish":
+            sl  = entry - risk
+            tp1 = entry + risk * 2
+            tp2 = entry + risk * 4
+        else:
+            sl  = entry + risk
+            tp1 = entry - risk * 2
+            tp2 = entry - risk * 4
+
+    return _gate_result(gates, direction, entry, sl, tp1, tp2)
+
+
 # ── Full pair analysis ────────────────────────────────────────────────────────
 
 def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
@@ -826,6 +1048,8 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
             "tier":        "A+",
         }
     else:
+        candidates = []
+
         # Safety Trade proxy (legacy — score ≥ 40 region with 5/7 gates)
         near_e50     = abs(closes[-1] - stack["e50"]) / closes[-1] < 0.0008
         safety_gates = sum([
@@ -838,7 +1062,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
             checklist_score >= 7,
         ])
         if safety_gates >= 5 and kz:
-            active_setup = {
+            candidates.append({
                 "key":         "safety",
                 "direction":   direction,
                 "gatesPassed": safety_gates,
@@ -848,7 +1072,32 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
                 "tp1":         tp1,
                 "tp2":         tp2,
                 "confidence":  "high" if safety_gates >= 7 else "medium",
-            }
+            })
+
+        # 22 Trade / 50-50 Bounce / Three-Drive — real detector ports (see above).
+        h1mtf = resample_to_h1(bars)
+        for setup_key, res in (
+            ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol)),
+            ("bounce5050", detect_fifty_fifty_bounce(bars, stack, level, tdi_leg, h1mtf, symbol)),
+            ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol)),
+        ):
+            if res["active"]:
+                candidates.append({
+                    "key":         setup_key,
+                    "direction":   res["direction"],
+                    "gatesPassed": res["gatesPassed"],
+                    "gatesTotal":  res["gatesTotal"],
+                    "entry":       res["entry"],
+                    "sl":          res["sl"],
+                    "tp1":         res["tp1"],
+                    "tp2":         res["tp2"],
+                    "confidence":  res["confidence"],
+                })
+
+        # Strongest active candidate wins — same priority rule as the frontend's
+        # sort-by-gatesPassed across the four named setups.
+        if candidates:
+            active_setup = max(candidates, key=lambda c: c["gatesPassed"])
 
     cross_513 = detect_513_cross(closes)
 
