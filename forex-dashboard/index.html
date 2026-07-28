@@ -5483,7 +5483,7 @@ function renderCrtTable(data) {
       <td>${_crtSetupCell(p)}</td>
       <td>${entryCell}</td>
       <td>${_crtKeyTimeCell(p)}</td>
-      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/10)</span></td>
+      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/12)</span></td>
     </tr>`;
   }).join('');
   tbody.innerHTML = rows || '<tr><td colspan="11" style="text-align:center;padding:24px">No data.</td></tr>';
