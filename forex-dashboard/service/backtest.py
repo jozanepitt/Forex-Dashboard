@@ -64,7 +64,11 @@ def run(pair: str, start_ts: int, end_ts: int,
             hit_tp1 = (direction == "bullish" and hi >= tp1) or (direction == "bearish" and lo <= tp1)
 
             if hit_sl or hit_tp1:
-                exit_p = tp1 if hit_tp1 else sl
+                # Intrabar path is unknown from OHLC alone. When a single bar's
+                # range touches both SL and TP1, assume worst-case (stop hit
+                # first) instead of always crediting a win — avoids inflating
+                # win rate/expectancy on wide-range or gap bars.
+                exit_p = sl if hit_sl else tp1
                 pip    = 0.0001 if bar["close"] < 10 else 0.01
                 pips   = ((exit_p - open_trade["entry"]) / pip
                           if direction == "bullish"
