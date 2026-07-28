@@ -831,15 +831,17 @@ td.mono{font-family:var(--font-mono)}
       <thead>
         <tr>
           <th>Pair</th>
+          <th>TF</th>
           <th>Price</th>
           <th>Direction</th>
+          <th>Entry TF Trend</th>
           <th>P1</th>
           <th>P2</th>
           <th>P3</th>
           <th>Divergence</th>
           <th>Location</th>
           <th>TDI @ P3</th>
-          <th>H4 Bias</th>
+          <th>Bias TF</th>
           <th>L1 (50)</th>
           <th>L2 (200)</th>
           <th>L3 (800)</th>
@@ -847,7 +849,7 @@ td.mono{font-family:var(--font-mono)}
           <th>Chart</th>
         </tr>
       </thead>
-      <tbody id="tdi123TableBody"><tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="tdi123TableBody"><tr><td colspan="17" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>TDI Cycle 123 (StrictlyCorrect / Inducement Cycles):</b> This is the "improvements on old BTMM" scanner. Where classic BTMM
@@ -4900,8 +4902,8 @@ async function loadTdi123() {
   const summary = document.getElementById('tdi123Summary');
   const btn     = document.getElementById('tdi123RefreshBtn');
   if (btn) btn.disabled = true;
-  summary.textContent = 'Fetching H1/H4/D1 candles, running FSO_TDI + 123 detector…';
-  tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  summary.textContent = 'Fetching M15/H1/H4/D1 candles, running FSO_TDI + 123 detector…';
+  tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
@@ -4983,9 +4985,18 @@ function renderTdi123Table(data) {
     });
   });
 
+  // Flatten H1 + M15 into independent display rows — M15 is its own setup
+  // with its own P1/P2/P3/grade/targets (biased by H1 instead of H4), not a
+  // badge riding on the H1 row. Each row already carries "timeframe": "H1"/"M15".
+  const flatRows = [];
+  pairs.forEach(p => {
+    flatRows.push(p);
+    if (p.m15) flatRows.push(p.m15);
+  });
+
   // Sort: A grades first, then B, then C, then NO-TRADE. Within grade by score desc.
   const gradeRank = {A: 0, B: 1, C: 2, 'NO-TRADE': 3, 'NO-DATA': 4};
-  let sorted = pairs.slice().sort((a, b) => {
+  let sorted = flatRows.slice().sort((a, b) => {
     const ra = gradeRank[a.grade] ?? 5;
     const rb = gradeRank[b.grade] ?? 5;
     if (ra !== rb) return ra - rb;
@@ -5004,9 +5015,13 @@ function renderTdi123Table(data) {
     const ext = p.tdi_extreme || {};
     const tgt = p.targets || {};
 
+    // Bias timeframe is dynamic: H4 for an H1 row, H1 for an M15 row —
+    // htf_bias_timeframe comes straight from the backend so the label is
+    // always correct for whichever row this is.
+    const biasTf = p.htf_bias_timeframe || (p.timeframe === 'M15' ? 'H1' : 'H4');
     const htfLabel = p.htf_bias
-      ? (p.htf_aligned ? `<span style="color:var(--green);font-weight:600">${p.htf_bias} ✓</span>`
-                       : `<span style="color:var(--text-muted)">${p.htf_bias}</span>`)
+      ? (p.htf_aligned ? `<span style="color:var(--green);font-weight:600">${biasTf}: ${p.htf_bias} ✓</span>`
+                       : `<span style="color:var(--text-muted)">${biasTf}: ${p.htf_bias}</span>`)
       : '<span style="color:var(--text-muted)">—</span>';
 
     const tdiCell = (ext && ext.baseline_at_p3 !== undefined)
@@ -5066,20 +5081,23 @@ function renderTdi123Table(data) {
 
     const priceCell = `<code>${_tdi123FmtPrice(p.current_price, sym)}</code>`;
 
-    // Timeframe badge: [M15] if M15 result exists, otherwise [H1]
-    const timeframeLabel = p.m15 ? '[M15]' : '[H1]';
-    const timeframeColor = p.m15 ? 'var(--cyan)' : 'var(--blue)';
-    const timeframeCell = `<span style="font-size:.7rem;font-weight:600;color:${timeframeColor};background:var(--text-muted);background-opacity:0.1;padding:2px 4px;border-radius:2px">${timeframeLabel}</span>`;
+    // Timeframe badge: this row IS an H1 setup or an M15 setup (each with its
+    // own P1/P2/P3/targets/grade) — never a hybrid, so p.timeframe is authoritative.
+    const rowTf = p.timeframe || 'H1';
+    const timeframeColor = rowTf === 'M15' ? 'var(--cyan)' : 'var(--blue)';
+    const timeframeCell = `<span style="font-size:.7rem;font-weight:600;color:${timeframeColor};background:var(--text-muted);background-opacity:0.1;padding:2px 4px;border-radius:2px">[${rowTf}]</span>`;
 
-    // H1 trend bias: show direction from H1 trend_regime
-    const h1Trend = (p.trend_regime || {}).direction || null;
-    const h1TrendLabel = h1Trend === 'bullish' ? '↑ Bullish'
-                       : h1Trend === 'bearish' ? '↓ Bearish'
+    // Entry-timeframe's own EMA-cascade trend (H1's for an H1 row, M15's for
+    // an M15 row) — distinct from the Bias TF column, which is the NEXT
+    // timeframe up used for the alignment score.
+    const entryTrend = (p.trend_regime || {}).direction || null;
+    const entryTrendLabel = entryTrend === 'bullish' ? '↑ Bullish'
+                       : entryTrend === 'bearish' ? '↓ Bearish'
                        : '— Neutral';
-    const h1TrendColor = h1Trend === 'bullish' ? 'var(--green)'
-                       : h1Trend === 'bearish' ? 'var(--red)'
+    const entryTrendColor = entryTrend === 'bullish' ? 'var(--green)'
+                       : entryTrend === 'bearish' ? 'var(--red)'
                        : 'var(--text-muted)';
-    const h1TrendCell = `<span style="color:${h1TrendColor};font-weight:600">${h1TrendLabel}</span>`;
+    const entryTrendCell = `<span style="color:${entryTrendColor};font-weight:600">${entryTrendLabel}</span>`;
 
     // "projected" = all 3 EMAs were on the wrong side of price, so L1/L2/L3
     // are 1x/2x/3x leg-1 measured-move multiples, NOT real EMA hits — flag
@@ -5096,7 +5114,7 @@ function renderTdi123Table(data) {
       <td>${timeframeCell}</td>
       <td>${priceCell}</td>
       <td>${_tdi123DirCell(p)}${ketchupBadge}${sessBadge}</td>
-      <td>${h1TrendCell}</td>
+      <td>${entryTrendCell}</td>
       <td><code>${_tdi123FmtPrice(p1.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p2.price, sym)}</code></td>
       <td><code>${_tdi123FmtPrice(p3.price, sym)}</code></td>
@@ -5108,17 +5126,18 @@ function renderTdi123Table(data) {
       <td>${l2}</td>
       <td>${l3}</td>
       <td>${_tdi123GradeCell(p.grade)}${scoreBadge}</td>
-      <td><button class="tdi123-detail-btn" data-tdi123-sym="${sym}">📈 View</button></td>
+      <td><button class="tdi123-detail-btn" data-tdi123-sym="${sym}" data-tdi123-tf="${rowTf}">📈 View</button></td>
     </tr>`;
   }).join('') || '<tr><td colspan="17" style="text-align:center;color:var(--text-muted);padding:24px">No results.</td></tr>';
 
   tbody.querySelectorAll('button[data-tdi123-sym]').forEach(btn => {
-    btn.addEventListener('click', () => openTdi123Chart(btn.dataset.tdi123Sym));
+    btn.addEventListener('click', () => openTdi123Chart(btn.dataset.tdi123Sym, btn.dataset.tdi123Tf));
   });
 }
 
 // ── Detail chart modal ──────────────────────────────────────────────────────
-async function openTdi123Chart(symbol) {
+async function openTdi123Chart(symbol, timeframe) {
+  const tf = (timeframe === 'M15') ? 'M15' : 'H1';
   const overlay = document.getElementById('modalOverlay');
   const title = document.getElementById('modalTitle');
   const body = document.getElementById('modalBody');
@@ -5126,18 +5145,16 @@ async function openTdi123Chart(symbol) {
 
   overlay.classList.add('tdi123-chart-modal');
   overlay.classList.add('active');
-  title.textContent = `${symbol} — TDI Cycle 123`;
-  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading candles + TDI series…</div>';
+  title.textContent = `${symbol} — TDI Cycle 123 [${tf}]`;
+  body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading ${tf} candles + TDI series…</div>`;
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
     const encoded = encodeURIComponent(symbol);
-    const resp = await fetch(`${baseUrl}/tdi123/detail?symbol=${encoded}`);
+    const resp = await fetch(`${baseUrl}/tdi123/detail?symbol=${encoded}&timeframe=${tf}`);
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
-    // Update title to show timeframe
-    const timeframeLabel = data.row?.m15 ? '[M15]' : '[H1]';
-    title.textContent = `${symbol} — TDI Cycle 123 ${timeframeLabel}`;
+    title.textContent = `${symbol} — TDI Cycle 123 [${data.timeframe || tf}]`;
     body.innerHTML = renderTdi123ChartSvg(data);
   } catch (err) {
     body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${err.message}</div>`;

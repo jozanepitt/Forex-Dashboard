@@ -661,170 +661,35 @@ def _htf_bias(h4_bars: Optional[list[dict]]) -> Optional[str]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 8. M15 pattern analysis (simplified: Grade A always alert, Grade B only if
-#    all 3 confluence present; uses H1 trend for direction bias)
+# 8. Per-timeframe pipeline (shared by H1 and M15 — identical rules, only the
+#    entry candles and the "next timeframe up" bias candles change). This is
+#    the single source of truth for scoring/grading: M15 reuses this function
+#    instead of a parallel simplified copy, so it can never drift out of sync
+#    with H1's rules again.
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _analyze_m15_pattern(
+def _analyze_timeframe(
     symbol: str,
-    m15_candles: list[dict],
-    h1_trend: dict,
-) -> Optional[dict]:
-    """Analyze M15 for 123 patterns. Returns setup or None.
-
-    M15 Grade B gate: only alert if ALL 3 confluence points present.
-    M15 Grade A: alert on strong signal.
-    Uses H1 trend (from _trend_regime) to filter for aligned direction.
-    """
-    if not m15_candles or len(m15_candles) < 100:
-        return None
-
-    closes = [b["close"] for b in m15_candles]
-    price = closes[-1]
-
-    # TDI series
-    from btmm_core import _rsi, _sma
-    rsi_series = _rsi(closes, 13)
-    fast_arr = _sma(rsi_series, 2)
-    slow_arr = _sma(rsi_series, 7)
-    baseline_series = _baseline_series(rsi_series, 34)
-
-    # Swings
-    swings = _find_swings(m15_candles)
-    if len(swings) < 3:
-        return None
-
-    # 123 geometry
-    pattern = _find_123_pattern(swings, m15_candles, symbol=symbol)
-    if not pattern:
-        return None
-
-    direction = pattern["direction"]
-
-    # Divergence
-    div = _check_divergence(pattern, rsi_series)
-
-    # TDI extreme
-    extreme = _check_tdi_extreme(pattern, rsi_series, baseline_series)
-
-    # Signal cross
-    cross = _check_signal_cross(pattern, fast_arr, slow_arr)
-
-    # M15 Grade B gate: require ALL 3 confluence (div + extreme + signal cross)
-    confluence_count = (
-        (1 if div["present"] else 0) +
-        (1 if extreme["present"] else 0) +
-        (1 if cross["present"] else 0)
-    )
-
-    # Scoring for M15 (simplified: max 8 pts)
-    score = 3  # base pattern
-    notes = ["M15 123 geometry ok"]
-
-    if div.get("strong"):
-        score += 2
-        notes.append("regular divergence")
-    elif div["present"]:
-        score += 1
-        notes.append("equal-level divergence")
-
-    if extreme.get("strong"):
-        score += 2
-        notes.append("TDI extreme strong")
-    elif extreme["present"]:
-        score += 1
-        notes.append("TDI extreme")
-
-    if cross["present"]:
-        score += 1
-        notes.append("signal cross")
-
-    # H1 trend alignment bonus
-    h1_aligned = (h1_trend.get("direction") == direction)
-    if h1_aligned:
-        score += 1
-        notes.append("H1 trend aligned")
-
-    # M15 Grade gating
-    if confluence_count < 3:
-        # Grade B requires all 3; below that is not alertable on M15
-        if score >= 7:
-            grade = "B-partial"  # for info only, won't trigger alert
-        else:
-            return None  # not enough confluence for M15
-    elif score >= 7:
-        grade = "B"
-    else:
-        grade = "B-weak"
-
-    if score >= 6:
-        grade = "A" if score >= 8 else "B"
-    elif confluence_count == 3:
-        grade = "B"
-    else:
-        return None
-
-    # Only return if Grade A or Grade B with all 3 confluence
-    if grade not in ("A", "B"):
-        return None
-
-    setup = "BUY" if direction == "bullish" else "SELL"
-
-    # Targets
-    targets = _ema_targets(closes, direction, price,
-                           leg1_range=pattern.get("leg1_range", 0.0))
-
-    return {
-        "timeframe": "M15",
-        "symbol": symbol,
-        "setup": setup,
-        "grade": grade,
-        "score": score,
-        "notes": "; ".join(notes),
-        "current_price": price,
-        "direction": direction,
-        "pattern": {
-            "p1": {"idx": pattern["p1"]["idx"], "price": pattern["p1"]["price"]},
-            "p2": {"idx": pattern["p2"]["idx"], "price": pattern["p2"]["price"]},
-            "p3": {"idx": pattern["p3"]["idx"], "price": pattern["p3"]["price"]},
-            "leg1_range_pips": round(pattern["leg1_range_pips"], 1),
-        },
-        "divergence": {
-            "present": div["present"],
-            "strong": div.get("strong", False),
-        },
-        "tdi_extreme": {
-            "present": extreme["present"],
-            "strong": extreme.get("strong", False),
-        },
-        "signal_cross": {"present": cross["present"]},
-        "h1_trend": h1_trend.get("direction"),
-        "h1_trend_aligned": h1_aligned,
-        "targets": targets,
-    }
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 8. Per-pair pipeline
-# ──────────────────────────────────────────────────────────────────────────────
-
-def analyze_pair(
-    symbol: str,
-    h1_candles: list[dict],
-    h4_candles: Optional[list[dict]] = None,
-    d1_candles: Optional[list[dict]] = None,
-    m15_candles: Optional[list[dict]] = None,
+    entry_candles: list[dict],
+    bias_candles: Optional[list[dict]],
+    d1_candles: Optional[list[dict]],
+    timeframe: str,
+    bias_timeframe: str,
 ) -> dict:
-    """Full pipeline for one pair: H1 primary + M15 (if provided).
+    """Full 123 pipeline on `entry_candles`, biased by `bias_candles` (the next
+    timeframe up: H4 for an H1 entry, H1 for an M15 entry).
 
-    Returns H1 result as root, plus m15 sub-key if M15 analysis successful.
-    Both H1 and M15 results include 'timeframe' field for labeling.
+    Identical scoring/grading regardless of timeframe — 15 pts max:
+      3 base + 3 divergence + 3 TDI extreme + 2 signal cross
+      + 2 bias-timeframe alignment + 2 freshness.
+    Grade: A >= 11, B >= 8, C >= 5.
     """
-    if not h1_candles or len(h1_candles) < 100:
+    if not entry_candles or len(entry_candles) < 100:
         return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-DATA",
-                "reason": "need ≥100 H1 candles", "score": 0}
+                "reason": f"need ≥100 {timeframe} candles", "score": 0,
+                "timeframe": timeframe}
 
-    closes = [b["close"] for b in h1_candles]
+    closes = [b["close"] for b in entry_candles]
     price = closes[-1]
 
     # Compute TDI + baseline
@@ -838,18 +703,18 @@ def analyze_pair(
     baseline_series = _baseline_series(rsi_series, 34)
 
     # 1. Swings
-    swings = _find_swings(h1_candles)
+    swings = _find_swings(entry_candles)
     if len(swings) < 3:
         return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
                 "reason": "not enough swings",
-                "score": 0, "current_price": price}
+                "score": 0, "current_price": price, "timeframe": timeframe}
 
     # 2. 123 geometry
-    pattern = _find_123_pattern(swings, h1_candles, symbol=symbol)
+    pattern = _find_123_pattern(swings, entry_candles, symbol=symbol)
     if not pattern:
         return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
                 "reason": "no 123 pattern",
-                "score": 0, "current_price": price,
+                "score": 0, "current_price": price, "timeframe": timeframe,
                 "tdi": {"rsi": tdi["rsi"], "baseline": baseline_series[-1] if baseline_series else 50}}
 
     direction = pattern["direction"]
@@ -867,15 +732,15 @@ def analyze_pair(
     targets = _ema_targets(closes, direction, price,
                             leg1_range=pattern.get("leg1_range", 0.0))
 
-    # 7. HTF bias
-    htf = _htf_bias(h4_candles)
+    # 7. Bias-timeframe alignment (H4 for H1 entries, H1 for M15 entries)
+    htf = _htf_bias(bias_candles)
     htf_aligned = (htf == direction)
 
     # 7b. Weekly-pivot location (Davit). Prefer daily candles for the weekly
-    # H/L/C; fall back to H1 when daily isn't supplied. No look-ahead — only the
-    # fully-completed prior week is used.
-    week_src = d1_candles if (d1_candles and len(d1_candles) >= 5) else h1_candles
-    pivots = _weekly_fib_pivots(_prev_week_hlc(week_src, h1_candles[-1]["ts_utc"]))
+    # H/L/C; fall back to the entry timeframe when daily isn't supplied. No
+    # look-ahead — only the fully-completed prior week is used.
+    week_src = d1_candles if (d1_candles and len(d1_candles) >= 5) else entry_candles
+    pivots = _weekly_fib_pivots(_prev_week_hlc(week_src, entry_candles[-1]["ts_utc"]))
     location = _location(price, direction, pivots)
 
     # 7c. Ketchup (13 EMA) reclaim — the ENTRY TRIGGER. BTMM: "once price closes
@@ -891,7 +756,7 @@ def analyze_pair(
     #    3: divergence (regular = 3, equal-level = 2)
     #    3: TDI extreme (strong = 3, present = 2)
     #    2: signal cross confirmation
-    #    2: HTF (H4) alignment
+    #    2: bias-timeframe alignment
     #    2: current price still near p3 (fresh, not stale)
     # Davit, "Pivot Trading with TDI" p.9: "When the market is in a strong trend
     # in either direction, oscillators do not function well ... Any signs of
@@ -904,7 +769,7 @@ def analyze_pair(
     )
 
     score = 3
-    notes = ["123 geometry ok"]
+    notes = [f"{timeframe} 123 geometry ok"]
     if div_ambiguous:
         score += 1
         notes.append(f"divergence vs stacked {trend['direction']} EMAs — ambiguous")
@@ -925,7 +790,7 @@ def analyze_pair(
         notes.append("TDI signal cross confirmed")
     if htf_aligned:
         score += 2
-        notes.append("H4 bias aligned")
+        notes.append(f"{bias_timeframe} bias aligned")
 
     # Freshness: price hasn't moved more than 30 % of leg-1 away from p3
     p3_price = pattern["p3"]["price"]
@@ -942,7 +807,7 @@ def analyze_pair(
     notes.append("ketchup reclaimed" if ketchup_reclaimed
                  else "awaiting 13-EMA reclaim")
 
-    # Grade (max 15)
+    # Grade (max 15) — identical thresholds for every timeframe
     if score >= 11:
         grade = "A"
     elif score >= 8:
@@ -966,7 +831,7 @@ def analyze_pair(
 
     # Entry / SL / TPs — ATR structure stop (see SL_* constants).
     pip = _pip_size(price, symbol)
-    atr = _atr(h1_candles) or (pattern["leg1_range"] * 0.5)  # fallback if short
+    atr = _atr(entry_candles) or (pattern["leg1_range"] * 0.5)  # fallback if short
     p3p = pattern["p3"]["price"]
     if setup == "BUY":
         entry = price
@@ -991,17 +856,17 @@ def analyze_pair(
     # target sits within the day's remaining ADR (so a move can actually get
     # there). None when ADR/daily data is unavailable — a None is treated as
     # "unknown", never as a hard fail, so missing data can't silently kill a setup.
-    now_ts = h1_candles[-1]["ts_utc"]
+    now_ts = entry_candles[-1]["ts_utc"]
     session = _session_label(now_ts)
     in_active_session = _in_active_session(now_ts)
-    adr_ctx = _adr_context(h1_candles, d1_candles)
+    adr_ctx = _adr_context(entry_candles, d1_candles)
     tp1 = targets["tp1"]
     if adr_ctx and entry is not None and tp1 is not None:
         tp1_reachable = abs(tp1 - entry) <= adr_ctx["remaining"]
     else:
         tp1_reachable = None
 
-    h1_result = {
+    return {
         "symbol": symbol,
         "setup": setup,
         "grade": grade,
@@ -1046,6 +911,7 @@ def analyze_pair(
         },
         "signal_cross": cross,
         "htf_bias": htf,
+        "htf_bias_timeframe": bias_timeframe,
         "htf_aligned": htf_aligned,
         "tdi_now": {
             "rsi": round(tdi["rsi"], 1),
@@ -1075,13 +941,39 @@ def analyze_pair(
             "rr1": (_pips(entry, targets["tp1"]) / _pips(entry, sl))
                    if (_pips(entry, sl) and _pips(entry, targets["tp1"])) else None,
         },
-        "timeframe": "H1",
+        "timeframe": timeframe,
     }
 
-    # M15 analysis (if provided)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 9. Per-pair pipeline: H1 (biased by H4) + optional M15 (biased by H1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def analyze_pair(
+    symbol: str,
+    h1_candles: list[dict],
+    h4_candles: Optional[list[dict]] = None,
+    d1_candles: Optional[list[dict]] = None,
+    m15_candles: Optional[list[dict]] = None,
+) -> dict:
+    """Full pipeline for one pair: H1 primary + M15 (if provided).
+
+    Both timeframes run the exact same rules via _analyze_timeframe — only the
+    entry candles and the bias timeframe (H4 for H1, H1 for M15) differ. H1 is
+    returned as root; M15's result is attached at h1_result["m15"] only when
+    it represents an actual BUY/SELL setup (not NO-TRADE/NO-DATA).
+    """
+    h1_result = _analyze_timeframe(
+        symbol, h1_candles, h4_candles, d1_candles,
+        timeframe="H1", bias_timeframe="H4",
+    )
+
     if m15_candles:
-        m15_result = _analyze_m15_pattern(symbol, m15_candles, trend)
-        if m15_result:
+        m15_result = _analyze_timeframe(
+            symbol, m15_candles, h1_candles, d1_candles,
+            timeframe="M15", bias_timeframe="H1",
+        )
+        if m15_result.get("setup") in ("BUY", "SELL"):
             h1_result["m15"] = m15_result
 
     return h1_result

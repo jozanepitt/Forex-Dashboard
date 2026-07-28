@@ -321,14 +321,16 @@ TDI123_CHART_DISPLAY_BARS = 400  # candles actually drawn on the chart (readabil
 def tdi123_detail():
     """Per-pair detail for the TDI Cycle 123 chart overlay.
 
-    Returns the raw H1 candles + full TDI series + swing markers + pattern points
-    the frontend needs to draw 1/2/3 markers and the divergence line.
+    Returns the raw candles + full TDI series + swing markers + pattern points
+    the frontend needs to draw 1/2/3 markers and the divergence line, for
+    whichever timeframe the caller asks for via ?timeframe=H1|M15 (default H1).
 
-    Pattern/EMA detection runs on the FULL DEFAULT_BACKFILL history (so EMA-800
-    is a real converged average, not the calc_ema() flat-line fallback), but the
-    chart only ever displays the most recent TDI123_CHART_DISPLAY_BARS candles —
-    so every per-bar array (and the p1/p2/p3 pattern indices) is sliced down to
-    that display window before being sent to the frontend.
+    Pattern/EMA detection runs on the FULL DEFAULT_BACKFILL history of the
+    requested entry timeframe (so EMA-800 is a real converged average, not the
+    calc_ema() flat-line fallback), but the chart only ever displays the most
+    recent TDI123_CHART_DISPLAY_BARS candles — so every per-bar array (and the
+    p1/p2/p3 pattern indices) is sliced down to that display window before
+    being sent to the frontend.
     """
     symbol = request.args.get("symbol", "").upper().replace("_", "/")
     if not symbol:
@@ -336,16 +338,33 @@ def tdi123_detail():
     if "/" not in symbol and len(symbol) == 6:
         symbol = f"{symbol[:3]}/{symbol[3:]}"
 
+    timeframe = request.args.get("timeframe", "H1").upper()
+    if timeframe not in ("H1", "M15"):
+        timeframe = "H1"
+
     h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=DEFAULT_BACKFILL)
     h4_bars, h4_stale = fetcher.get_candles(symbol, "4h", limit=200)
     d1_bars, d1_stale = fetcher.get_candles(symbol, "1day", limit=60)
-    m15_bars, m15_stale = fetcher.get_candles(symbol, "15min", limit=DEFAULT_BACKFILL)
+    m15_bars, m15_stale = ([], False)
+    if timeframe == "M15":
+        m15_bars, m15_stale = fetcher.get_candles(symbol, "15min", limit=DEFAULT_BACKFILL)
 
-    row = tdi_cycle_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars, d1_candles=d1_bars, m15_candles=m15_bars)
+    full = tdi_cycle_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars,
+                                       d1_candles=d1_bars, m15_candles=m15_bars or None)
+
+    if timeframe == "M15":
+        row = full.get("m15") or {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
+                                   "timeframe": "M15", "score": 0}
+        entry_bars = m15_bars
+        stale = bool(m15_stale or h1_stale)
+    else:
+        row = full
+        entry_bars = h1_bars
+        stale = bool(h1_stale or h4_stale or d1_stale)
 
     # Build TDI + baseline series for chart overlay (full history, for accuracy)
     from btmm_core import _rsi, _sma
-    closes = [b["close"] for b in h1_bars]
+    closes = [b["close"] for b in entry_bars]
     rsi_series = _rsi(closes, 13) if len(closes) >= 14 else [50.0] * len(closes)
     fast_arr = _sma(rsi_series, 2)
     slow_arr = _sma(rsi_series, 7)
@@ -368,11 +387,11 @@ def tdi123_detail():
     display_n = TDI123_CHART_DISPLAY_BARS
     pattern = (row.get("pattern") or {})
     swing_idxs = [pattern[k]["idx"] for k in ("p1", "p2", "p3") if k in pattern]
-    if swing_idxs:
+    if swing_idxs and entry_bars:
         min_swing_idx = min(swing_idxs)
-        display_n = max(display_n, len(h1_bars) - min_swing_idx + 5)
-    display_n = min(display_n, len(h1_bars))
-    offset = len(h1_bars) - display_n
+        display_n = max(display_n, len(entry_bars) - min_swing_idx + 5)
+    display_n = min(display_n, len(entry_bars)) if entry_bars else 0
+    offset = len(entry_bars) - display_n if entry_bars else 0
 
     if offset > 0 and pattern:
         row = dict(row)
@@ -388,9 +407,10 @@ def tdi123_detail():
 
     return jsonify({
         "symbol": symbol,
-        "stale": bool(h1_stale or h4_stale or d1_stale),
+        "timeframe": timeframe,
+        "stale": stale,
         "row": row,
-        "candles": _tail(h1_bars),
+        "candles": _tail(entry_bars),
         "ema50": _tail(ema50),
         "ema200": _tail(ema200),
         "ema800": _tail(ema800),
