@@ -5206,7 +5206,7 @@ function renderTdi123ChartSvg(data) {
 
   const emaSvg =
     emaLine(data.ema50, '#3b82f6') +
-    emaLine(data.ema200, '#111827') +
+    emaLine(data.ema200, '#b0b8c4') +
     emaLine(data.ema800, '#ec4899');
 
   const priceAxisRight = W - margin.right + 8;
@@ -5250,7 +5250,7 @@ function renderTdi123ChartSvg(data) {
   // are 1x/2x/3x leg-1 measured-move multiples, not real EMA hits.
   const projSuffix = tgt.projected ? ' ≈' : '';
   const targetSvg = targetLine(tgt.L1, '#3b82f6', `L1 (50)${projSuffix}`)
-                  + targetLine(tgt.L2, '#111827', `L2 (200)${projSuffix}`)
+                  + targetLine(tgt.L2, '#b0b8c4', `L2 (200)${projSuffix}`)
                   + targetLine(tgt.L3, '#ec4899', `L3 (800)${projSuffix}`);
 
   // ── TDI pane ─────────────────────────────────────────────────────
@@ -5315,7 +5315,7 @@ function renderTdi123ChartSvg(data) {
   const legend = `
     <div class="tdi123-chart-legend">
       <span><span class="swatch" style="background:#3b82f6"></span>50 EMA (L1)</span>
-      <span style="${ema800HasData ? '' : 'opacity:.4'}"><span class="swatch" style="background:#111827"></span>200 EMA (L2)</span>
+      <span style="${ema800HasData ? '' : 'opacity:.4'}"><span class="swatch" style="background:#b0b8c4"></span>200 EMA (L2)</span>
       <span style="${ema800HasData ? '' : 'opacity:.4'}"><span class="swatch" style="background:#ec4899"></span>800 EMA (L3)${ema800HasData ? '' : ' — insufficient history'}</span>
       <span><span class="dot" style="background:${setupColour}"></span>Point 1 / 3</span>
       <span><span class="dot" style="background:#FFD93D"></span>Point 2</span>
