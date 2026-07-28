@@ -9,10 +9,15 @@ from typing import Optional
 
 import cache
 from btmm_core import analyze
+from config import INTERVAL_SECS
 
 log = logging.getLogger("backtest")
 
 MIN_BARS_WARMUP = 200
+
+# Bars of trailing history needed before an EMA-800 has converged (seed
+# influence < 1%) — same standard as tdi_cycle_123._ema_targets / app.py.
+EMA800_WARMUP_BARS = 2400
 
 
 def run(pair: str, start_ts: int, end_ts: int,
@@ -31,7 +36,15 @@ def run(pair: str, start_ts: int, end_ts: int,
       }
     """
     setups = setups or ["safety"]
-    all_bars = cache.read_candles(pair, interval, limit=2000)
+
+    # Fetch enough history to (a) cover the full requested date range and
+    # (b) give the EMA-800 a real warmup so it converges instead of running
+    # the whole backtest off a seed-biased approximation — a fixed 2000-bar
+    # read silently truncated any 30/60-day M15 request to ~21 days.
+    interval_secs = INTERVAL_SECS.get(interval, 900)
+    bars_in_range = int((end_ts - start_ts) / interval_secs) + 10
+    fetch_limit = bars_in_range + EMA800_WARMUP_BARS
+    all_bars = cache.read_candles(pair, interval, limit=fetch_limit)
 
     # Filter to range
     bars = [b for b in all_bars if start_ts <= b["ts_utc"] <= end_ts]
@@ -91,8 +104,10 @@ def run(pair: str, start_ts: int, end_ts: int,
         if open_trade:
             continue
 
-        # Analyse current bar
-        sig = analyze(full[max(0, i - 400): i + 1])
+        # Analyse current bar — feed enough trailing history for the EMA-800
+        # to actually converge, not a seed-biased approximation from a short
+        # rolling window (same bug class already fixed in tdi_cycle_123.py).
+        sig = analyze(full[max(0, i - EMA800_WARMUP_BARS): i + 1])
 
         if sig.get("signal") == "insufficient_data":
             continue
