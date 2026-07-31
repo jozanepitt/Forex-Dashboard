@@ -137,7 +137,17 @@ class MT5Client:
 
     # ------------------------------------------------------------------ public
     def to_mt5_symbol(self, pair: str) -> str:
-        """'EUR/USD' -> 'EURUSDm' (or whatever suffix is configured)."""
+        """'EUR/USD' -> 'EURUSDm' (or whatever suffix is configured).
+
+        Symbols whose broker root differs from the standard (e.g. Exness
+        exposes the US Dollar Index as 'DYXm' instead of 'DXYm') can set
+        `mt5_symbol` in their instruments.py spec — we use that as the root
+        and still apply the broker suffix.
+        """
+        import instruments  # local import: providers pkg must stay importable standalone
+        s = instruments.spec(pair)
+        if s and s.get("mt5_symbol"):
+            return s["mt5_symbol"] + self._suffix
         return pair.replace("/", "").upper() + self._suffix
 
     def fetch(self, pair: str, interval: str = "15min", outputsize: int = 800,

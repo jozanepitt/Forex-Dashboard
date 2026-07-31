@@ -1164,7 +1164,8 @@ def evaluate_pair(pair_symbol: str, signal: str, score: float,
 # Indices don't carry a slash-separated currency pair; map the ones we watch to
 # the currency whose high-impact news actually moves them.
 _INDEX_CCY = {"DE30": "EUR", "GER40": "EUR", "US30": "USD", "USTEC": "USD",
-              "NAS100": "USD", "SPX500": "USD", "UK100": "GBP", "JP225": "JPY"}
+              "NAS100": "USD", "SPX500": "USD", "UK100": "GBP", "JP225": "JPY",
+              "DXY": "USD"}  # US Dollar Index reacts to USD news
 
 
 def _pair_currencies(pair: str) -> set[str]:

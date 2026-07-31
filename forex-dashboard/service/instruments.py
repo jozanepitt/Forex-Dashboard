@@ -72,6 +72,10 @@ SYMBOL_SPECS: dict[str, dict] = {
     "DE30":    dict(pip=1.0,    digits=1, cls="index", min_sl_pips=50),    # DAX  ~25k
     "US30":    dict(pip=1.0,    digits=1, cls="index", min_sl_pips=75),    # Dow  ~51k
     "USTEC":   dict(pip=1.0,    digits=1, cls="index", min_sl_pips=100),   # Nas  ~30k
+    # US Dollar Index. Broker (Exness) exposes it as "DXYm" — auto-suffix path
+    # handles this, no override needed. Price ~100, 3-digit, so pip=0.01 and
+    # min_sl_pips=15 ≈ 0.15% of price.
+    "DXY":     dict(pip=0.01,   digits=3, cls="index", min_sl_pips=15),
     # ── Crypto (reference; not currently in the universe) ──
     "BTC/USD": dict(pip=1.0,    digits=1, cls="crypto", min_sl_pips=150),
     "ETH/USD": dict(pip=0.1,    digits=2, cls="crypto", min_sl_pips=50),

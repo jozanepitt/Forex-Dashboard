@@ -979,13 +979,14 @@ const FOREX_PAIRS = [
   { symbol:'XAG/USD', base:24.50,  type:'metal', pip:0.01, decimals:3, pipValue:50 },
   { symbol:'DE30',    base:25000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
   { symbol:'US30',    base:44000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
-  { symbol:'USTEC',   base:20000,  type:'index', pip:1.0,  decimals:1, pipValue:1 }
+  { symbol:'USTEC',   base:20000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
+  { symbol:'DXY',     base:100.0,  type:'index', pip:0.01, decimals:3, pipValue:1 }
 ];
 
 const PRIORITY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
   'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD',
-  'XAU/USD', 'XAG/USD', 'DE30', 'US30', 'USTEC'
+  'XAU/USD', 'XAG/USD', 'DE30', 'US30', 'USTEC', 'DXY'
 ];
 
 // Per-asset base stop distance in PRICE terms (mirrors backend
@@ -996,7 +997,7 @@ function baseRisk(pair) {
   const pip = (pair && pair.pip) ? pair.pip : 0.0001;
   let floorPips = 10;
   if (pair && pair.type === 'metal')  floorPips = (pair.symbol === 'XAG/USD') ? 40 : 60;
-  else if (pair && pair.type === 'index')  floorPips = pair.symbol === 'USTEC' ? 100 : (pair.symbol === 'US30' ? 75 : 50);
+  else if (pair && pair.type === 'index')  floorPips = pair.symbol === 'USTEC' ? 100 : (pair.symbol === 'US30' ? 75 : pair.symbol === 'DXY' ? 15 : 50);
   else if (pair && pair.type === 'crypto') floorPips = 150;
   return floorPips * pip;
 }
@@ -4648,7 +4649,7 @@ function _jIsLong(dir) { return /buy|bull|long/i.test(dir || ''); }
 // Classify an instrument the same way the backtest did.
 function _jClass(pair) {
   if (pair === 'XAU/USD' || pair === 'XAG/USD') return 'metal';
-  if (['DE30','US30','USTEC','NAS100','GER40'].includes(pair)) return 'index';
+  if (['DE30','US30','USTEC','NAS100','GER40','DXY'].includes(pair)) return 'index';
   if (['EUR/USD','GBP/USD','USD/JPY','USD/CHF','USD/CAD','AUD/USD','NZD/USD'].includes(pair)) return 'fx-major';
   return 'fx-cross';
 }
@@ -4933,6 +4934,7 @@ function _tdi123FmtPrice(p, sym) {
   if (p > 5000) return Number(p).toFixed(1);
   if (sym === 'XAU/USD') return Number(p).toFixed(2);
   if (sym === 'XAG/USD') return Number(p).toFixed(3);
+  if (sym === 'DXY') return Number(p).toFixed(3);      // US Dollar Index ~100.000
   if (sym.includes('JPY')) return Number(p).toFixed(3);
   return Number(p).toFixed(5);
 }
@@ -5402,6 +5404,7 @@ function _crtFmtPrice(p, sym) {
   if (p > 5000) return p.toFixed(1);            // indices: DE30, US30, USTEC
   if (sym === 'XAU/USD') return p.toFixed(2);  // gold ~2050.00
   if (sym === 'XAG/USD') return p.toFixed(3);  // silver ~24.500
+  if (sym === 'DXY') return p.toFixed(3);       // US Dollar Index ~100.000
   if (sym.includes('JPY')) return p.toFixed(3);
   return p.toFixed(5);
 }
@@ -5542,6 +5545,7 @@ function _snrFmtPrice(p, sym) {
   if (p > 5000) return p.toFixed(1);                 // Other indices
   if (sym === 'XAU/USD') return p.toFixed(2);
   if (sym === 'XAG/USD') return p.toFixed(3);
+  if (sym === 'DXY') return p.toFixed(3);            // US Dollar Index ~100.000
   if (sym && sym.includes('JPY')) return p.toFixed(3);
   return p.toFixed(5);
 }

@@ -49,6 +49,7 @@ CRT_UNIVERSE = [
     "GBP/AUD", "AUD/CAD", "AUD/CHF", "AUD/NZD",  # AUD crosses
     "XAU/USD", "XAG/USD",
     "DE30", "US30", "USTEC",
+    "DXY",  # US Dollar Index (broker: DXYm on Exness)
 ]
 
 NY_HOUR_CBDR = 17

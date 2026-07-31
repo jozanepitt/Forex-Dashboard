@@ -30,6 +30,7 @@ PRIORITY_PAIRS = [
     "GBP/AUD", "AUD/CAD", "AUD/CHF", "AUD/NZD",  # AUD crosses — clean structure
     "XAU/USD", "XAG/USD",  # Gold, Silver — MT5 maps to XAUUSDm / XAGUSDm
     "DE30", "US30", "USTEC",  # DAX 40, Dow 30, Nasdaq 100 — MT5 maps to DE30m / US30m / USTECm
+    "DXY",  # US Dollar Index — MT5 maps to DXYm on Exness
 ]
 
 INTERVAL_SECS = {
