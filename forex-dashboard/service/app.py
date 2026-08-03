@@ -276,35 +276,36 @@ def tdi123():
     the client but symbols are fetched concurrently.
     """
     import time as _t
-    from concurrent.futures import ThreadPoolExecutor
 
     now = _t.time()
     if _TDI123_CACHE["payload"] is not None and (now - _TDI123_CACHE["ts"]) < _TDI123_TTL_SECS:
         return jsonify(_TDI123_CACHE["payload"])
 
     universe = tdi_cycle_123.TDI123_UNIVERSE
-    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe
-                                   for iv in ("1h", "4h", "1day", "15min")]
 
-    def _fetch(job):
-        sym, iv = job
-        # H1 needs >=800 bars for a real EMA-800 (calc_ema falls back to a flat
-        # line at current price otherwise) — match DEFAULT_BACKFILL so it's
-        # actually converged, not just past the bare minimum.
-        # M15 also needs deep history for accurate EMA convergence.
-        limits = {"1h": DEFAULT_BACKFILL, "4h": 200, "1day": 60, "15min": DEFAULT_BACKFILL}
-        bars, stale = fetcher.get_candles(sym, iv, limit=limits[iv])
-        return sym, iv, bars, stale
+    # Read from the candle cache directly. The scheduler's refresh_all() keeps
+    # the cache fresh every 30 min via MT5, so we don't need a per-call
+    # get_candles() (which does its own max_ts + refresh + read). Doing so
+    # spawned 100 concurrent SQLite connections that collided with the
+    # service's own writer and timed the endpoint out to 85-120s under load;
+    # a straight read is single-connection-per-call and ~10x faster.
+    #
+    # Staleness: derive from the cache's own max_ts vs interval expected window.
+    # H1 primary — only flag stale if H1 hasn't updated within 2 intervals.
+    limits = {"1h": DEFAULT_BACKFILL, "4h": 200, "1day": 60, "15min": DEFAULT_BACKFILL}
+    intervals = (("1h", "1h"), ("4h", "4h"), ("1day", "1d"), ("15min", "m15"))
+    now_ts = int(now)
 
-    candles_by_pair: dict[str, dict] = {sym: {"1h": [], "4h": [], "1d": [], "m15": []}
-                                        for sym in universe}
+    candles_by_pair: dict[str, dict] = {}
     stale_set: set[str] = set()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for sym, iv, bars, stale in pool.map(_fetch, jobs):
-            key = {"1h": "1h", "4h": "4h", "1day": "1d", "15min": "m15"}[iv]
-            candles_by_pair[sym][key] = bars
-            if stale and iv == "1h":  # only flag stale if H1 is stale (primary timeframe)
-                stale_set.add(sym)
+    for sym in universe:
+        candles_by_pair[sym] = {}
+        for iv, key in intervals:
+            candles_by_pair[sym][key] = cache.read_candles(sym, iv, limit=limits[iv])
+        # Flag stale from the H1 bar age — same rule the old code used.
+        h1_last = cache.max_ts(sym, "1h")
+        if h1_last is None or now_ts > h1_last + 2 * INTERVAL_SECS["1h"] + 60:
+            stale_set.add(sym)
 
     result = tdi_cycle_123.analyze_universe(candles_by_pair)
     result["stale_pairs"] = sorted(stale_set)
