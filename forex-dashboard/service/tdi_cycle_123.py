@@ -602,17 +602,19 @@ def _location(price: float, direction: str, pivots: Optional[dict]) -> dict:
 #   • ADR reachability: 88% of signals had TP1 further than the day's REMAINING
 #     ADR — mechanically unreachable before the session dies. Matches Davit:
 #     "late entries = stupid money; ADR already consumed = no-trade."
-SESSION_ACTIVE_START = 7    # UTC hour, inclusive (London open)
-SESSION_ACTIVE_END = 16     # UTC hour, exclusive (NY-open close)
+SESSION_ACTIVE_START = 3    # UTC hour, inclusive — 05:00 SAST (user rule)
+SESSION_ACTIVE_END = 18     # UTC hour, exclusive — 20:00 SAST (user rule)
 ADR_PERIOD_DAYS = 14
 
 
 def _session_label(ts_utc: int) -> str:
     h = datetime.fromtimestamp(ts_utc, tz=timezone.utc).hour
+    if 3 <= h < 7:   return "Asian-pm"      # 05:00-09:00 SAST — active per user rule
     if 7 <= h < 10:  return "London-open"
     if 10 <= h < 13: return "London"
     if 13 <= h < 16: return "NY-open"
-    if 16 <= h < 22: return "NY-afternoon"
+    if 16 <= h < 18: return "NY-afternoon"  # active until 20:00 SAST per user rule
+    if 18 <= h < 22: return "NY-late"       # 20:00-24:00 SAST — outside window
     return "Asian"
 
 

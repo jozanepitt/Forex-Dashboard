@@ -1196,11 +1196,12 @@ def _should_alert_tdi123(row: dict) -> bool:
     if grade not in ("A", "B"):
         return False
 
-    # Tier-1 timing gates. SESSION (on by default, 60-day A/B: -0.40R → +0.25R):
-    # reject the Asian dead-zone; only fire in the London+NY block. ADR (off by
-    # default — as a hard gate it starved the strategy to a handful of trades):
-    # reject when TP1 is beyond the day's remaining range. A None flag means the
-    # data was unavailable — treated as "unknown", never a hard fail.
+    # Timing gate — user rule: allow alerts (both A and B) inside the
+    # 05:00–20:00 SAST trading window (03:00–18:00 UTC, defined in
+    # tdi_cycle_123.SESSION_ACTIVE_START/END). Outside that window, block.
+    # ADR reachability stays off by default (as a hard gate it starves
+    # the strategy). A None flag means data was unavailable — never a
+    # hard fail.
     if TDI123_SESSION_FILTER and row.get("in_active_session") is False:
         return False
     if TDI123_ADR_FILTER and row.get("tp1_reachable") is False:
@@ -1261,15 +1262,35 @@ def alert_tdi123_setup(pair: str, row: dict):
         log.debug("TDI123 SUPPRESSED %s: incomplete trade plan", pair)
         return
 
-    direction_rr = "buy" if setup == "BUY" else "sell"
-    if not _check_rr(entry, sl, tp1, direction_rr, min_rr=0.8, symbol=pair):
-        log.warning("TDI123 alert BLOCKED for %s: bad R:R", pair)
+    # Multi-tier R:R check for TDI 123 — the strategy explicitly cascades
+    # through L1 (50 EMA), L2 (200 EMA), L3 (800 EMA); trader scales out
+    # at each. A plan is valid if AT LEAST ONE tier hits R:R >= 0.8, not
+    # just TP1 (which is intentionally the tightest target — often <1R
+    # away when a big HTF EMA sits closer than p3-based SL). Also validates
+    # each target is on the correct side of entry.
+    sl_dist = abs(entry - sl)
+    if sl_dist < 1e-9:
+        log.warning("TDI123 alert BLOCKED for %s: SL too tight (0 distance)", pair)
+        return
+    direction_ok = lambda tp: (setup == "BUY" and tp > entry) or (setup == "SELL" and tp < entry)
+    valid_tiers = [plan.get(k) for k in ("tp1", "tp2", "tp3") if plan.get(k) and direction_ok(plan.get(k))]
+    if not valid_tiers:
+        log.warning("TDI123 alert BLOCKED for %s: no tier on correct side of entry", pair)
+        return
+    best_rr = max(abs(tp - entry) / sl_dist for tp in valid_tiers)
+    if best_rr < 0.8:
+        log.warning("TDI123 alert BLOCKED for %s: bad R:R (best of L1/L2/L3 = 1:%.2f, min 1:0.8)",
+                    pair, best_rr)
         return
 
-    passed_q, q_reason = _passes_quality_filters(pair, setup, entry)
-    if not passed_q:
-        log.info("TDI123 FILTERED %s %s: %s", pair, setup, q_reason)
-        return
+    # NOTE: intentionally NOT calling _passes_quality_filters here. That gate
+    # was calibrated for SNR's audit (86% of SNR losses were with-trend), and
+    # its H1-trend check silently blocks Grade A TDI 123 setups whenever the
+    # 3-push happens WITH the H1 trend — even though TDI 123's own gating
+    # (grade thresholds + htf_aligned requirement for Grade B) already handles
+    # trend context per user rule "any A or B setup 05:00-20:00 SAST alerts".
+    # Its distance gate is also a no-op here: TDI 123 uses current close as
+    # entry, so distance to entry_price ≈ 0.
 
     # News gate: suppress if either of the pair's currencies has a high-impact
     # event within the window. Fails open — a feed error never blocks a trade.
