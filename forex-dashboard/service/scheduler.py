@@ -93,7 +93,7 @@ def refresh_all():
             _fetch_guarded(sym, DEFAULT_INTERVAL, limit=DEFAULT_BACKFILL)  # M15 — TDI123 M15 pattern detection
             _fetch_guarded(sym, "1h", limit=DEFAULT_BACKFILL)  # H1 — TDI123 primary (needs >=800 for real EMA-800)
             _fetch_guarded(sym, "4h", limit=200)           # H4 — TDI123 HTF bias
-            _fetch_guarded(sym, "1day", limit=60)          # daily — SNR-H4 scanner
+            _fetch_guarded(sym, "1day", limit=60)          # daily — TDI123 daily bias/ADR
             updated += 1
         except Exception as e:
             log.error("refresh_all: %s fetch failed/timed out: %s", sym, e)
@@ -130,18 +130,6 @@ def refresh_all():
         _run_crt_5am_alerts()
     except Exception as e:
         log.warning("CRT-5AM alerts failed: %s", e)
-
-    # Run Malaysian SNR Emperor scanner + Discord alerts
-    try:
-        _run_snr_alerts()
-    except Exception as e:
-        log.warning("SNR alerts failed: %s", e)
-
-    # Run M15 SNR Fast Scanner + Discord alerts
-    try:
-        _run_snr_m15_alerts()
-    except Exception as e:
-        log.warning("SNR-M15 alerts failed: %s", e)
 
     # Run TDI Cycle 123 scanner (improvements-on-BTMM) + Discord alerts
     try:
@@ -229,71 +217,6 @@ def _run_crt_5am_alerts():
             alerts.alert_crt_5am_setup(row["symbol"], row)
         except Exception as e:
             log.debug("CRT-5AM alert eval failed for %s: %s", row.get("symbol"), e)
-
-
-def _run_snr_alerts():
-    """Run the Malaysian SNR Emperor scanner and fire Discord alerts for confirmed setups."""
-    import cache
-    import snr_strategy
-
-    candles_by_pair: dict[str, dict] = {}
-    for sym in snr_strategy.SNR_UNIVERSE:
-        candles_by_pair[sym] = {
-            "m15": cache.read_candles(sym, "15min", limit=400),
-            "1d": cache.read_candles(sym, "1day", limit=60),
-        }
-    result = snr_strategy.analyze_universe(candles_by_pair)
-    for row in result.get("pairs", []):
-        try:
-            alerts.alert_snr_setup(row["symbol"], row)
-        except Exception as e:
-            log.debug("SNR alert eval failed for %s: %s", row.get("symbol"), e)
-
-
-def _run_snr_m15_alerts():
-    """Run the M15 SNR Fast Scanner and fire Discord alerts for confirmed setups.
-
-    The EMS gate (see alerts.alert_snr_m15_setup) needs the H4 scanner's
-    storyline for the same pair, so we run the H4 analysis here and pass each
-    pair's H4 row + raw M15 candles into the alert evaluator.
-    """
-    import cache
-    import snr_m15_strategy
-    import snr_strategy
-
-    candles_by_pair: dict[str, dict] = {}
-    for sym in snr_m15_strategy.SNR_M15_UNIVERSE:
-        candles_by_pair[sym] = {
-            "1h": cache.read_candles(sym, "1h", limit=200),
-            "m15": cache.read_candles(sym, "15min", limit=400),
-        }
-
-    # H4 storyline context for the EMS gate (uses M15 + daily candles).
-    h4_by_pair: dict[str, dict] = {}
-    try:
-        h4_candles_by_pair = {
-            sym: {
-                "m15": candles_by_pair[sym]["m15"],
-                "1d": cache.read_candles(sym, "1day", limit=60),
-            }
-            for sym in snr_strategy.SNR_UNIVERSE
-        }
-        h4_result = snr_strategy.analyze_universe(h4_candles_by_pair)
-        h4_by_pair = {r["symbol"]: r for r in h4_result.get("pairs", [])}
-    except Exception as e:
-        log.debug("SNR-M15 EMS gate: H4 context unavailable: %s", e)
-
-    result = snr_m15_strategy.analyze_universe(candles_by_pair)
-    for row in result.get("pairs", []):
-        sym = row["symbol"]
-        try:
-            alerts.alert_snr_m15_setup(
-                sym, row,
-                h4_row=h4_by_pair.get(sym),
-                m15_candles=candles_by_pair.get(sym, {}).get("m15"),
-            )
-        except Exception as e:
-            log.debug("SNR-M15 alert eval failed for %s: %s", sym, e)
 
 
 def _run_tdi123_alerts():

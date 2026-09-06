@@ -15,8 +15,6 @@ import alerts
 import backtest as bt
 import cache
 import crt_strategy
-import snr_strategy
-import snr_m15_strategy
 import tdi_cycle_123
 import fetcher
 import scheduler
@@ -177,90 +175,6 @@ def crt():
     return jsonify(result)
 
 
-# ── SNR endpoint (Malaysian SNR Emperor) ─────────────────────────────────────────────────────────────
-_SNR_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
-_SNR_TTL_SECS = 300
-
-
-@app.get("/snr")
-def snr():
-    """SNR (Support & Resistance) scanner across the universe."""
-    import time as _t
-    from concurrent.futures import ThreadPoolExecutor
-
-    now = _t.time()
-    if _SNR_CACHE["payload"] is not None and (now - _SNR_CACHE["ts"]) < _SNR_TTL_SECS:
-        return jsonify(_SNR_CACHE["payload"])
-
-    universe = snr_strategy.SNR_UNIVERSE
-    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("15min", "1day")]
-
-    def _fetch(job):
-        sym, iv = job
-        bars, stale = fetcher.get_candles(sym, iv, limit=(400 if iv == "15min" else 60))
-        return sym, iv, bars, stale
-
-    candles_by_pair: dict[str, dict] = {sym: {"m15": [], "1d": []} for sym in universe}
-    stale_set: set[str] = set()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for sym, iv, bars, stale in pool.map(_fetch, jobs):
-            candles_by_pair[sym]["m15" if iv == "15min" else "1d"] = bars
-            if stale:
-                stale_set.add(sym)
-
-    result = snr_strategy.analyze_universe(candles_by_pair)
-    result["stale_pairs"] = sorted(stale_set)
-    result["cached_at"] = int(now)
-    _SNR_CACHE["payload"] = result
-    _SNR_CACHE["ts"] = now
-    return jsonify(result)
-
-
-# ── SNR M15 Fast Scanner endpoint ─────────────────────────────────────────────────────────────────────
-_SNR_M15_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
-_SNR_M15_TTL_SECS = 120  # 2-min cache — fast scanner needs fresher data
-
-
-@app.get("/snr-m15")
-def snr_m15():
-    """SNR M15 Fast Scanner — same Emperor methodology, lower timeframes.
-
-    Fetches H1 (for level marking) + M15 (for breakout/engulfing).
-    Catches setups hours earlier than the H4 scanner.
-    """
-    import time as _t
-    from concurrent.futures import ThreadPoolExecutor
-
-    now = _t.time()
-    if _SNR_M15_CACHE["payload"] is not None and (now - _SNR_M15_CACHE["ts"]) < _SNR_M15_TTL_SECS:
-        return jsonify(_SNR_M15_CACHE["payload"])
-
-    universe = snr_m15_strategy.SNR_M15_UNIVERSE
-    # Fetch H1 (for level marking) + M15 (for breakout/engulfing confirmation)
-    jobs: list[tuple[str, str]] = [(sym, iv) for sym in universe for iv in ("15min", "1h")]
-
-    def _fetch(job):
-        sym, iv = job
-        limit = 400 if iv == "15min" else 200  # ~8 days H1, ~4 days M15
-        bars, stale = fetcher.get_candles(sym, iv, limit=limit)
-        return sym, iv, bars, stale
-
-    candles_by_pair: dict[str, dict] = {sym: {"1h": [], "m15": []} for sym in universe}
-    stale_set: set[str] = set()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for sym, iv, bars, stale in pool.map(_fetch, jobs):
-            candles_by_pair[sym]["1h" if iv == "1h" else "m15"] = bars
-            if stale:
-                stale_set.add(sym)
-
-    result = snr_m15_strategy.analyze_universe(candles_by_pair)
-    result["stale_pairs"] = sorted(stale_set)
-    result["cached_at"] = int(now)
-    _SNR_M15_CACHE["payload"] = result
-    _SNR_M15_CACHE["ts"] = now
-    return jsonify(result)
-
-
 # ── TDI Cycle 123 endpoint ──────────────────────────────────────────────────
 # Improvements-on-BTMM scanner: FSO_TDI + 123 Peak Formation + divergence.
 _TDI123_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
@@ -271,8 +185,8 @@ _TDI123_TTL_SECS = 180  # 3-min cache — H1 primary TF, so slightly fresher tha
 def tdi123():
     """TDI Cycle 123 Reversal scanner across the universe.
 
-    Fetches H1 (primary), H4 (HTF bias), and D1 (context). Reuses the same
-    parallel-fetch pattern as /snr so per-symbol IPC to MT5 is serialised inside
+    Fetches H1 (primary), H4 (HTF bias), and D1 (context). Uses a
+    parallel-fetch pattern so per-symbol IPC to MT5 is serialised inside
     the client but symbols are fetched concurrently.
     """
     import time as _t

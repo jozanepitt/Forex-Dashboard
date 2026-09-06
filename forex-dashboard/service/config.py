@@ -57,11 +57,6 @@ BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "true").lower() in (
 # full (noisier) BTMM alert set back.
 BTMM_APLUS_ONLY = os.environ.get("BTMM_APLUS_ONLY", "true").lower() in ("1", "true", "yes")
 
-# Grade-A-only mode for SNR Emperor H4 and M15 SNR scanners.
-# When True, only Grade A setups are sent to Discord; Grade B (and below) are
-# suppressed as noise. Set to "false" to allow Grade B alerts again.
-ALERTS_GRADE_A_ONLY = os.environ.get("ALERTS_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
-
 # 1AM CRT grade gate — separate from the SNR flag above because CRT fires fewer
 # setups and Grade B setups are acceptable signals there (they don't push as many
 # alerts as SNR). Default false = A + B both sent to Discord.
@@ -69,14 +64,6 @@ CRT_GRADE_A_ONLY = os.environ.get("CRT_GRADE_A_ONLY", "false").lower() in ("1", 
 
 # 5AM CRT grade gate — NY Open kill-zone session. A + B (default false, same as 1AM CRT).
 CRT_5AM_GRADE_A_ONLY = os.environ.get("CRT_5AM_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
-
-# Quality filters for SNR (H4 + M15) — based on 2026-06-09 pattern audit.
-# DISTANCE filter: skip signal if price is too far from the entry zone when fired
-#   (stale setups never fill or fill into established momentum). 0 disables.
-# TREND filter: skip signal if direction aligns with H1 trend (SNR is a reversal
-#   strategy; with-trend signals had 0% win rate in audit). Disable to allow all.
-ALERTS_DISTANCE_FILTER_PIPS = float(os.environ.get("ALERTS_DISTANCE_FILTER_PIPS", "50"))
-ALERTS_TREND_FILTER_ENABLED = os.environ.get("ALERTS_TREND_FILTER_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # TDI Cycle 123 — improvements-on-BTMM scanner (FSO_TDI + 123 Peak + divergence).
 # Grade gating same convention as CRT: default A + B both sent. Set "true" to
@@ -105,14 +92,6 @@ TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
 # its outcome (win at TP1 / loss at SL) from cached candles each refresh, so the
 # dashboard builds a REAL track record instead of relying on backtests.
 TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower() in ("1", "true", "yes")
-
-# EMS gate for M15 SNR signals — based on "The Alchemist EMS Trinity" + MSNR
-# ALCHEMIST notes. When True, an M15 SNR alert only fires if the higher
-# timeframe (H4) storyline agrees in direction AND price shows a liquidity
-# sweep AND a market structure shift. This turns M15 from a standalone (noisy)
-# signal source into a precision refinement of the HTF bias. Set "false" to
-# revert to the old standalone M15 behaviour.
-SNR_M15_EMS_GATE_ENABLED = os.environ.get("SNR_M15_EMS_GATE_ENABLED", "true").lower() in ("1", "true", "yes")
 
 
 def load_keys():

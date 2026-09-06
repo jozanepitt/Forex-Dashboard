@@ -12,7 +12,7 @@ Checks:
   1. Service /health responds.
   2. Scheduler is fresh — last successful refresh < 20 min ago (not stalled).
   3. Discord webhook is valid (non-destructive GET — no message posted).
-  4. Each dashboard endpoint (/crt, /snr, /snr-m15) returns data.
+  4. Each dashboard endpoint (/crt) returns data.
   5. Alert pipeline runs end-to-end with zero errors (Discord stubbed).
 
 Exit code 0 = all passed, 1 = something failed.
@@ -87,7 +87,7 @@ def main() -> int:
         check("Discord webhook valid", False, str(e))
 
     # 4. Dashboard endpoints return data
-    for ep in ("/crt", "/snr", "/snr-m15"):
+    for ep in ("/crt",):
         try:
             st, body = _get(ep, timeout=180)
             n = len(body.get("pairs", []))
@@ -99,8 +99,6 @@ def main() -> int:
     try:
         import alerts
         import cache
-        import snr_strategy
-        import snr_m15_strategy
         import crt_strategy
 
         sent = []
@@ -120,12 +118,6 @@ def main() -> int:
                 except Exception:
                     errs += 1
 
-        _drive(snr_strategy.SNR_UNIVERSE,
-               {"m15": ("15min", 400), "1d": ("1day", 60)},
-               (snr_strategy.analyze_universe, alerts.alert_snr_setup))
-        _drive(snr_m15_strategy.SNR_M15_UNIVERSE,
-               {"1h": ("1h", 200), "m15": ("15min", 400)},
-               (snr_m15_strategy.analyze_universe, alerts.alert_snr_m15_setup))
         _drive(crt_strategy.CRT_UNIVERSE,
                {"m15": ("15min", 400)},
                (crt_strategy.analyze_universe, alerts.alert_crt_setup))

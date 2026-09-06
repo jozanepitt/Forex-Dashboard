@@ -327,7 +327,6 @@ td.mono{font-family:var(--font-mono)}
 .trend-table tr:hover{background:var(--bg-elevated)}
 .trend-footer{padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;margin-top:14px;font-size:.78rem;color:var(--text-secondary);line-height:1.6}
 /* Journal */
-.mode-tab[data-mode="snr-m15"].active{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)}
 .mode-tab[data-mode="tdi123"].active{background:rgba(236,72,153,.12);color:#ec4899;border:1px solid rgba(236,72,153,.3)}
 .mode-tab[data-mode="journal"].active{background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
 .mode-tab[data-mode="backtest"].active{background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
@@ -426,8 +425,6 @@ td.mono{font-family:var(--font-mono)}
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
   <button class="mode-tab" data-mode="crt">🕐 1AM CRT</button>
-  <button class="mode-tab" data-mode="snr">🇲🇾 SNR Emperor</button>
-  <button class="mode-tab" data-mode="snr-m15">⚡ M15 SNR</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
   <button class="mode-tab" data-mode="journal">📒 Journal</button>
   <button class="mode-tab" data-mode="backtest">📈 Backtest</button>
@@ -776,46 +773,6 @@ td.mono{font-family:var(--font-mono)}
     </div>
   </div>
 
-  <!-- ── Malaysian SNR Emperor ─────────────────────────────────────────── -->
-  <div class="table-container" id="snrContainer" style="display:none">
-    <div class="trend-controls">
-      <div class="trend-control-group" style="min-width:260px">
-        <label>🇲🇾 Malaysian SNR Emperor</label>
-        <div id="snrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Close-to-open junctions · Fresh/Unfresh/MISS · Storyline · Emperor Setups 1-4</div>
-      </div>
-      <button class="trend-refresh-btn" id="snrRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta" id="snrMeta">5-Action SOP: Zone → Rejection → Breakout → Confluence → Entry</div>
-    </div>
-    <div class="trend-summary" id="snrSummary">Click <b>Refresh Scanner</b> to compute.</div>
-    <table class="trend-table snr-table">
-      <thead>
-        <tr>
-          <th>Pair</th>
-          <th>Price</th>
-          <th>Nearest S</th>
-          <th>Nearest R</th>
-          <th>Levels</th>
-          <th>Storyline</th>
-          <th>Setup</th>
-          <th>Engulfing</th>
-          <th>Trendline</th>
-          <th>Roadblocks</th>
-          <th>Signal</th>
-          <th>Grade</th>
-        </tr>
-      </thead>
-      <tbody id="snrTableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
-    </table>
-    <div class="trend-footer">
-      <b>Malaysian SNR Emperor:</b> Levels from close-to-open junctions (A-shape resistance, V-shape support).
-      Types: Classic, RBS/SBR, Gap, QMR. <b>Fresh</b> = untouched, <b>Unfresh</b> = wick-touched, <b>MISS</b> = validated (candles passed without touching).
-      <b>Storyline</b> = 4 rules: same-TF levels, rejection, H4 breakout confirmation, roadblocks.
-      <b>Setups:</b> 1 = High risk (50/50), 2 = Medium (rejection+refinement), 3 = Low (BO+QM pullback), 4 = Continuation.
-      <b>Engulfing:</b> Perfect, Quasimodo, Hidden + PEZ (intact zone) / FEZ (broken zone).
-      <b>X-Factor:</b> Trendline + SNR convergence = highest confluence.
-    </div>
-  </div>
-
   <!-- ── TDI Cycle 123 (Improvements-on-BTMM) ────────────────────────────── -->
   <div class="table-container" id="tdi123Container" style="display:none">
     <div class="trend-controls">
@@ -870,44 +827,6 @@ td.mono{font-family:var(--font-mono)}
     </div>
   </div>
 
-  <!-- ── M15 SNR Fast Scanner ────────────────────────────────────────────── -->
-  <div class="table-container" id="snrM15Container" style="display:none">
-    <div class="trend-controls">
-      <div class="trend-control-group" style="min-width:260px">
-        <label>⚡ M15 SNR Fast Scanner</label>
-        <div id="snrM15StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">H1 levels · M15 breakout/engulfing · Catches entries hours earlier</div>
-      </div>
-      <button class="trend-refresh-btn" id="snrM15RefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta" id="snrM15Meta">Same Emperor methodology — faster timeframes: H1→M15→M5</div>
-    </div>
-    <div class="trend-summary" id="snrM15Summary">Click <b>Refresh Scanner</b> to compute.</div>
-    <table class="trend-table snr-table">
-      <thead>
-        <tr>
-          <th>Pair</th>
-          <th>Price</th>
-          <th>Nearest S</th>
-          <th>Nearest R</th>
-          <th>Levels</th>
-          <th>Storyline</th>
-          <th>Setup</th>
-          <th>Engulfing</th>
-          <th>Trendline</th>
-          <th>Roadblocks</th>
-          <th>Signal</th>
-          <th>Grade</th>
-        </tr>
-      </thead>
-      <tbody id="snrM15TableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
-    </table>
-    <div class="trend-footer">
-      <b>M15 SNR Fast Scanner:</b> Same Malaysian SNR Emperor methodology shifted down one timeframe.
-      <b>H1</b> close-to-open junctions for level marking (refreshes every hour vs once daily).
-      <b>M15</b> for breakout confirmation, engulfing patterns, storyline, and trendlines.
-      Catches the same setups <b>hours earlier</b> than the H4 scanner. Tighter stop losses.
-      Discord alerts fire with ⚡ M15 prefix.
-    </div>
-  </div>
 </div>
 
 <div class="modal-overlay" id="modalOverlay">
@@ -4850,7 +4769,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'crt' || mode === 'snr' || mode === 'snr-m15' || mode === 'tdi123';
+    const isScanner = mode === 'crt' || mode === 'tdi123';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -4871,21 +4790,15 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     // Scanner containers: show the active one, hide all others
     const btmmContainer   = document.getElementById('btmmTableContainer');
     const crtContainer    = document.getElementById('crtContainer');
-    const snrContainer    = document.getElementById('snrContainer');
-    const snrM15Container = document.getElementById('snrM15Container');
     const tdi123Container = document.getElementById('tdi123Container');
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
     if (crtContainer)     crtContainer.style.display     = (mode === 'crt')       ? 'block' : 'none';
-    if (snrContainer)     snrContainer.style.display     = (mode === 'snr')       ? 'block' : 'none';
-    if (snrM15Container)  snrM15Container.style.display  = (mode === 'snr-m15')   ? 'block' : 'none';
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
 
     // Load content for the active mode
     if (mode === 'indicator') render();           // BTMM dashboard
     if (mode === 'journal')   loadJournal();
     if (mode === 'crt')       loadCrt();
-    if (mode === 'snr')       loadSnr();
-    if (mode === 'snr-m15')   loadSnrM15();
     if (mode === 'tdi123')    loadTdi123();
   });
 });
@@ -5510,318 +5423,6 @@ function renderCrtTable(data) {
 const crtBtn = document.getElementById('crtRefreshBtn');
 if (crtBtn) crtBtn.addEventListener('click', loadCrt);
 _renderCrtAnchorsLine();
-
-// ── Malaysian SNR Emperor loader ────────────────────────────────────────────
-async function loadSnr() {
-  const tbody   = document.getElementById('snrTableBody');
-  const summary = document.getElementById('snrSummary');
-  const btn     = document.getElementById('snrRefreshBtn');
-  if (btn) btn.disabled = true;
-  summary.textContent = 'Running Malaysian SNR Emperor analysis…';
-  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
-
-  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
-  try {
-    const ctl = new AbortController();
-    const tmr = setTimeout(() => ctl.abort(), 90000);
-    const resp = await fetch(`${baseUrl}/snr`, { signal: ctl.signal });
-    clearTimeout(tmr);
-    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
-    const data = await resp.json();
-    renderSnrTable(data);
-  } catch (err) {
-    console.error('SNR load failed', err);
-    const msg = err.name === 'AbortError' ? 'Request timed out (90s). MT5 may be busy — try Refresh Scanner.' : err.message;
-    summary.innerHTML = `<span style="color:var(--red)">Failed to load SNR scanner: ${msg}</span>`;
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-function _snrFmtPrice(p, sym) {
-  if (p === undefined || p === null) return '—';
-  if (sym === 'DE30') return p.toFixed(1);          // DAX index
-  if (p > 5000) return p.toFixed(1);                 // Other indices
-  if (sym === 'XAU/USD') return p.toFixed(2);
-  if (sym === 'XAG/USD') return p.toFixed(3);
-  if (sym === 'DXY') return p.toFixed(3);            // US Dollar Index ~100.000
-  if (sym && sym.includes('JPY')) return p.toFixed(3);
-  return p.toFixed(5);
-}
-
-function renderSnrTable(data) {
-  const tbody   = document.getElementById('snrTableBody');
-  const summary = document.getElementById('snrSummary');
-
-  const rows = (data.pairs || []).map(p => {
-    const sym = p.symbol;
-    const storyline = p.storyline || {};
-    const entry = p.entry_tier || {};
-    const engulfing = p.engulfing_patterns || [];
-    const roadblocks = p.roadblocks || [];
-    const tl_conf = p.tl_confluence || {};
-
-    const priceCell = `<span class="mono">${_snrFmtPrice(p.current_price, sym)}</span>`;
-    const supCell = p.nearest_support != null
-      ? `<span style="color:var(--green);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_support, sym)}</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
-    const resCell = p.nearest_resistance != null
-      ? `<span style="color:var(--red);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_resistance, sym)}</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
-
-    // Levels cell: fresh/unfresh + MISS + SNR types
-    const missCount = p.miss_validated || 0;
-    const types = p.snr_types || {};
-    const typeParts = [];
-    if (types.classic_a || types.classic_v) typeParts.push(`${(types.classic_a||0)+(types.classic_v||0)} cls`);
-    if (types.rbs || types.sbr) typeParts.push(`${(types.rbs||0)+(types.sbr||0)} rbs/sbr`);
-    if (types.gap_bullish || types.gap_bearish) typeParts.push(`${(types.gap_bullish||0)+(types.gap_bearish||0)} gap`);
-    if (types.qmr) typeParts.push(`${types.qmr} qm`);
-    let levelsCell = `<span style="color:var(--green)">${p.fresh_levels_count || 0}</span>/<span style="color:var(--text-muted)">${p.unfresh_levels_count || 0}</span>`;
-    if (missCount > 0) levelsCell += ` <span style="color:var(--cyan);font-size:.65rem" title="MISS-validated levels">${missCount}M</span>`;
-    if (typeParts.length) levelsCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${typeParts.join(' · ')}</span>`;
-
-    // Storyline cell
-    let storylineCell = '<span style="color:var(--text-muted)">—</span>';
-    if (storyline.active) {
-      const dir = storyline.direction === 'bullish' ? '↑' : '↓';
-      const col = storyline.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
-      const confBadge = storyline.confirmed
-        ? ' <span style="font-size:.6rem;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.5);color:var(--green);padding:1px 3px;border-radius:3px">BO✓</span>'
-        : ' <span style="font-size:.6rem;color:var(--yellow)">⏳</span>';
-      const snrType = storyline.from_snr_type ? ` <span style="font-size:.6rem;color:var(--text-secondary)">${storyline.from_snr_type}</span>` : '';
-      storylineCell = `<span style="color:${col};font-weight:600">${dir} ${storyline.direction}</span>${confBadge}${snrType}`
-        + `<br><span style="font-size:.7rem;color:var(--text-muted)">${_snrFmtPrice(storyline.from_level, sym)} → ${_snrFmtPrice(storyline.to_level, sym)}</span>`;
-    }
-
-    // Setup cell (Entry tier with Emperor setup number)
-    let setupCell = '<span style="color:var(--text-muted)">—</span>';
-    if (entry.tier && entry.tier !== 'no_setup') {
-      const tierColors = {low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--red)'};
-      const setupNames = {1: 'S1 (50/50)', 2: 'S2 (Med)', 3: 'S3 (Low)', 4: 'S4 (Cont)'};
-      const setupLabel = setupNames[entry.setup_num] || entry.tier.toUpperCase();
-      const confBadge = entry.confidence === 'high' ? ' 🎯' : entry.confidence === 'medium' ? ' 🔶' : '';
-      setupCell = `<span style="color:${tierColors[entry.tier] || 'var(--text-muted)'};font-weight:600">${setupLabel}${confBadge}</span>`
-        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${entry.entry_price ? _snrFmtPrice(entry.entry_price, sym) : ''}</span>`;
-    }
-
-    // Engulfing cell with PEZ/FEZ
-    let engCell = '<span style="color:var(--text-muted)">—</span>';
-    if (engulfing.length) {
-      const parts = engulfing.slice(-3).map(e => {
-        const col = e.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
-        const zoneBadge = e.zone_status === 'PEZ' ? ' <span style="font-size:.55rem;color:var(--green)">PEZ</span>'
-          : e.zone_status === 'FEZ' ? ' <span style="font-size:.55rem;color:var(--yellow)">FEZ</span>' : '';
-        return `<span style="color:${col};font-size:.75rem">${e.type}${zoneBadge}</span>`;
-      });
-      engCell = parts.join('<br>');
-      if (p.pez_count || p.fez_count) {
-        engCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${p.pez_count||0} PEZ · ${p.fez_count||0} FEZ</span>`;
-      }
-    }
-
-    // Trendline / X-Factor cell
-    let tlCell = '<span style="color:var(--text-muted)">—</span>';
-    if (tl_conf.active) {
-      tlCell = `<span style="color:var(--cyan);font-weight:600;font-size:.78rem">X-Factor ✨</span>`
-        + `<br><span style="font-size:.65rem;color:var(--text-secondary)">${tl_conf.tl_type||'TL'} + ${tl_conf.snr_type||'SNR'}</span>`;
-    } else {
-      const tls = p.trendlines || [];
-      const nearTl = tls.find(t => t.near_price);
-      if (nearTl) {
-        const col = nearTl.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
-        tlCell = `<span style="color:${col};font-size:.78rem">${nearTl.type} ${nearTl.direction === 'bullish' ? '↑' : '↓'}</span>`
-          + `<br><span style="font-size:.65rem;color:var(--text-muted)">@ ${_snrFmtPrice(nearTl.projected, sym)}</span>`;
-      }
-    }
-
-    // Roadblocks cell
-    const rbCell = roadblocks.length
-      ? `<span style="color:var(--yellow);font-size:.78rem">${roadblocks.length} block${roadblocks.length>1?'s':''}</span>`
-        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${roadblocks.slice(0,2).map(r => _snrFmtPrice(r.price, sym)).join(', ')}</span>`
-      : '<span style="color:var(--green);font-size:.78rem">Clear ✅</span>';
-
-    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : p.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
-    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
-      <td><b>${sym}</b></td>
-      <td>${priceCell}</td>
-      <td>${supCell}</td>
-      <td>${resCell}</td>
-      <td>${levelsCell}</td>
-      <td>${storylineCell}</td>
-      <td>${setupCell}</td>
-      <td>${engCell}</td>
-      <td>${tlCell}</td>
-      <td>${rbCell}</td>
-      <td>${_crtSetupCell(p)}</td>
-      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/15)</span></td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="12" style="text-align:center;padding:24px">No data.</td></tr>';
-
-  const stale = (data.stale_pairs && data.stale_pairs.length)
-    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
-  summary.innerHTML = `
-    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
-    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
-    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
-    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span> ·
-    <span style="font-weight:600">${data.active_storylines || 0} storylines</span>
-    ${stale}
-  `;
-}
-
-const snrBtn = document.getElementById('snrRefreshBtn');
-if (snrBtn) snrBtn.addEventListener('click', loadSnr);
-
-// ── M15 SNR Fast Scanner loader ────────────────────────────────────────────
-async function loadSnrM15() {
-  const tbody   = document.getElementById('snrM15TableBody');
-  const summary = document.getElementById('snrM15Summary');
-  const btn     = document.getElementById('snrM15RefreshBtn');
-  if (btn) btn.disabled = true;
-  summary.textContent = 'Running M15 SNR Fast Scanner (H1 levels + M15 breakout)…';
-  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
-
-  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
-  try {
-    const ctl = new AbortController();
-    const tmr = setTimeout(() => ctl.abort(), 90000);
-    const resp = await fetch(`${baseUrl}/snr-m15`, { signal: ctl.signal });
-    clearTimeout(tmr);
-    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
-    const data = await resp.json();
-    renderSnrM15Table(data);
-  } catch (err) {
-    console.error('SNR-M15 load failed', err);
-    const msg = err.name === 'AbortError' ? 'Request timed out (90s). MT5 may be busy — try Refresh Scanner.' : err.message;
-    summary.innerHTML = `<span style="color:var(--red)">Failed to load M15 SNR scanner: ${msg}</span>`;
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-function renderSnrM15Table(data) {
-  const tbody   = document.getElementById('snrM15TableBody');
-  const summary = document.getElementById('snrM15Summary');
-
-  const rows = (data.pairs || []).map(p => {
-    const sym = p.symbol;
-    const storyline = p.storyline || {};
-    const entry = p.entry_tier || {};
-    const engulfing = p.engulfing_patterns || [];
-    const roadblocks = p.roadblocks || [];
-    const tl_conf = p.tl_confluence || {};
-
-    const priceCell = `<span class="mono">${_snrFmtPrice(p.current_price, sym)}</span>`;
-    const supCell = p.nearest_support != null
-      ? `<span style="color:var(--green);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_support, sym)}</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
-    const resCell = p.nearest_resistance != null
-      ? `<span style="color:var(--red);font-size:.78rem" class="mono">${_snrFmtPrice(p.nearest_resistance, sym)}</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
-
-    const missCount = p.miss_validated || 0;
-    const types = p.snr_types || {};
-    const typeParts = [];
-    if (types.classic_a || types.classic_v) typeParts.push(`${(types.classic_a||0)+(types.classic_v||0)} cls`);
-    if (types.rbs || types.sbr) typeParts.push(`${(types.rbs||0)+(types.sbr||0)} rbs/sbr`);
-    if (types.gap_bullish || types.gap_bearish) typeParts.push(`${(types.gap_bullish||0)+(types.gap_bearish||0)} gap`);
-    if (types.qmr) typeParts.push(`${types.qmr} qm`);
-    let levelsCell = `<span style="color:var(--green)">${p.fresh_levels_count || 0}</span>/<span style="color:var(--text-muted)">${p.unfresh_levels_count || 0}</span>`;
-    if (missCount > 0) levelsCell += ` <span style="color:var(--cyan);font-size:.65rem" title="MISS-validated levels">${missCount}M</span>`;
-    if (typeParts.length) levelsCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${typeParts.join(' · ')}</span>`;
-
-    let storylineCell = '<span style="color:var(--text-muted)">—</span>';
-    if (storyline.active) {
-      const dir = storyline.direction === 'bullish' ? '↑' : '↓';
-      const col = storyline.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
-      const confBadge = storyline.confirmed
-        ? ' <span style="font-size:.6rem;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.5);color:var(--green);padding:1px 3px;border-radius:3px">BO✓</span>'
-        : ' <span style="font-size:.6rem;color:var(--yellow)">⏳</span>';
-      const snrType = storyline.from_snr_type ? ` <span style="font-size:.6rem;color:var(--text-secondary)">${storyline.from_snr_type}</span>` : '';
-      storylineCell = `<span style="color:${col};font-weight:600">${dir} ${storyline.direction}</span>${confBadge}${snrType}`
-        + `<br><span style="font-size:.7rem;color:var(--text-muted)">${_snrFmtPrice(storyline.from_level, sym)} → ${_snrFmtPrice(storyline.to_level, sym)}</span>`;
-    }
-
-    let setupCell = '<span style="color:var(--text-muted)">—</span>';
-    if (entry.tier && entry.tier !== 'no_setup') {
-      const tierColors = {low: 'var(--green)', medium: 'var(--yellow)', high: 'var(--red)'};
-      const setupNames = {1: 'S1 (50/50)', 2: 'S2 (Med)', 3: 'S3 (Low)', 4: 'S4 (Cont)'};
-      const setupLabel = setupNames[entry.setup_num] || entry.tier.toUpperCase();
-      const confBadge = entry.confidence === 'high' ? ' 🎯' : entry.confidence === 'medium' ? ' 🔶' : '';
-      setupCell = `<span style="color:${tierColors[entry.tier] || 'var(--text-muted)'};font-weight:600">${setupLabel}${confBadge}</span>`
-        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${entry.entry_price ? _snrFmtPrice(entry.entry_price, sym) : ''}</span>`;
-    }
-
-    let engCell = '<span style="color:var(--text-muted)">—</span>';
-    if (engulfing.length) {
-      const parts = engulfing.slice(-3).map(e => {
-        const col = e.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
-        const zoneBadge = e.zone_status === 'PEZ' ? ' <span style="font-size:.55rem;color:var(--green)">PEZ</span>'
-          : e.zone_status === 'FEZ' ? ' <span style="font-size:.55rem;color:var(--yellow)">FEZ</span>' : '';
-        return `<span style="color:${col};font-size:.75rem">${e.type}${zoneBadge}</span>`;
-      });
-      engCell = parts.join('<br>');
-      if (p.pez_count || p.fez_count) {
-        engCell += `<br><span style="font-size:.6rem;color:var(--text-secondary)">${p.pez_count||0} PEZ · ${p.fez_count||0} FEZ</span>`;
-      }
-    }
-
-    let tlCell = '<span style="color:var(--text-muted)">—</span>';
-    if (tl_conf.active) {
-      tlCell = `<span style="color:var(--cyan);font-weight:600;font-size:.78rem">X-Factor ✨</span>`
-        + `<br><span style="font-size:.65rem;color:var(--text-secondary)">${tl_conf.tl_type||'TL'} + ${tl_conf.snr_type||'SNR'}</span>`;
-    } else {
-      const tls = p.trendlines || [];
-      const nearTl = tls.find(t => t.near_price);
-      if (nearTl) {
-        const col = nearTl.direction === 'bullish' ? 'var(--green)' : 'var(--red)';
-        tlCell = `<span style="color:${col};font-size:.78rem">${nearTl.type} ${nearTl.direction === 'bullish' ? '↑' : '↓'}</span>`
-          + `<br><span style="font-size:.65rem;color:var(--text-muted)">@ ${_snrFmtPrice(nearTl.projected, sym)}</span>`;
-      }
-    }
-
-    const rbCell = roadblocks.length
-      ? `<span style="color:var(--yellow);font-size:.78rem">${roadblocks.length} block${roadblocks.length>1?'s':''}</span>`
-        + `<br><span style="font-size:.6rem;color:var(--text-muted)">${roadblocks.slice(0,2).map(r => _snrFmtPrice(r.price, sym)).join(', ')}</span>`
-      : '<span style="color:var(--green);font-size:.78rem">Clear ✅</span>';
-
-    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : p.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
-    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
-      <td><b>${sym}</b></td>
-      <td>${priceCell}</td>
-      <td>${supCell}</td>
-      <td>${resCell}</td>
-      <td>${levelsCell}</td>
-      <td>${storylineCell}</td>
-      <td>${setupCell}</td>
-      <td>${engCell}</td>
-      <td>${tlCell}</td>
-      <td>${rbCell}</td>
-      <td>${_crtSetupCell(p)}</td>
-      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/15)</span></td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="12" style="text-align:center;padding:24px">No data.</td></tr>';
-
-  const stale = (data.stale_pairs && data.stale_pairs.length)
-    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
-  summary.innerHTML = `
-    <span style="color:var(--orange);font-weight:600">⚡ M15 Fast Scanner</span> ·
-    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
-    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
-    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
-    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span> ·
-    <span style="font-weight:600">${data.active_storylines || 0} storylines</span>
-    ${stale}
-  `;
-}
-
-const snrM15Btn = document.getElementById('snrM15RefreshBtn');
-if (snrM15Btn) snrM15Btn.addEventListener('click', loadSnrM15);
 
 // ── WebSocket subscription (Phase B) ────────────────────────────────────────
 // The service emits 'refresh-complete' after each :02/:17/:32/:47 UTC refresh.
