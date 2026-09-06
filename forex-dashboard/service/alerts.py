@@ -15,6 +15,7 @@ from config import (
     CRT_5AM_GRADE_A_ONLY, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
     TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
+    BTMM123_ALERTS_ENABLED, BTMM123_SESSION_FILTER, BTMM123_NEWS_FILTER,
 )
 from providers import forexfactory
 
@@ -1011,3 +1012,112 @@ def alert_tdi123_setup(pair: str, row: dict):
     # from ever drifting out of sync with H1's alert gates again.
     if row.get("m15"):
         alert_tdi123_setup(pair, row["m15"])
+
+
+# ── BTMM 123 (classic 1-2-3 price action, BTMM-doctrine confirmed) ───────────
+# Replaces the removed Malaysian SNR Emperor slot. Reuses _pair_currencies /
+# _news_blocks_pair above (already pair-agnostic, not TDI123-specific).
+
+def _should_alert_btmm123(row: dict) -> bool:
+    """Grade A always; Grade B/C never (kept simple until a backtest says
+    otherwise). Session gate mirrors TDI123's: block outside the active
+    window, but a missing/unknown session flag (None) never hard-fails."""
+    if row.get("grade") != "A":
+        return False
+    if BTMM123_SESSION_FILTER and row.get("in_active_session") is False:
+        return False
+    return True
+
+
+def alert_btmm123_setup(pair: str, row: dict):
+    """Fire when the BTMM 123 scanner signals a tradeable setup.
+
+    NOT LIVE by default (BTMM123_ALERTS_ENABLED defaults to false) — this is
+    a brand-new strategy with no track record yet. TDI Cycle 123's own history
+    is the reason: it looked fine on paper and only proved breakeven-to-
+    negative after a proper walk-forward backtest, done after a month of
+    tuning instead of before. BTMM 123 must not repeat that order of
+    operations — see docs/superpowers/specs for the backtest-before-live gate.
+    """
+    if not BTMM123_ALERTS_ENABLED:
+        return
+
+    setup = row.get("setup")
+    grade = row.get("grade")
+    if setup not in ("BUY", "SELL"):
+        return
+    if not _should_alert_btmm123(row):
+        log.debug("BTMM123 FILTERED %s: grade %s / session does not meet threshold", pair, grade)
+        return
+
+    plan = row.get("trade_plan") or {}
+    entry = plan.get("entry")
+    sl = plan.get("sl")
+    tp1 = plan.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("BTMM123 SUPPRESSED %s: incomplete trade plan", pair)
+        return
+
+    sl_dist = abs(entry - sl)
+    if sl_dist < 1e-9:
+        log.warning("BTMM123 alert BLOCKED for %s: SL too tight (0 distance)", pair)
+        return
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.warning("BTMM123 alert BLOCKED for %s: bad R:R", pair)
+        return
+
+    if BTMM123_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("BTMM123 news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            hit = _pair_currencies(pair) & blocked
+            log.info("BTMM123 SUPPRESSED %s: high-impact news within 60m (%s)",
+                     pair, ",".join(sorted(hit)))
+            return
+
+    rule = f"btmm123_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    colour = 0xFFD700
+
+    pattern = row.get("pattern") or {}
+    level = row.get("level") or {}
+    hunt = row.get("stop_hunt") or {}
+    p1, p2, p3 = pattern.get("p1", {}), pattern.get("p2", {}), pattern.get("p3", {})
+    tp2, tp3 = plan.get("tp2"), plan.get("tp3")
+    sl_pips = plan.get("sl_pips") or 0
+    rr1 = plan.get("rr1") or 0
+
+    fields = [
+        {"name": "Direction", "value": f"**{'📈 BUY' if setup == 'BUY' else '📉 SELL'}**", "inline": True},
+        {"name": "Grade",     "value": f"⭐ **{grade} ({row.get('score', 0)}/15)**",        "inline": True},
+        {"name": "Setup",     "value": "**BTMM 123**",                                     "inline": True},
+        {"name": "🎯 Entry",     "value": f"`{_fmt_price(entry, pair)}`",                  "inline": True},
+        {"name": "🛑 Stop Loss", "value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",  "inline": True},
+        {"name": "Risk:Reward",  "value": f"**1 : {rr1:.1f}**",                            "inline": True},
+        {"name": "123 Pattern",
+         "value": f"1 `{_fmt_price(p1.get('price'), pair)}` → 2 `{_fmt_price(p2.get('price'), pair)}` → 3 `{_fmt_price(p3.get('price'), pair)}`  ({pattern.get('leg1_range_pips', 0)} pips leg-1)",
+         "inline": False},
+        {"name": "EMA Level",
+         "value": f"{'Level II' if level.get('level_ii') else 'Level I' if level.get('level_i') else 'none'} ({level.get('count', 0)}/5 aligned)",
+         "inline": True},
+        {"name": "Stop Hunt",
+         "value": "✅ confirmed" if hunt.get("active") else "—",
+         "inline": True},
+    ]
+
+    embed = {
+        "title":       f"{arrow} ⭐ {pair} — BTMM 123 {setup}",
+        "description": row.get("notes") or "BTMM 123 — classic 1-2-3 reversal, BTMM-doctrine confirmed.",
+        "color":       colour,
+        "fields":      fields,
+        "footer":      {"text": f"BTMM 123 · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("BTMM123 alert sent: %s %s grade=%s score=%d", pair, setup, grade, row.get("score", 0))

@@ -93,6 +93,17 @@ TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
 # dashboard builds a REAL track record instead of relying on backtests.
 TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower() in ("1", "true", "yes")
 
+# BTMM 123 — classic 1-2-3 price action confirmed by BTMM doctrine (EMA Level
+# cascade + stop hunt + Asian range) instead of a TDI/oscillator dependency.
+# Replaces the removed Malaysian SNR Emperor slot.
+# ALERTS default FALSE: this is a brand-new strategy with no track record.
+# TDI Cycle 123's own history (looked fine on paper, proved breakeven-to-
+# negative only after a proper walk-forward backtest) is why — BTMM 123 stays
+# dashboard-visible/Discord-silent until a backtest shows a real edge.
+BTMM123_ALERTS_ENABLED = os.environ.get("BTMM123_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+BTMM123_SESSION_FILTER = os.environ.get("BTMM123_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
+BTMM123_NEWS_FILTER = os.environ.get("BTMM123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+
 
 def load_keys():
     """Return list of {name, value} for keys defined in env.

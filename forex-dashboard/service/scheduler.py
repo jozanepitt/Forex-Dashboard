@@ -137,6 +137,13 @@ def refresh_all():
     except Exception as e:
         log.warning("TDI123 alerts failed: %s", e)
 
+    # Run BTMM 123 scanner (BTMM-doctrine 1-2-3) — dashboard-visible; Discord
+    # stays silent until BTMM123_ALERTS_ENABLED is turned on post-backtest.
+    try:
+        _run_btmm123_alerts()
+    except Exception as e:
+        log.warning("BTMM123 alerts failed: %s", e)
+
     # Notify dashboard subscribers via WebSocket. Late import keeps scheduler importable
     # standalone (e.g. for tests) without pulling Flask-SocketIO into the import graph.
     try:
@@ -248,6 +255,24 @@ def _run_tdi123_alerts():
             trade_tracker.resolve_open_trades()
     except Exception as e:  # noqa: BLE001
         log.debug("TDI123 journal resolve failed: %s", e)
+
+
+def _run_btmm123_alerts():
+    """Run the BTMM 123 scanner and fire Discord alerts for confirmed setups."""
+    import cache
+    import btmm_123
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in btmm_123.BTMM123_UNIVERSE:
+        candles_by_pair[sym] = {
+            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
+        }
+    result = btmm_123.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        try:
+            alerts.alert_btmm123_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("BTMM123 alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 _stall_warned = False

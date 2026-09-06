@@ -13,6 +13,7 @@ from flask_socketio import SocketIO
 
 import alerts
 import backtest as bt
+import btmm_123
 import cache
 import crt_strategy
 import tdi_cycle_123
@@ -335,6 +336,93 @@ def tdi123_detail():
             "slow": _tail(slow_arr),
             "baseline": _tail(baseline),
         },
+    })
+
+
+# ── BTMM 123 endpoint ────────────────────────────────────────────────────────
+# Classic 1-2-3 price action, BTMM-doctrine confirmed. Replaces the removed
+# Malaysian SNR Emperor slot. H1-only (no HTF bias / M15 yet — kept simpler
+# than TDI123 until a backtest justifies more).
+_BTMM123_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_BTMM123_TTL_SECS = 180  # same cadence as TDI123 — H1 primary
+
+
+@app.get("/btmm123")
+def btmm123():
+    """BTMM 123 scanner across the universe."""
+    import time as _t
+
+    now = _t.time()
+    if _BTMM123_CACHE["payload"] is not None and (now - _BTMM123_CACHE["ts"]) < _BTMM123_TTL_SECS:
+        return jsonify(_BTMM123_CACHE["payload"])
+
+    universe = btmm_123.BTMM123_UNIVERSE
+    now_ts = int(now)
+
+    candles_by_pair: dict[str, dict] = {}
+    stale_set: set[str] = set()
+    for sym in universe:
+        candles_by_pair[sym] = {"1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL)}
+        h1_last = cache.max_ts(sym, "1h")
+        if h1_last is None or now_ts > h1_last + 2 * INTERVAL_SECS["1h"] + 60:
+            stale_set.add(sym)
+
+    result = btmm_123.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _BTMM123_CACHE["payload"] = result
+    _BTMM123_CACHE["ts"] = now
+    return jsonify(result)
+
+
+@app.get("/btmm123/detail")
+def btmm123_detail():
+    """Per-pair detail for the BTMM 123 chart overlay: raw H1 candles + EMAs
+    + swing/pattern markers, for the frontend to draw the 1/2/3 markers."""
+    symbol = request.args.get("symbol", "").upper().replace("_", "/")
+    if not symbol:
+        return jsonify({"error": "symbol required"}), 400
+    if "/" not in symbol and len(symbol) == 6:
+        symbol = f"{symbol[:3]}/{symbol[3:]}"
+
+    h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=DEFAULT_BACKFILL)
+    row = btmm_123.analyze_pair(symbol, h1_bars)
+
+    from btmm_core import calc_ema
+    closes = [b["close"] for b in h1_bars]
+    ema50 = calc_ema(closes, 50) if len(closes) >= 50 else [None] * len(closes)
+    ema200 = calc_ema(closes, 200) if len(closes) >= 300 else [None] * len(closes)
+    ema800 = calc_ema(closes, 800) if len(closes) >= 2400 else [None] * len(closes)
+
+    display_n = min(TDI123_CHART_DISPLAY_BARS, len(h1_bars)) if h1_bars else 0
+    pattern = row.get("pattern") or {}
+    swing_idxs = [pattern[k]["idx"] for k in ("p1", "p2", "p3") if k in pattern]
+    if swing_idxs and h1_bars:
+        min_swing_idx = min(swing_idxs)
+        display_n = max(display_n, len(h1_bars) - min_swing_idx + 5)
+    display_n = min(display_n, len(h1_bars)) if h1_bars else 0
+    offset = len(h1_bars) - display_n if h1_bars else 0
+
+    if offset > 0 and pattern:
+        row = dict(row)
+        row["pattern"] = dict(pattern)
+        for k in ("p1", "p2", "p3"):
+            if k in pattern:
+                pt = dict(pattern[k])
+                pt["idx"] = pt["idx"] - offset
+                row["pattern"][k] = pt
+
+    def _tail(arr):
+        return arr[offset:] if offset > 0 else arr
+
+    return jsonify({
+        "symbol": symbol,
+        "stale": h1_stale,
+        "row": row,
+        "candles": _tail(h1_bars),
+        "ema50": _tail(ema50),
+        "ema200": _tail(ema200),
+        "ema800": _tail(ema800),
     })
 
 
