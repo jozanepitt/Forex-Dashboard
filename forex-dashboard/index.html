@@ -332,7 +332,7 @@ td.mono{font-family:var(--font-mono)}
 .mode-tab[data-mode="journal"].active{background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
 .mode-tab[data-mode="backtest"].active{background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
 /* TDI 123 detail modal chart */
-.tdi123-chart-modal .modal{max-width:1100px;width:95vw}
+.tdi123-chart-modal .modal,.btmm123-chart-modal .modal{max-width:1100px;width:95vw}
 .tdi123-chart-svg{width:100%;height:auto;display:block;background:var(--bg-card);border:1px solid var(--border);border-radius:6px}
 .tdi123-chart-legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.72rem;color:var(--text-secondary);margin:8px 0 16px;padding:8px 12px;background:var(--bg-card);border-radius:6px}
 .tdi123-chart-legend .swatch{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:4px}
@@ -796,11 +796,17 @@ td.mono{font-family:var(--font-mono)}
           <th>EMA Level</th>
           <th>Stop Hunt</th>
           <th>Asian Range</th>
+          <th>Location</th>
+          <th>Bias TF</th>
           <th>Signal</th>
+          <th>L1 (50)</th>
+          <th>L2 (200)</th>
+          <th>L3 (800)</th>
           <th>Grade</th>
+          <th>Chart</th>
         </tr>
       </thead>
-      <tbody id="btmm123TableBody"><tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="btmm123TableBody"><tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>BTMM 123:</b> classic price-structure 1-2-3 reversal (no oscillator), confirmed by BTMM doctrine instead of TDI divergence —
@@ -4309,6 +4315,7 @@ function closeModal() {
   const overlay = document.getElementById('modalOverlay');
   overlay.classList.remove('active');
   overlay.classList.remove('tdi123-chart-modal');
+  overlay.classList.remove('btmm123-chart-modal');
 }
 
 function updateSBTimer() {
@@ -5499,14 +5506,45 @@ function renderBtmm123Table(data) {
   const tbody   = document.getElementById('btmm123TableBody');
   const summary = document.getElementById('btmm123Summary');
 
-  const tfBadge = (tf, setupType, htf, aligned) => {
+  const tfBadge = (tf, setupType) => {
     const col = tf === 'M15' ? 'var(--cyan)' : 'var(--text-primary)';
     const tag = setupType === 'reset' ? 'Re-set' : '123';
-    const bias = htf ? `<br><span style="font-size:.65rem;color:${aligned ? 'var(--green)' : 'var(--text-muted)'}">${aligned ? '✅' : '✗'} ${htf}</span>` : '';
-    return `<span style="font-weight:700;color:${col}">${tf || 'H1'}</span><br><span style="font-size:.65rem;color:var(--text-muted)">${tag}</span>${bias}`;
+    return `<span style="font-weight:700;color:${col}">${tf || 'H1'}</span><br><span style="font-size:.65rem;color:var(--text-muted)">${tag}</span>`;
   };
 
-  const rowHtml = (o, pairLabel, fallbackTf) => {
+  // Weekly-pivot location (same doctrine/styling as TDI123's Location column).
+  const locCell = (o) => {
+    const loc = o.location || {};
+    const locStyle = {
+      prime:     ['var(--green)',       '★ ' + (loc.zone || '')],
+      good:      ['var(--green)',       '✓ ' + (loc.zone || '')],
+      weak:      ['var(--yellow)',      '~ ' + (loc.zone || '') + ' (38)'],
+      extended:  ['var(--yellow)',      '↗ ' + (loc.zone || '')],
+      poor:      ['var(--text-muted)',  '✗ mid-pivot'],
+      wrongside: ['var(--red)',         '✗ wrong side'],
+      unknown:   ['var(--text-muted)',  '—'],
+    }[loc.quality || 'unknown'] || ['var(--text-muted)', '—'];
+    return `<span title="loc ratio ${loc.loc_ratio ?? '?'} of weekly range"
+         style="color:${locStyle[0]};font-weight:${loc.ok ? 600 : 500}">${locStyle[1]}</span>`;
+  };
+
+  // Bias timeframe is dynamic: H4 for an H1 row, H1 for an M15 row.
+  const htfCell = (o) => {
+    const biasTf = o.htf_bias_timeframe || (o.timeframe === 'M15' ? 'H1' : 'H4');
+    return o.htf_bias
+      ? (o.htf_aligned ? `<span style="color:var(--green);font-weight:600">${biasTf}: ${o.htf_bias} ✓</span>`
+                       : `<span style="color:var(--text-muted)">${biasTf}: ${o.htf_bias}</span>`)
+      : '<span style="color:var(--text-muted)">—</span>';
+  };
+
+  const targetCell = (o, key, pipsKey) => {
+    const tgt = o.targets || {};
+    if (tgt[key] == null) return '<span style="color:var(--text-muted)">—</span>';
+    const projBadge = tgt.projected ? '<br><span style="font-size:.6rem;color:var(--yellow)">≈ measured move</span>' : '';
+    return `<span class="mono">${_crtFmtPrice(tgt[key], o.symbol)}</span><br><span style="font-size:.65rem;color:var(--text-muted)">+${tgt[pipsKey] || '?'} pips</span>${projBadge}`;
+  };
+
+  const rowHtml = (o) => {
     const pattern = o.pattern || {};
     const level = o.level || {};
     const hunt = o.stop_hunt || {};
@@ -5537,35 +5575,50 @@ function renderBtmm123Table(data) {
       : (asian.range_pips ? `<span style="color:var(--yellow);font-size:.78rem">${asian.range_pips.toFixed(0)} pips</span>` : '<span style="color:var(--text-muted)">—</span>');
 
     const rowStyle = o.grade === 'A' ? 'background:rgba(34,197,94,.06)' : o.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
-    const tf = o.timeframe || fallbackTf;
+    const rowTf = o.timeframe || 'H1';
     return `<tr style="${rowStyle}" title="${(o.notes || '').replace(/"/g,'&quot;')}">
-      <td><b>${pairLabel}</b></td>
-      <td>${tfBadge(tf, o.setup_type, o.htf_bias_timeframe, o.htf_aligned)}</td>
+      <td><b>${o.symbol}</b></td>
+      <td>${tfBadge(rowTf, o.setup_type)}</td>
       <td>${priceCell}</td>
       <td>${patternCell}</td>
       <td>${levelCell}</td>
       <td>${huntCell}</td>
       <td>${asianCell}</td>
+      <td>${locCell(o)}</td>
+      <td>${htfCell(o)}</td>
       <td>${_crtSetupCell(o)}</td>
+      <td>${targetCell(o, 'L1', 'L1_pips')}</td>
+      <td>${targetCell(o, 'L2', 'L2_pips')}</td>
+      <td>${targetCell(o, 'L3', 'L3_pips')}</td>
       <td>${_crtGradeCell(o.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${o.score||0}/17)</span></td>
+      <td><button class="btmm123-detail-btn" data-btmm123-sym="${o.symbol}" data-btmm123-tf="${rowTf}">📈 View</button></td>
     </tr>`;
   };
 
-  // Best setups first: rank each pair by its strongest leg (H1 or M15,
-  // whichever scores higher), highest score at the top, NO-TRADE at the
-  // bottom — instead of the fixed PRIORITY_PAIRS config order.
-  const bestScore = (p) => Math.max(p.score || 0, (p.m15 && p.m15.score) || 0);
-  const sortedPairs = (data.pairs || []).slice().sort((a, b) => bestScore(b) - bestScore(a));
+  // Flatten H1 + M15 into independent display rows — M15 is its own setup
+  // with its own pattern/level/targets/grade (biased by H1 instead of H4),
+  // not a badge riding on the H1 row. Same convention as TDI123's table.
+  const flatRows = [];
+  (data.pairs || []).forEach(p => {
+    flatRows.push(p);
+    if (p.m15 && (p.m15.setup === 'BUY' || p.m15.setup === 'SELL')) flatRows.push(p.m15);
+  });
 
-  const rows = sortedPairs.map(p => {
-    const sym = p.symbol;
-    let html = rowHtml(p, sym, 'H1');
-    if (p.m15 && (p.m15.setup === 'BUY' || p.m15.setup === 'SELL')) {
-      html += rowHtml(p.m15, `↳ ${sym}`, 'M15');
-    }
-    return html;
-  }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center;padding:24px">No data.</td></tr>';
+  // Best setups first: A grades, then B, then C, then NO-TRADE; within a
+  // grade, highest score first — instead of the fixed PRIORITY_PAIRS order.
+  const gradeRank = {A: 0, B: 1, C: 2, 'NO-TRADE': 3, 'NO-DATA': 4};
+  const sorted = flatRows.slice().sort((a, b) => {
+    const ra = gradeRank[a.grade] ?? 5;
+    const rb = gradeRank[b.grade] ?? 5;
+    if (ra !== rb) return ra - rb;
+    return (b.score || 0) - (a.score || 0);
+  });
+
+  tbody.innerHTML = sorted.map(rowHtml).join('') || '<tr><td colspan="15" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  tbody.querySelectorAll('button[data-btmm123-sym]').forEach(btn => {
+    btn.addEventListener('click', () => openBtmm123Chart(btn.dataset.btmm123Sym, btn.dataset.btmm123Tf));
+  });
 
   const stale = (data.stale_pairs && data.stale_pairs.length)
     ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
@@ -5579,6 +5632,181 @@ function renderBtmm123Table(data) {
     ${resets ? ` · <span style="color:var(--yellow);font-weight:600">${resets} Re-set</span>` : ''}
     ${stale}
   `;
+}
+
+async function openBtmm123Chart(symbol, timeframe) {
+  const tf = (timeframe === 'M15') ? 'M15' : 'H1';
+  const overlay = document.getElementById('modalOverlay');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  if (!overlay || !title || !body) return;
+
+  overlay.classList.add('btmm123-chart-modal');
+  overlay.classList.add('active');
+  title.textContent = `${symbol} — BTMM 123 [${tf}]`;
+  body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading ${tf} candles…</div>`;
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const encoded = encodeURIComponent(symbol);
+    const resp = await fetch(`${baseUrl}/btmm123/detail?symbol=${encoded}&timeframe=${tf}`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    title.textContent = `${symbol} — BTMM 123 [${data.timeframe || tf}]`;
+    body.innerHTML = renderBtmm123ChartSvg(data);
+  } catch (err) {
+    body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${err.message}</div>`;
+  }
+}
+
+function renderBtmm123ChartSvg(data) {
+  const candles = data.candles || [];
+  const row = data.row || {};
+  const sym = data.symbol;
+  if (!candles.length) return '<div style="padding:24px;color:var(--text-muted)">No candles available.</div>';
+
+  const pat = row.pattern || {};
+  const p1 = pat.p1, p2 = pat.p2, p3 = pat.p3;
+  const isReset = row.setup_type === 'reset';
+
+  const W = 1000, H_price = 460, margin = {top: 12, right: 60, bottom: 22, left: 12};
+  const H = H_price + margin.top + margin.bottom + 30;
+  const chartW = W - margin.left - margin.right;
+
+  const hi = Math.max(...candles.map(c => c.high));
+  const lo = Math.min(...candles.map(c => c.low));
+  const pad = (hi - lo) * 0.05;
+  const yTop = hi + pad, yBot = lo - pad;
+  const priceY = v => margin.top + (yTop - v) / (yTop - yBot) * H_price;
+  const barW = chartW / candles.length;
+  const xAt = i => margin.left + i * barW + barW * 0.5;
+
+  const candleSvg = candles.map((c, i) => {
+    const x = xAt(i);
+    const bodyTop = priceY(Math.max(c.open, c.close));
+    const bodyBot = priceY(Math.min(c.open, c.close));
+    const wickTop = priceY(c.high);
+    const wickBot = priceY(c.low);
+    const bull = c.close >= c.open;
+    const col = bull ? '#00E676' : '#FF1744';
+    return `<line x1="${x}" x2="${x}" y1="${wickTop}" y2="${wickBot}" stroke="${col}" stroke-width="1"/>
+            <rect x="${x - barW * 0.35}" y="${bodyTop}" width="${barW * 0.7}" height="${Math.max(1, bodyBot - bodyTop)}" fill="${col}" fill-opacity="0.85"/>`;
+  }).join('');
+
+  const emaLine = (arr, colour) => {
+    if (!arr || !arr.length) return '';
+    const pts = arr.map((v, i) => (v === null || v === undefined) ? null : `${xAt(i).toFixed(1)},${priceY(v).toFixed(1)}`)
+                   .filter(Boolean).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${colour}" stroke-width="1.4" stroke-opacity="0.9"/>`;
+  };
+  const emaSvg = emaLine(data.ema50, '#3b82f6') + emaLine(data.ema200, '#b0b8c4') + emaLine(data.ema800, '#ec4899');
+
+  const priceAxisRight = W - margin.right + 8;
+  const priceAxis = [yTop, yTop - (yTop - yBot) * 0.25, yTop - (yTop - yBot) * 0.5, yTop - (yTop - yBot) * 0.75, yBot]
+    .map(v => `<text x="${priceAxisRight}" y="${priceY(v) + 3}" font-size="9" fill="#666">${_crtFmtPrice(v, sym)}</text>`)
+    .join('');
+
+  // Asian range band — BTMM123's actual confirmation zone (plays the role
+  // TDI123's oscillator sub-panel plays there), shaded across the full width.
+  const asian = row.asian_range || {};
+  let asianSvg = '';
+  if (asian.high != null && asian.low != null) {
+    const yHi = priceY(asian.high), yLo = priceY(asian.low);
+    asianSvg = `<rect x="${margin.left}" y="${Math.min(yHi,yLo)}" width="${chartW}" height="${Math.max(1, Math.abs(yLo-yHi))}"
+                  fill="${asian.valid ? '#00E676' : '#FFD93D'}" fill-opacity="0.08"/>
+                <text x="${margin.left + 6}" y="${Math.min(yHi,yLo) - 4}" font-size="9" fill="${asian.valid ? '#00C853' : '#d29922'}">
+                  Asian range ${(asian.range_pips||0).toFixed(0)} pips ${asian.valid ? '(tight)' : '(wide)'}</text>`;
+  }
+
+  // 1/2/3 markers + divergence-style connector for a 123 setup, or a single
+  // marker at the false-breakout extreme for a Re-set (no 1/2/3 there).
+  let markerSvg = '', connectorSvg = '';
+  const drawMarker = (pt, label, colour) => {
+    if (!pt || pt.idx === undefined || pt.idx < 0 || pt.idx >= candles.length) return '';
+    const x = xAt(pt.idx), y = priceY(pt.price);
+    const above = label === '2';
+    return `<circle cx="${x}" cy="${y}" r="9" fill="${colour}" stroke="white" stroke-width="1.5"/>
+            <text x="${x}" y="${y + 4}" font-size="11" fill="white" font-weight="700" text-anchor="middle">${label}</text>
+            <text x="${x}" y="${above ? y - 14 : y + 20}" font-size="9" fill="${colour}" text-anchor="middle">${_crtFmtPrice(pt.price, sym)}</text>`;
+  };
+  const setupColour = row.direction === 'bullish' ? '#00E676' : '#FF1744';
+  if (!isReset) {
+    markerSvg += drawMarker(p1, '1', setupColour);
+    markerSvg += drawMarker(p2, '2', '#FFD93D');
+    markerSvg += drawMarker(p3, '3', setupColour);
+    if (p1 && p3 && p1.idx !== undefined && p3.idx !== undefined) {
+      connectorSvg = `<line x1="${xAt(p1.idx)}" y1="${priceY(p1.price)}" x2="${xAt(p3.idx)}" y2="${priceY(p3.price)}"
+                       stroke="#ec4899" stroke-width="1.2" stroke-dasharray="4,3"/>`;
+    }
+  } else if (row.reset && row.reset.extreme != null) {
+    const y = priceY(row.reset.extreme);
+    connectorSvg = `<line x1="${margin.left}" x2="${margin.left + chartW}" y1="${y}" y2="${y}"
+                      stroke="${setupColour}" stroke-width="1" stroke-dasharray="5,3" stroke-opacity="0.8"/>
+                     <text x="${margin.left + chartW - 6}" y="${y - 4}" font-size="9" fill="${setupColour}" text-anchor="end">200EMA false-breakout extreme</text>`;
+  }
+
+  // Target lines (L1/L2/L3) — dashed horizontals at the EMA-cascade levels.
+  const tgt = row.targets || {};
+  const targetLine = (v, colour, label) => {
+    if (v === null || v === undefined) return '';
+    const y = priceY(v);
+    if (y < margin.top || y > margin.top + H_price) return '';
+    return `<line x1="${margin.left}" x2="${margin.left + chartW}" y1="${y}" y2="${y}"
+              stroke="${colour}" stroke-width="0.8" stroke-dasharray="2,4" stroke-opacity="0.7"/>
+            <text x="${margin.left + chartW - 34}" y="${y - 3}" font-size="9" fill="${colour}">${label}</text>`;
+  };
+  const projSuffix = tgt.projected ? ' ≈' : '';
+  const targetSvg = targetLine(tgt.L1, '#3b82f6', `L1 (50)${projSuffix}`)
+                  + targetLine(tgt.L2, '#b0b8c4', `L2 (200)${projSuffix}`)
+                  + targetLine(tgt.L3, '#ec4899', `L3 (800)${projSuffix}`);
+
+  const notesBadge = row.notes
+    ? `<text x="${margin.left + 8}" y="${margin.top + 14}" font-size="10" fill="#333">${(row.setup || '—')}  ·  grade ${row.grade || '—'}  ·  ${row.notes}</text>`
+    : '';
+
+  const ema800HasData = (data.ema800 || []).some(v => v !== null && v !== undefined);
+  const level = row.level || {}, hunt = row.stop_hunt || {};
+  const legend = `
+    <div class="tdi123-chart-legend">
+      <span><span class="swatch" style="background:#3b82f6"></span>50 EMA (L1)</span>
+      <span style="${ema800HasData ? '' : 'opacity:.4'}"><span class="swatch" style="background:#b0b8c4"></span>200 EMA (L2)</span>
+      <span style="${ema800HasData ? '' : 'opacity:.4'}"><span class="swatch" style="background:#ec4899"></span>800 EMA (L3)${ema800HasData ? '' : ' — insufficient history'}</span>
+      ${isReset ? '' : `<span><span class="dot" style="background:${setupColour}"></span>Point 1 / 3</span><span><span class="dot" style="background:#FFD93D"></span>Point 2</span>`}
+      <span><span class="swatch" style="background:${asian.valid ? '#00C853' : '#d29922'}"></span>Asian range (00:00–07:00 GMT)</span>
+      <span>EMA Level: <b style="color:${level.level_ii ? 'var(--green)' : 'var(--text-secondary)'}">${level.level_ii ? 'Level II' : level.level_i ? 'Level I' : 'none'}</b></span>
+      <span>Stop Hunt: <b style="color:${hunt.active ? 'var(--green)' : 'var(--text-muted)'}">${hunt.active ? '✅ ' + (hunt.direction||'') : '—'}</b></span>
+      ${tgt.projected ? '<span style="color:#f59e0b">≈ L1/L2/L3 are measured-move projections (EMAs were on the wrong side of price), not real EMA hits</span>' : ''}
+    </div>`;
+
+  const svg = `<svg class="tdi123-chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="${margin.left}" y="${margin.top}" width="${chartW}" height="${H_price}" fill="none" stroke="#333" stroke-opacity="0.15"/>
+    ${asianSvg}
+    ${targetSvg}
+    ${candleSvg}
+    ${emaSvg}
+    ${connectorSvg}
+    ${markerSvg}
+    ${priceAxis}
+    ${notesBadge}
+  </svg>`;
+
+  const plan = row.trade_plan || {};
+  const setupSummary = row.setup && row.setup !== 'NO-TRADE'
+    ? `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-card);border-left:3px solid ${setupColour};border-radius:6px">
+         <b style="color:${setupColour}">${row.setup}</b> · grade <b>${row.grade}</b> · score ${row.score}/17
+         · notes: ${row.notes || '—'}
+         · Entry <code>${_crtFmtPrice(plan.entry, sym)}</code>
+         · SL <code>${_crtFmtPrice(plan.sl, sym)}</code>
+         (${plan.sl_pips || '?'} pips)
+         · L1 <code>${_crtFmtPrice(tgt.L1, sym)}</code>
+         · L2 <code>${_crtFmtPrice(tgt.L2, sym)}</code>
+         · L3 <code>${_crtFmtPrice(tgt.L3, sym)}</code>
+       </div>`
+    : `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-card);border-left:3px solid var(--text-muted);border-radius:6px">
+         No live BTMM 123 setup for this pair. Chart shows current structure + EMA cascade.
+       </div>`;
+
+  return setupSummary + legend + svg;
 }
 
 const btmm123Btn = document.getElementById('btmm123RefreshBtn');
