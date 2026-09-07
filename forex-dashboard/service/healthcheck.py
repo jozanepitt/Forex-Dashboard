@@ -123,7 +123,7 @@ def main() -> int:
                {"m15": ("15min", 400)},
                (crt_strategy.analyze_universe, alerts.alert_crt_setup))
         _drive(btmm_123.BTMM123_UNIVERSE,
-               {"1h": ("1h", 3200)},
+               {"1h": ("1h", 3200), "4h": ("4h", 200), "m15": ("15min", 3200)},
                (btmm_123.analyze_universe, alerts.alert_btmm123_setup))
 
         check("alert pipeline runs clean", errs == 0,

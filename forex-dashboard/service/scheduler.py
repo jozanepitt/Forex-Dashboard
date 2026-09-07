@@ -266,6 +266,8 @@ def _run_btmm123_alerts():
     for sym in btmm_123.BTMM123_UNIVERSE:
         candles_by_pair[sym] = {
             "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
+            "4h": cache.read_candles(sym, "4h", limit=200),
+            "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
         }
     result = btmm_123.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):

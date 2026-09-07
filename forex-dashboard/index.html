@@ -780,16 +780,17 @@ td.mono{font-family:var(--font-mono)}
     <div class="trend-controls">
       <div class="trend-control-group" style="min-width:260px">
         <label>🎯 BTMM 123</label>
-        <div id="btmm123StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">1-2-3 pattern · EMA Level cascade · Stop hunt · Asian range</div>
+        <div id="btmm123StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">1-2-3 pattern · EMA Level cascade · Stop hunt · Asian range · H1+H4/M15 · Re-set</div>
       </div>
       <button class="trend-refresh-btn" id="btmm123RefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta" id="btmm123Meta">Not TDI-driven: confirmed by BTMM doctrine, not divergence. Not yet backtested — dashboard-only, Discord alerts off by default.</div>
+      <div class="trend-meta" id="btmm123Meta">A+B Discord alerts on · 17-pt scale · H4 bias + M15 trigger + 200EMA Re-set + pivot location gate.</div>
     </div>
     <div class="trend-summary" id="btmm123Summary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table snr-table">
       <thead>
         <tr>
           <th>Pair</th>
+          <th>TF</th>
           <th>Price</th>
           <th>Pattern</th>
           <th>EMA Level</th>
@@ -799,13 +800,13 @@ td.mono{font-family:var(--font-mono)}
           <th>Grade</th>
         </tr>
       </thead>
-      <tbody id="btmm123TableBody"><tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="btmm123TableBody"><tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>BTMM 123:</b> classic price-structure 1-2-3 reversal (no oscillator), confirmed by BTMM doctrine instead of TDI divergence —
       <b>EMA Level</b> (Level II = 4-5 of 5 EMAs aligned, Level I = 1-3), <b>Stop Hunt</b> (pierce-and-reject of recent structure), and a tight <b>Asian Range</b> (&lt;50 pips).
-      Replaces the retired Malaysian SNR Emperor slot. Grade A/B/C on the same 15-pt scale as TDI 123.
-      Discord alerts are OFF by default until a walk-forward backtest shows a real edge — this tab is dashboard-visible only for now.
+      Setups fire on <b>H1</b> (biased by H4) and <b>M15</b> (trigger leg), plus the <b>200EMA Re-set</b> second setup. Wrong-side pivot location caps A/B to C.
+      Grade A/B/C on the same 17-pt scale as TDI 123. Discord alerts on for A+B.
     </div>
   </div>
 
@@ -5473,7 +5474,7 @@ async function loadBtmm123() {
   const btn     = document.getElementById('btmm123RefreshBtn');
   if (btn) btn.disabled = true;
   summary.textContent = 'Fetching H1 candles, running 123 detector + BTMM confirmation…';
-  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
@@ -5488,7 +5489,7 @@ async function loadBtmm123() {
     console.error('BTMM123 load failed', err);
     const msg = err.name === 'AbortError' ? 'Request timed out (120s). MT5 may be busy — try Refresh Scanner.' : err.message;
     summary.innerHTML = `<span style="color:var(--red)">Failed to load BTMM 123 scanner: ${msg}</span>`;
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -5498,19 +5499,28 @@ function renderBtmm123Table(data) {
   const tbody   = document.getElementById('btmm123TableBody');
   const summary = document.getElementById('btmm123Summary');
 
-  const rows = (data.pairs || []).map(p => {
-    const sym = p.symbol;
-    const pattern = p.pattern || {};
-    const level = p.level || {};
-    const hunt = p.stop_hunt || {};
-    const asian = p.asian_range || {};
+  const tfBadge = (tf, setupType, htf, aligned) => {
+    const col = tf === 'M15' ? 'var(--cyan)' : 'var(--text-primary)';
+    const tag = setupType === 'reset' ? 'Re-set' : '123';
+    const bias = htf ? `<br><span style="font-size:.65rem;color:${aligned ? 'var(--green)' : 'var(--text-muted)'}">${aligned ? '✅' : '✗'} ${htf}</span>` : '';
+    return `<span style="font-weight:700;color:${col}">${tf || 'H1'}</span><br><span style="font-size:.65rem;color:var(--text-muted)">${tag}</span>${bias}`;
+  };
 
-    const priceCell = `<span class="mono">${_crtFmtPrice(p.current_price, sym)}</span>`;
+  const rowHtml = (o, pairLabel, fallbackTf) => {
+    const pattern = o.pattern || {};
+    const level = o.level || {};
+    const hunt = o.stop_hunt || {};
+    const asian = o.asian_range || {};
+
+    const priceCell = `<span class="mono">${_crtFmtPrice(o.current_price, o.symbol)}</span>`;
 
     let patternCell = '<span style="color:var(--text-muted)">—</span>';
     if (pattern.p3) {
-      patternCell = `<span style="font-size:.75rem">1 ${_crtFmtPrice(pattern.p1 && pattern.p1.price, sym)} → 2 ${_crtFmtPrice(pattern.p2 && pattern.p2.price, sym)} → 3 ${_crtFmtPrice(pattern.p3.price, sym)}</span>`
+      patternCell = `<span style="font-size:.75rem">1 ${_crtFmtPrice(pattern.p1 && pattern.p1.price, o.symbol)} → 2 ${_crtFmtPrice(pattern.p2 && pattern.p2.price, o.symbol)} → 3 ${_crtFmtPrice(pattern.p3.price, o.symbol)}</span>`
         + `<br><span style="font-size:.65rem;color:var(--text-muted)">${pattern.leg1_range_pips || 0} pips leg-1</span>`;
+    } else if (o.setup_type === 'reset' && o.reset && o.reset.extreme != null) {
+      patternCell = `<span style="font-size:.75rem">200EMA break @ ${_crtFmtPrice(o.reset.extreme, o.symbol)}</span>`
+        + `<br><span style="font-size:.65rem;color:var(--text-muted)">false-breakout</span>`;
     }
 
     const levelCell = level.count
@@ -5526,27 +5536,47 @@ function renderBtmm123Table(data) {
       ? `<span style="color:var(--green);font-size:.78rem">✅ ${(asian.range_pips || 0).toFixed(0)} pips</span>`
       : (asian.range_pips ? `<span style="color:var(--yellow);font-size:.78rem">${asian.range_pips.toFixed(0)} pips</span>` : '<span style="color:var(--text-muted)">—</span>');
 
-    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : p.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
-    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
-      <td><b>${sym}</b></td>
+    const rowStyle = o.grade === 'A' ? 'background:rgba(34,197,94,.06)' : o.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
+    const tf = o.timeframe || fallbackTf;
+    return `<tr style="${rowStyle}" title="${(o.notes || '').replace(/"/g,'&quot;')}">
+      <td><b>${pairLabel}</b></td>
+      <td>${tfBadge(tf, o.setup_type, o.htf_bias_timeframe, o.htf_aligned)}</td>
       <td>${priceCell}</td>
       <td>${patternCell}</td>
       <td>${levelCell}</td>
       <td>${huntCell}</td>
       <td>${asianCell}</td>
-      <td>${_crtSetupCell(p)}</td>
-      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score||0}/15)</span></td>
+      <td>${_crtSetupCell(o)}</td>
+      <td>${_crtGradeCell(o.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${o.score||0}/17)</span></td>
     </tr>`;
+  };
+
+  // Best setups first: rank each pair by its strongest leg (H1 or M15,
+  // whichever scores higher), highest score at the top, NO-TRADE at the
+  // bottom — instead of the fixed PRIORITY_PAIRS config order.
+  const bestScore = (p) => Math.max(p.score || 0, (p.m15 && p.m15.score) || 0);
+  const sortedPairs = (data.pairs || []).slice().sort((a, b) => bestScore(b) - bestScore(a));
+
+  const rows = sortedPairs.map(p => {
+    const sym = p.symbol;
+    let html = rowHtml(p, sym, 'H1');
+    if (p.m15 && (p.m15.setup === 'BUY' || p.m15.setup === 'SELL')) {
+      html += rowHtml(p.m15, `↳ ${sym}`, 'M15');
+    }
+    return html;
   }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="8" style="text-align:center;padding:24px">No data.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center;padding:24px">No data.</td></tr>';
 
   const stale = (data.stale_pairs && data.stale_pairs.length)
     ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  const resets = (data.pairs || []).filter(p => p.setup_type === 'reset' && (p.setup === 'BUY' || p.setup === 'SELL')).length
+    + (data.pairs || []).filter(p => p.m15 && p.m15.setup_type === 'reset' && (p.m15.setup === 'BUY' || p.m15.setup === 'SELL')).length;
   summary.innerHTML = `
     <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
     <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
     <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
     <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span>
+    ${resets ? ` · <span style="color:var(--yellow);font-weight:600">${resets} Re-set</span>` : ''}
     ${stale}
   `;
 }

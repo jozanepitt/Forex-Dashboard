@@ -16,6 +16,7 @@ from config import (
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
     TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
     BTMM123_ALERTS_ENABLED, BTMM123_SESSION_FILTER, BTMM123_NEWS_FILTER,
+    BTMM123_GRADE_A_ONLY,
 )
 from providers import forexfactory
 
@@ -1019,10 +1020,13 @@ def alert_tdi123_setup(pair: str, row: dict):
 # _news_blocks_pair above (already pair-agnostic, not TDI123-specific).
 
 def _should_alert_btmm123(row: dict) -> bool:
-    """Grade A always; Grade B/C never (kept simple until a backtest says
-    otherwise). Session gate mirrors TDI123's: block outside the active
-    window, but a missing/unknown session flag (None) never hard-fails."""
-    if row.get("grade") != "A":
+    """Grade A always; Grade B unless BTMM123_GRADE_A_ONLY is set (same
+    A+B convention as CRT/TDI123); Grade C never. Session gate mirrors
+    TDI123's: block outside the active window, but a missing/unknown
+    session flag (None) never hard-fails."""
+    if row.get("grade") not in ("A", "B"):
+        return False
+    if BTMM123_GRADE_A_ONLY and row.get("grade") == "B":
         return False
     if BTMM123_SESSION_FILTER and row.get("in_active_session") is False:
         return False
@@ -1032,12 +1036,11 @@ def _should_alert_btmm123(row: dict) -> bool:
 def alert_btmm123_setup(pair: str, row: dict):
     """Fire when the BTMM 123 scanner signals a tradeable setup.
 
-    NOT LIVE by default (BTMM123_ALERTS_ENABLED defaults to false) — this is
-    a brand-new strategy with no track record yet. TDI Cycle 123's own history
-    is the reason: it looked fine on paper and only proved breakeven-to-
-    negative after a proper walk-forward backtest, done after a month of
-    tuning instead of before. BTMM 123 must not repeat that order of
-    operations — see docs/superpowers/specs for the backtest-before-live gate.
+    Gates:
+      - Alerts globally enabled (BTMM123_ALERTS_ENABLED)
+      - Grade A always, Grade B unless BTMM123_GRADE_A_ONLY=true (same
+        A+B convention as CRT/TDI123); Grade C never
+      - R:R sanity on trade plan (min 1:0.8 on TP1)
     """
     if not BTMM123_ALERTS_ENABLED:
         return
@@ -1078,13 +1081,19 @@ def alert_btmm123_setup(pair: str, row: dict):
                      pair, ",".join(sorted(hit)))
             return
 
-    rule = f"btmm123_{setup.lower()}_{grade}"
+    # Timeframe is part of the throttle key — an H1 and an M15 alert on the
+    # same pair/direction/grade are distinct setups and must not collide
+    # (see TDI123's identical convention).
+    timeframe = row.get("timeframe") or "H1"
+    rule = f"btmm123_{timeframe.lower()}_{row.get('setup_type', '123')}_{setup.lower()}_{grade}"
     if _is_throttled(pair, rule):
         return
 
     arrow = "📈" if setup == "BUY" else "📉"
     colour = 0xFFD700
 
+    setup_type = row.get("setup_type", "123")
+    setup_label = "BTMM Re-set" if setup_type == "reset" else "BTMM 123"
     pattern = row.get("pattern") or {}
     level = row.get("level") or {}
     hunt = row.get("stop_hunt") or {}
@@ -1093,16 +1102,28 @@ def alert_btmm123_setup(pair: str, row: dict):
     sl_pips = plan.get("sl_pips") or 0
     rr1 = plan.get("rr1") or 0
 
+    if setup_type == "reset":
+        reset_info = row.get("reset") or {}
+        pattern_field = {
+            "name": "Re-set",
+            "value": f"200EMA false-breakout at `{_fmt_price(reset_info.get('extreme'), pair)}`",
+            "inline": False,
+        }
+    else:
+        pattern_field = {
+            "name": "123 Pattern",
+            "value": f"1 `{_fmt_price(p1.get('price'), pair)}` → 2 `{_fmt_price(p2.get('price'), pair)}` → 3 `{_fmt_price(p3.get('price'), pair)}`  ({pattern.get('leg1_range_pips', 0)} pips leg-1)",
+            "inline": False,
+        }
+
     fields = [
         {"name": "Direction", "value": f"**{'📈 BUY' if setup == 'BUY' else '📉 SELL'}**", "inline": True},
-        {"name": "Grade",     "value": f"⭐ **{grade} ({row.get('score', 0)}/15)**",        "inline": True},
-        {"name": "Setup",     "value": "**BTMM 123**",                                     "inline": True},
+        {"name": "Grade",     "value": f"⭐ **{grade} ({row.get('score', 0)}/17)**",        "inline": True},
+        {"name": "Setup",     "value": f"**{setup_label}**",                               "inline": True},
         {"name": "🎯 Entry",     "value": f"`{_fmt_price(entry, pair)}`",                  "inline": True},
         {"name": "🛑 Stop Loss", "value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",  "inline": True},
         {"name": "Risk:Reward",  "value": f"**1 : {rr1:.1f}**",                            "inline": True},
-        {"name": "123 Pattern",
-         "value": f"1 `{_fmt_price(p1.get('price'), pair)}` → 2 `{_fmt_price(p2.get('price'), pair)}` → 3 `{_fmt_price(p3.get('price'), pair)}`  ({pattern.get('leg1_range_pips', 0)} pips leg-1)",
-         "inline": False},
+        pattern_field,
         {"name": "EMA Level",
          "value": f"{'Level II' if level.get('level_ii') else 'Level I' if level.get('level_i') else 'none'} ({level.get('count', 0)}/5 aligned)",
          "inline": True},
@@ -1112,7 +1133,7 @@ def alert_btmm123_setup(pair: str, row: dict):
     ]
 
     embed = {
-        "title":       f"{arrow} ⭐ {pair} — BTMM 123 {setup}",
+        "title":       f"{arrow} ⭐ {pair} — {setup_label} {setup}",
         "description": row.get("notes") or "BTMM 123 — classic 1-2-3 reversal, BTMM-doctrine confirmed.",
         "color":       colour,
         "fields":      fields,
@@ -1121,3 +1142,10 @@ def alert_btmm123_setup(pair: str, row: dict):
     if _post_discord(embed):
         _mark_sent(pair, rule)
         log.info("BTMM123 alert sent: %s %s grade=%s score=%d", pair, setup, grade, row.get("score", 0))
+
+    # M15 alert: identical rules, identical function — recurse on the M15
+    # sub-result exactly as if it were its own row, matching TDI123's pattern.
+    # Without this, analyze_pair's M15 leg is scored and shown on the
+    # dashboard but never actually reaches Discord.
+    if row.get("m15"):
+        alert_btmm123_setup(pair, row["m15"])

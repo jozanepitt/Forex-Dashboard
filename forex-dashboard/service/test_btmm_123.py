@@ -6,7 +6,8 @@ slot in the dashboard.
 Geometry (swings, 123 pattern, session labels, ATR) is reused directly from
 tdi_cycle_123.py by import — tdi_cycle_123.py itself is untouched. This file
 tests only what's new here: the EMA-Level score, stop-hunt score, Asian-range
-score, grade thresholds, and the end-to-end pipeline/alert gate.
+score, pivot-location gate, H4 bias, M15 leg, 200EMA Re-set branch, grade
+thresholds, and the end-to-end pipeline/alert gate.
 """
 from __future__ import annotations
 
@@ -186,6 +187,19 @@ def test_should_alert_grade_a_always():
     assert _should_alert_btmm123({"grade": "A", "in_active_session": True}) is True
 
 
+def test_should_alert_grade_b_allowed_by_default():
+    """A+B convention like CRT/TDI123: Grade B alerts unless restricted."""
+    assert _should_alert_btmm123({"grade": "B", "in_active_session": True}) is True
+
+
+def test_should_alert_grade_b_blocked_when_a_only(monkeypatch):
+    """BTMM123_GRADE_A_ONLY=true restricts to Grade A (kill-switch)."""
+    import alerts
+    monkeypatch.setattr(alerts, "BTMM123_GRADE_A_ONLY", True)
+    assert alerts._should_alert_btmm123({"grade": "B", "in_active_session": True}) is False
+    assert alerts._should_alert_btmm123({"grade": "A", "in_active_session": True}) is True
+
+
 def test_should_alert_grade_c_never():
     assert _should_alert_btmm123({"grade": "C", "in_active_session": True}) is False
 
@@ -197,3 +211,145 @@ def test_should_alert_blocks_outside_session():
 def test_should_alert_none_session_does_not_hard_fail():
     """Missing session data must not silently kill an otherwise-valid alert."""
     assert _should_alert_btmm123({"grade": "A", "in_active_session": None}) is True
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 1 — pivot location gate (Critical-Area doctrine: never sell into
+# support / buy into resistance)
+# ──────────────────────────────────────────────────────────────────────
+
+def test_location_keys_present_on_tradeable_row():
+    bars = _build_bullish_123_series()
+    row = m.analyze_pair("EUR/USD", bars)
+    assert "location" in row and "location_ok" in row
+    assert isinstance(row["location_ok"], bool)
+    assert "pivot location" in row["notes"]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 2 — H4 bias alignment (+2) and M15 trigger leg
+# ──────────────────────────────────────────────────────────────────────
+
+def _build_h4_uptrend():
+    """70 rising H4 closes: price above a rising 50 EMA -> bullish bias."""
+    return [{"ts_utc": i * 14400, "open": 1.1000 + 0.0010 * i,
+             "high": 1.1005 + 0.0010 * i, "low": 1.0995 + 0.0010 * i,
+             "close": 1.1000 + 0.0010 * i} for i in range(70)]
+
+
+def test_h4_aligned_bias_adds_two_points():
+    bars = _build_bullish_123_series()
+    plain = m.analyze_pair("EUR/USD", bars)
+    biased = m.analyze_pair("EUR/USD", bars, h4_candles=_build_h4_uptrend())
+    assert biased["htf_bias"] == "bullish"
+    assert biased["htf_aligned"] is True
+    assert biased["score"] == plain["score"] + 2
+    assert "H4 bias aligned" in biased["notes"]
+
+
+def test_m15_leg_attached_when_tradeable():
+    h1_bars = _build_bullish_123_series()
+    m15_bars = _build_bullish_123_series()
+    row = m.analyze_pair("EUR/USD", h1_bars, m15_candles=m15_bars)
+    assert row["m15"]["setup"] == "BUY"
+    assert row["m15"]["timeframe"] == "M15"
+
+
+def _minimal_alertable_row(timeframe: str, m15: Optional[dict] = None) -> dict:
+    """Smallest row that clears every gate in alert_btmm123_setup, so the
+    recursion test isolates M15-recursion behavior from pattern geometry."""
+    row = {
+        "symbol": "EUR/USD",
+        "setup": "BUY",
+        "grade": "A",
+        "score": 15,
+        "setup_type": "123",
+        "timeframe": timeframe,
+        "notes": "test row",
+        "in_active_session": True,
+        "pattern": {"p1": {"price": 1.0900}, "p2": {"price": 1.1000}, "p3": {"price": 1.0950},
+                    "leg1_range_pips": 100.0},
+        "level": {"count": 5, "level_ii": True, "level_i": False},
+        "stop_hunt": {"active": True},
+        "trade_plan": {"entry": 1.1000, "sl": 1.0950, "sl_pips": 50.0,
+                       "tp1": 1.1050, "tp2": None, "tp3": None, "rr1": 1.0},
+    }
+    if m15 is not None:
+        row["m15"] = m15
+    return row
+
+
+def test_alert_recurses_into_m15_leg(monkeypatch):
+    """Regression: alert_btmm123_setup must recurse into row['m15'] like
+    alert_tdi123_setup does — otherwise a tradeable M15 leg is scored and
+    shown on the dashboard but never reaches Discord."""
+    import alerts
+
+    monkeypatch.setattr(alerts, "BTMM123_ALERTS_ENABLED", True)
+    monkeypatch.setattr(alerts, "BTMM123_NEWS_FILTER", False)
+    sent_titles = []
+    monkeypatch.setattr(alerts, "_post_discord",
+                        lambda embed: (sent_titles.append(embed["title"]) or True))
+    monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
+    monkeypatch.setattr(alerts, "_mark_sent", lambda pair, rule: None)
+
+    m15_row = _minimal_alertable_row("M15")
+    row = _minimal_alertable_row("H1", m15=m15_row)
+
+    alerts.alert_btmm123_setup("EUR/USD", row)
+
+    assert len(sent_titles) == 2, "expected one Discord embed for H1 and one for M15"
+
+
+def test_alert_throttle_key_distinguishes_h1_from_m15():
+    """H1 and M15 alerts on the same pair/direction/grade must not collide
+    on the throttle key — each is its own setup, same convention as TDI123."""
+    import alerts
+
+    h1_row = {"timeframe": "H1", "setup_type": "123"}
+    m15_row = {"timeframe": "M15", "setup_type": "123"}
+    setup, grade = "buy", "A"
+    h1_rule = f"btmm123_{h1_row['timeframe'].lower()}_{h1_row['setup_type']}_{setup}_{grade}"
+    m15_rule = f"btmm123_{m15_row['timeframe'].lower()}_{m15_row['setup_type']}_{setup}_{grade}"
+    assert h1_rule != m15_rule
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fix 3 — 200EMA false-breakout Re-set branch
+# ──────────────────────────────────────────────────────────────────────
+
+def _build_bearish_reset_series():
+    """Flat ~1.1000 base (no 8-pip 123 legs), then a 5-bar push above the
+    200 EMA that fails back below it with a stop-hunt low on the final bar."""
+    bars = []
+    for i in range(209):
+        p = 1.1000 + (0.00005 if i % 2 == 0 else -0.00005)
+        bars.append(_bar(i * 3600, p + 0.00005, p - 0.00005, p))
+    ts = 209 * 3600
+    bars.append(_bar(ts, 1.1030, 1.0995, 1.1025)); ts += 3600
+    bars.append(_bar(ts, 1.1026, 1.1000, 1.1005)); ts += 3600
+    bars.append(_bar(ts, 1.1008, 1.0998, 1.1000)); ts += 3600
+    bars.append(_bar(ts, 1.1002, 1.0997, 1.0999)); ts += 3600
+    bars.append(_bar(ts, 1.1000, 1.0985, 1.0996))
+    return bars
+
+
+def test_200ema_false_breakout_fires_bearish_reset():
+    row = m.analyze_pair("EUR/USD", _build_bearish_reset_series())
+    assert row["setup"] == "SELL"
+    assert row["setup_type"] == "reset"
+    assert row["pattern"] == {}
+    assert row["reset"]["extreme"] > row["current_price"]
+    assert row["trade_plan"]["sl"] > row["trade_plan"]["entry"]
+    # 9 points (3 base + 4 Level II + 2 Asian; final-bar hunt points the
+    # other way) = B on points, but the synthetic weekly pivots leave price
+    # on the wrong side, so the location cap correctly drops it to C.
+    assert row["score"] == 9
+    assert row["grade"] == "C"
+    assert "grade capped: poor pivot location" in row["notes"]
+
+
+def test_reset_detector_quiet_without_break():
+    bars = [_bar(i * 3600, 1.10005, 1.09995, 1.1000) for i in range(220)]
+    closes = [b["close"] for b in bars]
+    assert m._detect_ema200_false_break(bars, closes)["active"] is False

@@ -340,9 +340,9 @@ def tdi123_detail():
 
 
 # ── BTMM 123 endpoint ────────────────────────────────────────────────────────
-# Classic 1-2-3 price action, BTMM-doctrine confirmed. Replaces the removed
-# Malaysian SNR Emperor slot. H1-only (no HTF bias / M15 yet — kept simpler
-# than TDI123 until a backtest justifies more).
+# Classic 1-2-3 price action (or 200EMA Re-set), BTMM-doctrine confirmed.
+# Replaces the removed Malaysian SNR Emperor slot. H1 primary biased by H4,
+# plus M15 trigger leg — same structure as TDI123.
 _BTMM123_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
 _BTMM123_TTL_SECS = 180  # same cadence as TDI123 — H1 primary
 
@@ -362,7 +362,11 @@ def btmm123():
     candles_by_pair: dict[str, dict] = {}
     stale_set: set[str] = set()
     for sym in universe:
-        candles_by_pair[sym] = {"1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL)}
+        candles_by_pair[sym] = {
+            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
+            "4h": cache.read_candles(sym, "4h", limit=200),
+            "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
+        }
         h1_last = cache.max_ts(sym, "1h")
         if h1_last is None or now_ts > h1_last + 2 * INTERVAL_SECS["1h"] + 60:
             stale_set.add(sym)

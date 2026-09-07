@@ -103,6 +103,9 @@ TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower(
 BTMM123_ALERTS_ENABLED = os.environ.get("BTMM123_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 BTMM123_SESSION_FILTER = os.environ.get("BTMM123_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
 BTMM123_NEWS_FILTER = os.environ.get("BTMM123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+# Grade gate — same convention as CRT/TDI123: default false = Grade A + B
+# both sent to Discord. Set "true" to restrict to Grade A only.
+BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 
 
 def load_keys():
