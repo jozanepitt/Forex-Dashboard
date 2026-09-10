@@ -15,8 +15,10 @@ from config import (
     CRT_5AM_GRADE_A_ONLY, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
     TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
+    TDI123_WATCH_ALERTS_ENABLED,
     BTMM123_ALERTS_ENABLED, BTMM123_SESSION_FILTER, BTMM123_NEWS_FILTER,
-    BTMM123_GRADE_A_ONLY,
+    BTMM123_GRADE_A_ONLY, BTMM123_WATCH_ALERTS_ENABLED,
+    VWAP9EMA_ALERTS_ENABLED, VWAP9EMA_GRADE_A_ONLY, VWAP9EMA_MIN_SCORE,
 )
 from providers import forexfactory
 
@@ -57,6 +59,7 @@ _COLOURS = {
     "setup":       0xA855F7,   # purple
     "kill_zone":   0xFFD93D,   # yellow
     "info":        0x4FC3F7,   # blue
+    "watch":       0x8B949E,   # grey — "still forming", not a trade signal
 }
 
 _SETUP_NAMES = {
@@ -840,6 +843,17 @@ def alert_tdi123_setup(pair: str, row: dict):
     if not TDI123_ALERTS_ENABLED:
         return
 
+    # M15 leg evaluated FIRST and unconditionally — independent of whatever
+    # the H1 leg's gates decide below. Bug found 2026-09-10: this recursion
+    # used to sit after the H1 early-return gates, so a Grade A/B M15 setup
+    # was silently never evaluated whenever H1 didn't ALSO independently
+    # qualify (e.g. H1 grade C/NO-TRADE) — exactly the common case, since M15
+    # and H1 grade independently. Guarded by timeframe so a future scanner
+    # change that nests "m15" one level deeper can't recurse unboundedly
+    # (review finding 2026-09-10).
+    if row.get("m15") and row.get("timeframe") != "M15":
+        alert_tdi123_setup(pair, row["m15"])
+
     setup = row.get("setup")
     grade = row.get("grade")
     if setup not in ("BUY", "SELL"):
@@ -1008,11 +1022,118 @@ def alert_tdi123_setup(pair: str, row: dict):
             except Exception as e:  # noqa: BLE001
                 log.warning("TDI123 journal open failed for %s: %s", pair, e)
 
-    # M15 alert: identical rules, identical function — recurse on the M15
-    # sub-result exactly as if it were its own row. This is what keeps M15
-    # from ever drifting out of sync with H1's alert gates again.
-    if row.get("m15"):
-        alert_tdi123_setup(pair, row["m15"])
+
+def _tdi123_watch_reasons(pair: str, row: dict) -> list[tuple[str, bool, str]]:
+    """Checklist mirroring alert_tdi123_setup's gates, in the same order, for
+    the watch embed. The news lookup is the only side effect (fails open like
+    the real gate). Never used to suppress the real alert — only to describe
+    what is still missing."""
+    grade = row.get("grade")
+    checks: list[tuple[str, bool, str]] = []
+
+    if grade == "A":
+        checks.append(("Grade", True, "A"))
+    else:
+        div = row.get("divergence") or {}
+        htf_aligned = bool(row.get("htf_aligned"))
+        rr_b = (row.get("trade_plan") or {}).get("rr1") or 0
+        checks.append(("Divergence present", bool(div.get("present")),
+                       "yes" if div.get("present") else "none"))
+        checks.append(("HTF bias aligned", htf_aligned,
+                       f"{row.get('htf_bias_timeframe', 'H4')}: {row.get('htf_bias', '?')}"))
+        checks.append(("Grade-B R:R ≥ 1.0", rr_b >= 1.0, f"1:{rr_b:.2f}"))
+
+    if TDI123_SESSION_FILTER:
+        checks.append(("Active session", row.get("in_active_session") is not False,
+                       row.get("session", "?")))
+    if TDI123_ADR_FILTER:
+        checks.append(("TP1 within remaining ADR", row.get("tp1_reachable") is not False,
+                       "reachable" if row.get("tp1_reachable") else "unreachable"))
+
+    cross = bool((row.get("signal_cross") or {}).get("present"))
+    checks.append(("Signal cross confirmed", cross, "confirmed" if cross else "not yet"))
+
+    plan = row.get("trade_plan") or {}
+    entry, sl, tp1 = plan.get("entry"), plan.get("sl"), plan.get("tp1")
+    plan_complete = bool(entry and sl and tp1)
+    checks.append(("Trade plan complete", plan_complete, "ok" if plan_complete else "incomplete"))
+
+    if plan_complete:
+        setup = row.get("setup")
+        sl_dist = abs(entry - sl)
+        direction_ok = lambda tp: (setup == "BUY" and tp > entry) or (setup == "SELL" and tp < entry)
+        valid_tiers = [plan.get(k) for k in ("tp1", "tp2", "tp3") if plan.get(k) and direction_ok(plan.get(k))]
+        best_rr = (max(abs(tp - entry) / sl_dist for tp in valid_tiers)
+                  if valid_tiers and sl_dist > 1e-9 else 0)
+        checks.append(("R:R ≥ 0.8 (best tier)", best_rr >= 0.8, f"1:{best_rr:.2f}"))
+
+    if TDI123_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(TDI123_NEWS_WINDOW_MIN, high_only=True)
+        except Exception:  # noqa: BLE001
+            blocked = set()
+        news_clear = not _news_blocks_pair(pair, blocked)
+        checks.append(("No high-impact news window", news_clear,
+                       "clear" if news_clear else f"blocked within {TDI123_NEWS_WINDOW_MIN}m"))
+
+    return checks
+
+
+def alert_tdi123_watch(pair: str, row: dict):
+    """Post a 'still forming' embed for Grade A/B TDI123 setups that don't yet
+    clear every gate in alert_tdi123_setup, so a setup can be monitored on
+    Discord as it develops instead of only on the dashboard. Skips silently
+    once everything passes — the real alert already covers that case."""
+    if not TDI123_WATCH_ALERTS_ENABLED:
+        return
+
+    # M15 leg evaluated first and unconditionally — see alert_tdi123_setup's
+    # matching fix note (2026-09-10). Without this, a Grade B M15 setup was
+    # never watched whenever H1 didn't also independently qualify. Guarded by
+    # timeframe so a future scanner change that ever nests "m15" one level
+    # deeper can't cause unbounded recursion (review finding 2026-09-10).
+    if row.get("m15") and row.get("timeframe") != "M15":
+        alert_tdi123_watch(pair, row["m15"])
+
+    grade = row.get("grade")
+    setup = row.get("setup")
+    if grade not in ("A", "B") or setup not in ("BUY", "SELL"):
+        return
+
+    try:
+        checks = _tdi123_watch_reasons(pair, row)
+    except Exception as e:  # noqa: BLE001
+        log.warning("TDI123 watch checklist crashed for %s: %s", pair, e)
+        return
+
+    # Skip only when the real alert is actually live to catch this — if
+    # TDI123_ALERTS_ENABLED is off, nothing else will ever tell the user this
+    # setup is fully qualified, so keep posting even at "all clear" (review
+    # finding 2026-09-10: this used to skip unconditionally on all-pass,
+    # silently producing zero notification whenever the real alert was off).
+    if TDI123_ALERTS_ENABLED and all(passed for _, passed, _ in checks):
+        return  # everything passes and the real alert is live — it already fired this
+
+    timeframe = row.get("timeframe") or "H1"
+    rule = f"tdi123watch_{timeframe.lower()}_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    lines = [f"{'✅' if ok else '❌'} {label} — {detail}" for label, ok, detail in checks]
+
+    embed = {
+        "title":       f"👀 {arrow} {pair} — TDI Cycle 123 [{timeframe}] {setup} watching (Grade {grade})",
+        "description": "Still forming — not a trade signal yet.\n" + "\n".join(lines),
+        "color":       _COLOURS["watch"],
+        "fields":      [
+            {"name": "Grade", "value": f"**{grade} ({row.get('score', 0)}/15)**", "inline": True},
+        ],
+        "footer":      {"text": f"TDI Cycle 123 {timeframe} · Monitoring only · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("TDI123 watch alert sent: %s [%s] %s grade=%s", pair, timeframe, setup, grade)
 
 
 # ── BTMM 123 (classic 1-2-3 price action, BTMM-doctrine confirmed) ───────────
@@ -1044,6 +1165,15 @@ def alert_btmm123_setup(pair: str, row: dict):
     """
     if not BTMM123_ALERTS_ENABLED:
         return
+
+    # M15 leg evaluated first and unconditionally — see alert_tdi123_setup's
+    # matching fix note (2026-09-10): recursing after the H1 gates meant a
+    # Grade A/B M15 setup was silently skipped whenever H1 didn't ALSO
+    # independently qualify. Guarded by timeframe so a future scanner change
+    # that nests "m15" one level deeper can't recurse unboundedly (review
+    # finding 2026-09-10).
+    if row.get("m15") and row.get("timeframe") != "M15":
+        alert_btmm123_setup(pair, row["m15"])
 
     setup = row.get("setup")
     grade = row.get("grade")
@@ -1143,9 +1273,193 @@ def alert_btmm123_setup(pair: str, row: dict):
         _mark_sent(pair, rule)
         log.info("BTMM123 alert sent: %s %s grade=%s score=%d", pair, setup, grade, row.get("score", 0))
 
-    # M15 alert: identical rules, identical function — recurse on the M15
-    # sub-result exactly as if it were its own row, matching TDI123's pattern.
-    # Without this, analyze_pair's M15 leg is scored and shown on the
-    # dashboard but never actually reaches Discord.
-    if row.get("m15"):
-        alert_btmm123_setup(pair, row["m15"])
+
+def _btmm123_watch_reasons(pair: str, row: dict) -> list[tuple[str, bool, str]]:
+    """Checklist mirroring alert_btmm123_setup's gates, in the same order."""
+    grade = row.get("grade")
+    checks: list[tuple[str, bool, str]] = []
+
+    if grade == "A":
+        checks.append(("Grade", True, "A"))
+    else:
+        grade_ok = not BTMM123_GRADE_A_ONLY
+        checks.append(("Grade B allowed", grade_ok,
+                       "allowed" if grade_ok else "BTMM123_GRADE_A_ONLY is on"))
+
+    if BTMM123_SESSION_FILTER:
+        checks.append(("Active session", row.get("in_active_session") is not False,
+                       row.get("session", "?")))
+
+    plan = row.get("trade_plan") or {}
+    entry, sl, tp1 = plan.get("entry"), plan.get("sl"), plan.get("tp1")
+    plan_complete = bool(entry and sl and tp1)
+    checks.append(("Trade plan complete", plan_complete, "ok" if plan_complete else "incomplete"))
+
+    if plan_complete:
+        setup = row.get("setup")
+        rr_ok = _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair)
+        checks.append(("R:R ≥ 0.8", rr_ok, "ok" if rr_ok else "below minimum"))
+
+    if BTMM123_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception:  # noqa: BLE001
+            blocked = set()
+        news_clear = not _news_blocks_pair(pair, blocked)
+        checks.append(("No high-impact news window", news_clear,
+                       "clear" if news_clear else "blocked within 60m"))
+
+    return checks
+
+
+def alert_btmm123_watch(pair: str, row: dict):
+    """Post a 'still forming' embed for Grade A/B BTMM123 setups that don't
+    yet clear every gate in alert_btmm123_setup. Independent of BTMM123_
+    ALERTS_ENABLED by design — lets you watch setups develop while real
+    BTMM123 alerts stay off. Skips silently once everything passes."""
+    if not BTMM123_WATCH_ALERTS_ENABLED:
+        return
+
+    # M15 leg evaluated first and unconditionally — see alert_tdi123_setup's
+    # matching fix note (2026-09-10). Guarded by timeframe so a future scanner
+    # change that nests "m15" one level deeper can't recurse unboundedly
+    # (review finding 2026-09-10).
+    if row.get("m15") and row.get("timeframe") != "M15":
+        alert_btmm123_watch(pair, row["m15"])
+
+    grade = row.get("grade")
+    setup = row.get("setup")
+    if grade not in ("A", "B") or setup not in ("BUY", "SELL"):
+        return
+
+    try:
+        checks = _btmm123_watch_reasons(pair, row)
+    except Exception as e:  # noqa: BLE001
+        log.warning("BTMM123 watch checklist crashed for %s: %s", pair, e)
+        return
+
+    # Skip only when the real alert is actually live — see alert_tdi123_watch's
+    # matching fix note (2026-09-10). Under BTMM123's own shipped defaults
+    # (BTMM123_ALERTS_ENABLED=false, BTMM123_WATCH_ALERTS_ENABLED=true) the
+    # unconditional version silently produced ZERO notification for a fully-
+    # qualified setup — exactly the moment the user most needs to hear about it.
+    if BTMM123_ALERTS_ENABLED and all(passed for _, passed, _ in checks):
+        return
+
+    timeframe = row.get("timeframe") or "H1"
+    setup_type = row.get("setup_type", "123")
+    rule = f"btmm123watch_{timeframe.lower()}_{setup_type}_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    setup_label = "BTMM Re-set" if setup_type == "reset" else "BTMM 123"
+    lines = [f"{'✅' if ok else '❌'} {label} — {detail}" for label, ok, detail in checks]
+
+    embed = {
+        "title":       f"👀 {arrow} {pair} — {setup_label} {setup} watching (Grade {grade})",
+        "description": "Still forming — not a trade signal yet.\n" + "\n".join(lines),
+        "color":       _COLOURS["watch"],
+        "fields":      [
+            {"name": "Grade", "value": f"**{grade} ({row.get('score', 0)}/17)**", "inline": True},
+        ],
+        "footer":      {"text": f"{setup_label} · Monitoring only · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("BTMM123 watch alert sent: %s %s grade=%s", pair, setup, grade)
+
+
+# ── VWAP + 9 EMA (M15) ──────────────────────────────────────────────────────
+
+def _should_alert_vwap9ema(row: dict) -> bool:
+    """Score floor (default 9/10) is the primary gate — user rule (2026-09-10):
+    only the best 9s and 10s reach Discord. This already excludes all of Grade
+    B (max 7/10) and Grade A's low end (score 8, previously alerted). Grade C
+    and NO-TRADE never alert. VWAP9EMA_GRADE_A_ONLY is now a no-op under the
+    default MIN_SCORE=9 (no B-grade row can score that high) but stays as an
+    explicit label-based cut in case MIN_SCORE is ever lowered."""
+    if row.get("grade") not in ("A", "B"):
+        return False
+    if VWAP9EMA_GRADE_A_ONLY and row.get("grade") == "B":
+        return False
+    return (row.get("score") or 0) >= VWAP9EMA_MIN_SCORE
+
+
+def alert_vwap9ema_setup(pair: str, row: dict, is_test: bool = False):
+    """Fire when the VWAP+9EMA (M15) scanner confirms a Grade A/B setup.
+
+    `row` is one element from vwap9ema_strategy.analyze_universe()['pairs'].
+    Pass is_test=True to send a clearly-labelled one-off test embed that
+    bypasses the grade gate and the hourly throttle (does not mark the rule
+    as sent, so it never suppresses a real alert that follows).
+    """
+    if not is_test and not VWAP9EMA_ALERTS_ENABLED:
+        return
+
+    setup = row.get("setup")
+    grade = row.get("grade")
+    if setup not in ("BUY", "SELL"):
+        return
+    if not is_test and not _should_alert_vwap9ema(row):
+        log.debug("VWAP9EMA FILTERED %s: grade %s below threshold", pair, grade)
+        return
+
+    entry, sl, tp = row.get("entry"), row.get("sl"), row.get("tp")
+    if not (entry and sl and tp):
+        log.debug("VWAP9EMA SUPPRESSED %s: incomplete trade plan", pair)
+        return
+
+    # R:R / direction sanity — every other trade-plan alert in this file gates
+    # on this before posting (alert_strong_signal, alert_aplus_setup,
+    # alert_active_setup, alert_btmm123_setup, alert_tdi123_setup's multi-tier
+    # check); this one didn't (review finding 2026-09-10). A degenerate plan
+    # from the scanner (SL ~= entry, or TP on the wrong side) would otherwise
+    # post as a live, actionable signal with no safety net. Applied even in
+    # is_test mode — a test send shouldn't bypass basic sanity either.
+    if not _check_rr(entry, sl, tp, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.warning("VWAP9EMA alert BLOCKED for %s: bad R:R", pair)
+        return
+
+    rule = f"vwap9ema_{setup.lower()}_{grade}"
+    if not is_test and _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    colour = 0x60A5FA if not is_test else 0x9CA3AF  # blue; grey for test sends
+
+    pip = _pip_size(entry, pair)
+    sl_pips = round(abs(entry - sl) / pip)
+    tp_pips = round(abs(tp - entry) / pip)
+    rr = tp_pips / sl_pips if sl_pips else 0
+
+    fields = [
+        {"name": "Direction",   "value": f"**{'📈 BUY' if setup == 'BUY' else '📉 SELL'}**", "inline": True},
+        {"name": "Grade",       "value": f"⭐ **{grade} ({row.get('score', 0)}/10)**",        "inline": True},
+        {"name": "Session",     "value": row.get("session_status") or "—",                   "inline": True},
+        {"name": "🎯 Entry",    "value": f"`{_fmt_price(entry, pair)}`",                     "inline": True},
+        {"name": "🛑 Stop Loss","value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",     "inline": True},
+        {"name": "🎯 TP (2R)",  "value": f"`{_fmt_price(tp, pair)}`  (+{tp_pips} pips)",     "inline": True},
+        {"name": "Risk:Reward", "value": f"**1 : {rr:.1f}**",                                "inline": True},
+        {"name": "Bias",        "value": row.get("bias") or "—",                             "inline": True},
+        {"name": "Pullback",    "value": "VWAP touch" if row.get("touched_vwap") else "9 EMA touch", "inline": True},
+        {"name": "Volume",      "value": "↑ confirmed" if row.get("volume_confirm") else "—", "inline": True},
+    ]
+
+    title = f"{arrow} {pair} — VWAP+9EMA {setup}"
+    if is_test:
+        title = f"🧪 TEST — {title}"
+
+    embed = {
+        "title":       title,
+        "description": row.get("notes") or "VWAP + 9 EMA (M15) — pullback + candle-close confirmation.",
+        "color":       colour,
+        "fields":      fields,
+        "footer":      {"text": f"VWAP+9EMA (M15) · {_now_utc_str()} ({_now_sast_str()} SAST)"
+                                  + (" · TEST SEND, not a live signal" if is_test else "")},
+    }
+    if _post_discord(embed):
+        if not is_test:
+            _mark_sent(pair, rule)
+        log.info("VWAP9EMA alert sent%s: %s %s grade=%s score=%d",
+                 " (TEST)" if is_test else "", pair, setup, grade, row.get("score", 0))

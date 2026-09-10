@@ -144,6 +144,12 @@ def refresh_all():
     except Exception as e:
         log.warning("BTMM123 alerts failed: %s", e)
 
+    # Run VWAP + 9 EMA (M15) scanner + Discord alerts (A/B grade only)
+    try:
+        _run_vwap9ema_alerts()
+    except Exception as e:
+        log.warning("VWAP9EMA alerts failed: %s", e)
+
     # Notify dashboard subscribers via WebSocket. Late import keeps scheduler importable
     # standalone (e.g. for tests) without pulling Flask-SocketIO into the import graph.
     try:
@@ -226,6 +232,26 @@ def _run_crt_5am_alerts():
             log.debug("CRT-5AM alert eval failed for %s: %s", row.get("symbol"), e)
 
 
+def _run_vwap9ema_alerts():
+    """Run the VWAP+9EMA (M15) scanner against the cache and fire Discord
+    alerts for Grade A/B setups. Majors already refreshed every cycle as part
+    of PRIORITY_PAIRS, so this reads straight from cache like _run_crt_alerts."""
+    import cache
+    import vwap9ema_strategy
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=400),
+        }
+    result = vwap9ema_strategy.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        try:
+            alerts.alert_vwap9ema_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("VWAP9EMA alert eval failed for %s: %s", row.get("symbol"), e)
+
+
 def _run_tdi123_alerts():
     """Run the TDI Cycle 123 scanner and fire Discord alerts for confirmed setups."""
     import cache
@@ -245,6 +271,10 @@ def _run_tdi123_alerts():
             alerts.alert_tdi123_setup(row["symbol"], row)
         except Exception as e:
             log.debug("TDI123 alert eval failed for %s: %s", row.get("symbol"), e)
+        try:
+            alerts.alert_tdi123_watch(row["symbol"], row)
+        except Exception as e:
+            log.debug("TDI123 watch eval failed for %s: %s", row.get("symbol"), e)
 
     # Resolve previously-journaled signals against the candles that have printed
     # since, so the dashboard accumulates a REAL win/loss record over time.
@@ -275,6 +305,10 @@ def _run_btmm123_alerts():
             alerts.alert_btmm123_setup(row["symbol"], row)
         except Exception as e:
             log.debug("BTMM123 alert eval failed for %s: %s", row.get("symbol"), e)
+        try:
+            alerts.alert_btmm123_watch(row["symbol"], row)
+        except Exception as e:
+            log.debug("BTMM123 watch eval failed for %s: %s", row.get("symbol"), e)
 
 
 _stall_warned = False

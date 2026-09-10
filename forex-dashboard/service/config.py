@@ -92,6 +92,12 @@ TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
 # its outcome (win at TP1 / loss at SL) from cached candles each refresh, so the
 # dashboard builds a REAL track record instead of relying on backtests.
 TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower() in ("1", "true", "yes")
+# WATCH (default ON): post a grey "still forming" embed for A/B setups that
+# don't yet clear every gate above, listing exactly what's missing, so a
+# setup can be monitored on Discord as it develops instead of only on the
+# dashboard. Independent of TDI123_ALERTS_ENABLED — never duplicates a real
+# alert (skips silently once every gate has actually passed).
+TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # BTMM 123 — classic 1-2-3 price action confirmed by BTMM doctrine (EMA Level
 # cascade + stop hunt + Asian range) instead of a TDI/oscillator dependency.
@@ -106,6 +112,21 @@ BTMM123_NEWS_FILTER = os.environ.get("BTMM123_NEWS_FILTER", "true").lower() in (
 # Grade gate — same convention as CRT/TDI123: default false = Grade A + B
 # both sent to Discord. Set "true" to restrict to Grade A only.
 BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+# WATCH (default ON): same "still forming" monitoring embed as TDI123_WATCH_
+# ALERTS_ENABLED, deliberately independent of BTMM123_ALERTS_ENABLED — lets
+# you watch A/B setups develop even while real BTMM123 alerts stay off.
+BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# VWAP + 9 EMA (M15) — user explicitly asked for Discord alerts on this one,
+# so (unlike BTMM 123) it defaults ON despite having no track record yet.
+# VWAP9EMA_GRADE_A_ONLY=true would restrict to Grade A only (kept for symmetry
+# with CRT/TDI123/BTMM123), but MIN_SCORE below is now the tighter gate: user
+# rule (2026-09-10) is only the best 9/10 and 10/10 setups reach Discord —
+# that already excludes all of Grade B (max 7/10) and the low end of Grade A
+# (score 8), which used to alert. Grade C never alerts either way.
+VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+VWAP9EMA_GRADE_A_ONLY = os.environ.get("VWAP9EMA_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+VWAP9EMA_MIN_SCORE = int(os.environ.get("VWAP9EMA_MIN_SCORE", "9"))
 
 
 def load_keys():
