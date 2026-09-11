@@ -281,9 +281,15 @@ def test_score_and_grade_max_is_ten_grade_a():
     assert grade == "A"
 
 
-def test_score_and_grade_minimum_is_three_grade_c():
+def test_score_and_grade_below_c_floor_is_no_trade():
     score, grade = m._score_and_grade(False, False, "unknown", "ASIAN")
     assert score == 3
+    assert grade == "NO-TRADE"
+
+
+def test_score_and_grade_at_c_floor_is_c():
+    score, grade = m._score_and_grade(False, False, "close_inside_band", "ASIAN")
+    assert score == 4   # 3 base + 0 exhaustion + 0 fading + 1 confirmation + 0 session
     assert grade == "C"
 
 

@@ -321,5 +321,5 @@ def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
     score += conf_points.get(confirmation_type, 0)
     session_points = {"ACTIVE": 2, "LONDON": 1, "NY-LATE": 1, "ASIAN": 0}
     score += session_points.get(session_status, 0)
-    grade = "A" if score >= 8 else "B" if score >= 6 else "C"
+    grade = "A" if score >= 8 else "B" if score >= 6 else "C" if score >= 4 else "NO-TRADE"
     return score, grade
