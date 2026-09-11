@@ -18,7 +18,8 @@ from config import (
     TDI123_WATCH_ALERTS_ENABLED,
     BTMM123_ALERTS_ENABLED, BTMM123_SESSION_FILTER, BTMM123_NEWS_FILTER,
     BTMM123_GRADE_A_ONLY, BTMM123_WATCH_ALERTS_ENABLED,
-    VWAP9EMA_ALERTS_ENABLED, VWAP9EMA_GRADE_A_ONLY, VWAP9EMA_MIN_SCORE,
+    VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
+    VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
 )
 from providers import forexfactory
 
@@ -1370,96 +1371,117 @@ def alert_btmm123_watch(pair: str, row: dict):
         log.info("BTMM123 watch alert sent: %s %s grade=%s", pair, setup, grade)
 
 
-# ── VWAP + 9 EMA (M15) ──────────────────────────────────────────────────────
+# ── VWAP Mean Reversion (M15) ────────────────────────────────────────────────
 
-def _should_alert_vwap9ema(row: dict) -> bool:
-    """Score floor (default 9/10) is the primary gate — user rule (2026-09-10):
-    only the best 9s and 10s reach Discord. This already excludes all of Grade
-    B (max 7/10) and Grade A's low end (score 8, previously alerted). Grade C
-    and NO-TRADE never alert. VWAP9EMA_GRADE_A_ONLY is now a no-op under the
-    default MIN_SCORE=9 (no B-grade row can score that high) but stays as an
-    explicit label-based cut in case MIN_SCORE is ever lowered."""
+def _should_alert_vwap_mr(row: dict) -> bool:
+    """Hard floor: only fire on score >= VWAP_MR_MIN_SCORE (default 9/10),
+    regardless of grade label. Grade C and NO-TRADE never alert."""
     if row.get("grade") not in ("A", "B"):
         return False
-    if VWAP9EMA_GRADE_A_ONLY and row.get("grade") == "B":
+    if VWAP_MR_GRADE_A_ONLY and row.get("grade") == "B":
         return False
-    return (row.get("score") or 0) >= VWAP9EMA_MIN_SCORE
+    return (row.get("score") or 0) >= VWAP_MR_MIN_SCORE
 
 
-def alert_vwap9ema_setup(pair: str, row: dict, is_test: bool = False):
-    """Fire when the VWAP+9EMA (M15) scanner confirms a Grade A/B setup.
+def alert_vwap_mr_setup(pair: str, row: dict, is_test: bool = False):
+    """Fire when the VWAP Mean Reversion scanner confirms a Grade A/B setup
+    at or above VWAP_MR_MIN_SCORE.
 
-    `row` is one element from vwap9ema_strategy.analyze_universe()['pairs'].
+    `row` is one element from vwap_mean_reversion_strategy.analyze_universe()['pairs'].
     Pass is_test=True to send a clearly-labelled one-off test embed that
-    bypasses the grade gate and the hourly throttle (does not mark the rule
-    as sent, so it never suppresses a real alert that follows).
+    bypasses the grade/score gate and the hourly throttle (does not mark the
+    rule as sent, so it never suppresses a real alert that follows) —
+    matches the VWAP+9EMA convention this replaces.
     """
-    if not is_test and not VWAP9EMA_ALERTS_ENABLED:
+    if not is_test and not VWAP_MR_ALERTS_ENABLED:
         return
 
     setup = row.get("setup")
     grade = row.get("grade")
     if setup not in ("BUY", "SELL"):
         return
-    if not is_test and not _should_alert_vwap9ema(row):
-        log.debug("VWAP9EMA FILTERED %s: grade %s below threshold", pair, grade)
+    if not is_test and not _should_alert_vwap_mr(row):
+        log.debug("VWAP_MR FILTERED %s: grade %s / score %s below threshold", pair, grade, row.get("score"))
         return
 
-    entry, sl, tp = row.get("entry"), row.get("sl"), row.get("tp")
-    if not (entry and sl and tp):
-        log.debug("VWAP9EMA SUPPRESSED %s: incomplete trade plan", pair)
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("VWAP_MR SUPPRESSED %s: incomplete trade plan", pair)
         return
 
-    # R:R / direction sanity — every other trade-plan alert in this file gates
-    # on this before posting (alert_strong_signal, alert_aplus_setup,
-    # alert_active_setup, alert_btmm123_setup, alert_tdi123_setup's multi-tier
-    # check); this one didn't (review finding 2026-09-10). A degenerate plan
-    # from the scanner (SL ~= entry, or TP on the wrong side) would otherwise
-    # post as a live, actionable signal with no safety net. Applied even in
-    # is_test mode — a test send shouldn't bypass basic sanity either.
-    if not _check_rr(entry, sl, tp, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
-        log.warning("VWAP9EMA alert BLOCKED for %s: bad R:R", pair)
+    # R:R / direction sanity (every trade-plan alert in this file gates on
+    # this before posting) -- see 2026-09-10 review finding on the retired
+    # VWAP+9EMA alert, which had no such check.
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.warning("VWAP_MR alert BLOCKED for %s: bad R:R", pair)
         return
 
-    rule = f"vwap9ema_{setup.lower()}_{grade}"
+    # News gate: suppress if either of the pair's currencies has a high-
+    # impact event within 60 min. Fails open -- a feed error never blocks
+    # a trade (same convention as TDI123/BTMM123).
+    if not is_test and VWAP_MR_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("VWAP_MR news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            hit = _pair_currencies(pair) & blocked
+            log.info("VWAP_MR SUPPRESSED %s: high-impact news within 60m (%s)",
+                     pair, ",".join(sorted(hit)))
+            return
+
+    rule = f"vwap_mr_{setup.lower()}_{grade}"
     if not is_test and _is_throttled(pair, rule):
         return
 
     arrow = "📈" if setup == "BUY" else "📉"
-    colour = 0x60A5FA if not is_test else 0x9CA3AF  # blue; grey for test sends
+    colour = 0x60A5FA if not is_test else 0x9CA3AF
 
     pip = _pip_size(entry, pair)
-    sl_pips = round(abs(entry - sl) / pip)
-    tp_pips = round(abs(tp - entry) / pip)
-    rr = tp_pips / sl_pips if sl_pips else 0
+    sl_pips = row.get("sl_pips") or round(abs(entry - sl) / pip, 1)
+    tp1_pips = row.get("tp1_pips") or round(abs(tp1 - entry) / pip, 1)
+    rr = tp1_pips / sl_pips if sl_pips else 0
+
+    ext = row.get("extension") or {}
+    conf = row.get("confirmation") or {}
+    conf_label = {
+        "rejection_wick": "Rejection wick", "close_inside_band": "Close back inside band",
+        "two_bar_pattern": "Two-bar reversal pattern",
+    }.get(conf.get("type"), conf.get("type") or "—")
 
     fields = [
         {"name": "Direction",   "value": f"**{'📈 BUY' if setup == 'BUY' else '📉 SELL'}**", "inline": True},
         {"name": "Grade",       "value": f"⭐ **{grade} ({row.get('score', 0)}/10)**",        "inline": True},
-        {"name": "Session",     "value": row.get("session_status") or "—",                   "inline": True},
-        {"name": "🎯 Entry",    "value": f"`{_fmt_price(entry, pair)}`",                     "inline": True},
-        {"name": "🛑 Stop Loss","value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",     "inline": True},
-        {"name": "🎯 TP (2R)",  "value": f"`{_fmt_price(tp, pair)}`  (+{tp_pips} pips)",     "inline": True},
-        {"name": "Risk:Reward", "value": f"**1 : {rr:.1f}**",                                "inline": True},
-        {"name": "Bias",        "value": row.get("bias") or "—",                             "inline": True},
-        {"name": "Pullback",    "value": "VWAP touch" if row.get("touched_vwap") else "9 EMA touch", "inline": True},
-        {"name": "Volume",      "value": "↑ confirmed" if row.get("volume_confirm") else "—", "inline": True},
+        {"name": "Regime (ER)", "value": f"{row.get('er', 0):.2f} (< 0.35 required)",         "inline": True},
+        {"name": "🎯 Entry",    "value": f"`{_fmt_price(entry, pair)}`",                      "inline": True},
+        {"name": "🛑 Stop Loss","value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",       "inline": True},
+        {"name": "🎯 TP1 (VWAP)","value": f"`{_fmt_price(tp1, pair)}`  (+{tp1_pips} pips)",   "inline": True},
+        {"name": "Risk:Reward", "value": f"**1 : {rr:.1f}**",                                 "inline": True},
+        {"name": "Extension",   "value": f"z = {ext.get('z', 0):.2f}",                        "inline": True},
+        {"name": "Confirmation","value": conf_label,                                          "inline": True},
+        {"name": "Exhaustion vol", "value": "✅" if row.get("exhaustion_volume") else "—",    "inline": True},
+        {"name": "Fading vol",  "value": "✅" if row.get("fading_volume") else "—",           "inline": True},
+        {"name": "Session",     "value": row.get("session_status") or "—",                    "inline": True},
     ]
+    if row.get("tp2") is not None:
+        tp2_pips = row.get("tp2_pips") or round(abs(row["tp2"] - entry) / pip, 1)
+        fields.append({"name": "🎯 TP2 (overshoot)", "value": f"`{_fmt_price(row['tp2'], pair)}`  (+{tp2_pips} pips)", "inline": True})
 
-    title = f"{arrow} {pair} — VWAP+9EMA {setup}"
+    title = f"{arrow} {pair} — VWAP Mean Reversion {setup}"
     if is_test:
         title = f"🧪 TEST — {title}"
 
     embed = {
         "title":       title,
-        "description": row.get("notes") or "VWAP + 9 EMA (M15) — pullback + candle-close confirmation.",
+        "description": row.get("notes") or "VWAP Mean Reversion — extension + stall confirmation.",
         "color":       colour,
         "fields":      fields,
-        "footer":      {"text": f"VWAP+9EMA (M15) · {_now_utc_str()} ({_now_sast_str()} SAST)"
+        "footer":      {"text": f"VWAP Mean Reversion (M15) · {_now_utc_str()} ({_now_sast_str()} SAST)"
                                   + (" · TEST SEND, not a live signal" if is_test else "")},
     }
     if _post_discord(embed):
         if not is_test:
             _mark_sent(pair, rule)
-        log.info("VWAP9EMA alert sent%s: %s %s grade=%s score=%d",
+        log.info("VWAP_MR alert sent%s: %s %s grade=%s score=%d",
                  " (TEST)" if is_test else "", pair, setup, grade, row.get("score", 0))

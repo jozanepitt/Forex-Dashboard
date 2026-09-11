@@ -117,16 +117,21 @@ BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "false").lower() i
 # you watch A/B setups develop even while real BTMM123 alerts stay off.
 BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 
-# VWAP + 9 EMA (M15) — user explicitly asked for Discord alerts on this one,
-# so (unlike BTMM 123) it defaults ON despite having no track record yet.
-# VWAP9EMA_GRADE_A_ONLY=true would restrict to Grade A only (kept for symmetry
-# with CRT/TDI123/BTMM123), but MIN_SCORE below is now the tighter gate: user
-# rule (2026-09-10) is only the best 9/10 and 10/10 setups reach Discord —
-# that already excludes all of Grade B (max 7/10) and the low end of Grade A
-# (score 8), which used to alert. Grade C never alerts either way.
-VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
-VWAP9EMA_GRADE_A_ONLY = os.environ.get("VWAP9EMA_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
-VWAP9EMA_MIN_SCORE = int(os.environ.get("VWAP9EMA_MIN_SCORE", "9"))
+# VWAP Mean Reversion (M15) — replaces VWAP+9EMA (2026-09-11). Adapted from
+# an external US-equity research spec; see
+# docs/superpowers/specs/2026-09-10-vwap-mean-reversion-strategy-design.md
+# for the full rationale and every deviation from the source document.
+# MIN_SCORE=9 carries forward the user's VWAP9EMA tightening (2026-09-10):
+# only the best 9/10 and 10/10 setups reach Discord.
+VWAP_MR_ALERTS_ENABLED = os.environ.get("VWAP_MR_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+VWAP_MR_GRADE_A_ONLY = os.environ.get("VWAP_MR_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+VWAP_MR_MIN_SCORE = int(os.environ.get("VWAP_MR_MIN_SCORE", "9"))
+VWAP_MR_WATCH_ALERTS_ENABLED = os.environ.get("VWAP_MR_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+# News gate (doc §3.2/§3.3.5): suppress if either of the pair's currencies
+# has a high-impact ForexFactory event within 60 min. Reuses the exact same
+# infrastructure as TDI123/BTMM123 (forexfactory.currencies_in_window +
+# alerts._news_blocks_pair), applied at the alert layer (see spec deviation #11).
+VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
 
 def load_keys():
