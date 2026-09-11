@@ -15,12 +15,11 @@ Two exit modes:
 
 Both modes also force-close at market if neither SL nor the target is hit
 within TIME_STOP_BARS bars of entry (doc §3.5 time stop), matching the live
-scanner's "fresh" vs "stale" distinction — the retired VWAP+9EMA backtester
-had no time-stop at all.
+scanner's "fresh" vs "stale" distinction.
 
-Mirrors vwap9ema_backtest.py's walk-forward shape (worst-case-if-both-hit-
-in-one-bar rule, stats formula, result shape) so the existing dashboard
-rendering can display either strategy's results unchanged.
+Implements a walk-forward backtest shape (worst-case-if-both-hit-in-one-bar
+rule, stats formula, result shape) for dashboard rendering of historical
+trade performance.
 """
 from __future__ import annotations
 
@@ -95,8 +94,8 @@ def run(pair: str, start_ts: int, end_ts: int,
             exit_p = None
             if hit_sl or hit_target:
                 # Intrabar path unknown from OHLC alone -- assume worst-case
-                # (stop hit first) when a bar's range touches both, same
-                # convention as the BTMM and retired VWAP+9EMA backtesters.
+                # (stop hit first) when a bar's range touches both, matching
+                # the BTMM backtester convention.
                 exit_p = sl if hit_sl else target
             elif timed_out:
                 exit_p = close  # doc §3.5 time stop -- force-close at market
@@ -122,11 +121,11 @@ def run(pair: str, start_ts: int, end_ts: int,
         if open_trade:
             continue
 
-        # Windowed history, same rationale as vwap9ema_backtest.py: VWAP and
-        # the ER regime filter both reset/recompute per UTC day or trailing
-        # lookback using each candle's own timestamp, so a 400-bar trailing
-        # window (matching the live /vwap-mr fetch) is correctness-safe and
-        # keeps this O(n) instead of O(n^2) over a long backtest range.
+        # Windowed history: VWAP and the ER regime filter both reset/recompute
+        # per UTC day or trailing lookback using each candle's own timestamp,
+        # so a 400-bar trailing window (matching the live /vwap-mr fetch) is
+        # correctness-safe and keeps this O(n) instead of O(n^2) over a long
+        # backtest range.
         window = full[max(0, i - ANALYSIS_WINDOW + 1): i + 1]
         sig = vwap_mean_reversion_strategy.analyze_pair(pair, window)
 

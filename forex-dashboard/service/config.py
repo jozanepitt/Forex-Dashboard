@@ -121,8 +121,8 @@ BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "t
 # an external US-equity research spec; see
 # docs/superpowers/specs/2026-09-10-vwap-mean-reversion-strategy-design.md
 # for the full rationale and every deviation from the source document.
-# MIN_SCORE=9 carries forward the user's VWAP9EMA tightening (2026-09-10):
-# only the best 9/10 and 10/10 setups reach Discord.
+# MIN_SCORE=9 restricts alerts to best-confidence setups (9/10 and 10/10):
+# only the highest-confidence trades trigger Discord.
 VWAP_MR_ALERTS_ENABLED = os.environ.get("VWAP_MR_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 VWAP_MR_GRADE_A_ONLY = os.environ.get("VWAP_MR_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 VWAP_MR_MIN_SCORE = int(os.environ.get("VWAP_MR_MIN_SCORE", "9"))
