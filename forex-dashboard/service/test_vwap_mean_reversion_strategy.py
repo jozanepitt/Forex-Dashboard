@@ -214,3 +214,32 @@ def test_confirmation_times_out():
     z = [None] * len(candles)
     result = m._check_confirmation(candles, z, extension)
     assert result is None
+
+
+def test_confirmation_rejection_wick_long_direction():
+    """Long direction: wick on the LOW side. Bar extended down (z <= -2.0),
+    now shows rejection of that downward move via a wick below open/close."""
+    extension = {"idx": 5, "direction": "long", "z": -2.5}
+    candles = [_bar(i * 900, 1.1050, 1.1030, 1.1040, vol=100) for i in range(6)]
+    # bar 6: low wicks down; range 0.0040, wick (min(open,close) - low) = 0.0030 -> 75% of range
+    candles.append(_bar(6 * 900, 1.1040, 1.1000, 1.1020, open_=1.1030, vol=80))
+    z = [None] * len(candles)
+    result = m._check_confirmation(candles, z, extension)
+    assert result["type"] == "rejection_wick"
+    assert result["idx"] == 6
+    assert result["bars_since_extension"] == 1
+
+
+def test_confirmation_two_bar_pattern_long_direction():
+    """Long direction: two consecutive bars with HIGHER lows, mirroring the
+    short direction's lower-high streak."""
+    extension = {"idx": 5, "direction": "long", "z": -2.5}
+    # ext bar (idx 5) low = 1.1020
+    candles = [_bar(i * 900, 1.1060, 1.1020, 1.1040, vol=100) for i in range(6)]
+    candles.append(_bar(6 * 900, 1.1050, 1.1030, 1.1040, open_=1.1035, vol=90))  # higher low #1
+    candles.append(_bar(7 * 900, 1.1040, 1.1035, 1.1025, open_=1.1030, vol=90))  # higher low #2
+    z = [None] * len(candles)
+    result = m._check_confirmation(candles, z, extension)
+    assert result["type"] == "two_bar_pattern"
+    assert result["idx"] == 7
+    assert result["bars_since_extension"] == 2
