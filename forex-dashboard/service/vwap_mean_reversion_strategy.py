@@ -178,3 +178,38 @@ def _efficiency_ratio(closes: list[float], i: int, n: int = ER_LOOKBACK) -> Opti
     if path_sum <= 1e-12:
         return 0.0
     return net_change / path_sum
+
+
+def _bars_into_session(candles: list[dict], i: int) -> int:
+    """1-based count of how many bars (including bar i) fall on the same
+    UTC calendar day as bar i, counting backwards. Used to enforce
+    "no signal before bar 15 of the session" (doc §2.4) against the actual
+    daily VWAP-reset boundary, not just the raw array index."""
+    day = datetime.fromtimestamp(candles[i]["ts_utc"], tz=timezone.utc).date()
+    count = 0
+    for k in range(i, -1, -1):
+        if datetime.fromtimestamp(candles[k]["ts_utc"], tz=timezone.utc).date() != day:
+            break
+        count += 1
+    return count
+
+
+def _find_extension(candles: list[dict], z: list[Optional[float]]) -> Optional[dict]:
+    """Most recent bar within the live-relevant window where |z| crosses
+    the extension threshold and the bar is at least MIN_BARS_BEFORE_SIGNAL
+    into its session (doc §2.4 hard rule, §3.3.1 extension gate).
+    direction "short" means price extended ABOVE the band (fade with a
+    SELL); "long" means extended BELOW (fade with a BUY)."""
+    n = len(candles)
+    earliest = max(0, n - 1 - CONFIRMATION_TIMEOUT_BARS)
+    for i in range(n - 1, earliest - 1, -1):
+        zi = z[i]
+        if zi is None:
+            continue
+        if _bars_into_session(candles, i) < MIN_BARS_BEFORE_SIGNAL:
+            continue
+        if zi >= Z_EXTENSION_THRESHOLD:
+            return {"idx": i, "direction": "short", "z": zi}
+        if zi <= -Z_EXTENSION_THRESHOLD:
+            return {"idx": i, "direction": "long", "z": zi}
+    return None

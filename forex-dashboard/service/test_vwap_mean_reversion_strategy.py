@@ -104,3 +104,44 @@ def test_efficiency_ratio_choppy_is_near_zero():
 def test_efficiency_ratio_none_before_lookback():
     closes = [100.0 + i for i in range(10)]
     assert m._efficiency_ratio(closes, 5, n=20) is None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Extension detection
+# ──────────────────────────────────────────────────────────────────────
+
+def test_find_extension_detects_short():
+    candles = [_bar(i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(20)]
+    z = [None] * 19 + [2.5]
+    result = m._find_extension(candles, z)
+    assert result == {"idx": 19, "direction": "short", "z": 2.5}
+
+
+def test_find_extension_detects_long():
+    candles = [_bar(i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(20)]
+    z = [None] * 19 + [-2.2]
+    result = m._find_extension(candles, z)
+    assert result == {"idx": 19, "direction": "long", "z": -2.2}
+
+
+def test_find_extension_none_when_no_bar_qualifies():
+    candles = [_bar(i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(20)]
+    z = [1.0] * 20
+    assert m._find_extension(candles, z) is None
+
+
+def test_find_extension_rejects_before_min_bars_into_session():
+    """Only 10 bars total this session (< MIN_BARS_BEFORE_SIGNAL=15) --
+    extension present but must be rejected."""
+    candles = [_bar(i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(10)]
+    z = [None] * 9 + [3.0]
+    assert m._find_extension(candles, z) is None
+
+
+def test_find_extension_ignores_stale_extension_outside_window():
+    """Extension 9 bars before the latest bar -- outside the
+    CONFIRMATION_TIMEOUT_BARS(6)+1 lookback window, must be ignored."""
+    candles = [_bar(i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(30)]
+    z = [None] * 30
+    z[20] = 2.8
+    assert m._find_extension(candles, z) is None
