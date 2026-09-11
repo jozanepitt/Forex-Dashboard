@@ -28,6 +28,7 @@ from typing import Optional
 
 import cache
 import vwap_mean_reversion_strategy
+from alerts import _check_rr
 from config import INTERVAL_SECS
 
 log = logging.getLogger("vwap_mean_reversion_backtest")
@@ -138,6 +139,15 @@ def run(pair: str, start_ts: int, end_ts: int,
         entry, sl = sig.get("entry"), sig.get("sl")
         target = sig.get("tp1") if exit_mode == "tp1" else sig.get("tp2")
         if not (entry and sl and target):
+            continue
+
+        # R:R / direction sanity -- the same gate the live Discord alert
+        # applies (alerts.alert_vwap_mr_setup) before posting. Without this,
+        # the backtest could count a trade the live system would have
+        # refused, making its stats describe a different, looser strategy
+        # than what actually ships (final review finding, 2026-09-11).
+        direction = "buy" if setup == "BUY" else "sell"
+        if not _check_rr(entry, sl, target, direction, min_rr=0.8, symbol=pair):
             continue
 
         open_trade = {
