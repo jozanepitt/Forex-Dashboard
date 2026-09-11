@@ -396,6 +396,7 @@ td.mono{font-family:var(--font-mono)}
 .btn-close-trade:hover{background:rgba(255,80,80,.2)}
 </style>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -425,7 +426,7 @@ td.mono{font-family:var(--font-mono)}
 
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
-  <button class="mode-tab" data-mode="crt">🕐 1AM CRT</button>
+  <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="btmm123">🎯 BTMM 123</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
   <button class="mode-tab" data-mode="journal">📒 Journal</button>
@@ -514,6 +515,12 @@ td.mono{font-family:var(--font-mono)}
 <!-- ── Backtest View ──────────────────────────────────────────────────── -->
 <div id="backtestView">
   <div class="bt-header">
+    <div><label>Strategy</label><br>
+      <select id="btStrategy" onchange="onBtStrategyChange()">
+        <option value="btmm">BTMM</option>
+        <option value="vwap_mr">VWAP Mean Reversion</option>
+      </select>
+    </div>
     <div><label>Pair</label><br>
       <select id="btPair">
         <option>EUR/USD</option><option>GBP/USD</option><option>USD/JPY</option>
@@ -523,7 +530,7 @@ td.mono{font-family:var(--font-mono)}
         <option>GBP/CHF</option><option>AUD/JPY</option><option>CAD/JPY</option>
       </select>
     </div>
-    <div><label>Setup</label><br>
+    <div id="btSetupGroup"><label>Setup</label><br>
       <select id="btSetup">
         <option value="safety">Safety Trade</option>
         <option value="trade22">22 Trade</option>
@@ -539,12 +546,25 @@ td.mono{font-family:var(--font-mono)}
         <option value="60">60 days</option>
       </select>
     </div>
-    <div><label>Min Gates</label><br>
+    <div id="btMinGatesGroup"><label>Min Gates</label><br>
       <select id="btMinGates">
         <option value="4">4+</option>
         <option value="5" selected>5+</option>
         <option value="6">6+</option>
         <option value="7">7+</option>
+      </select>
+    </div>
+    <div id="btMinGradeGroup" style="display:none"><label>Min Grade</label><br>
+      <select id="btMinGrade">
+        <option value="A">A only</option>
+        <option value="B" selected>A + B</option>
+        <option value="C">A + B + C</option>
+      </select>
+    </div>
+    <div id="btExitModeGroup" style="display:none"><label>Exit</label><br>
+      <select id="btExitMode">
+        <option value="tp1" selected>TP1 (VWAP)</option>
+        <option value="tp2">TP2 (overshoot)</option>
       </select>
     </div>
     <div style="align-self:flex-end">
@@ -572,7 +592,7 @@ td.mono{font-family:var(--font-mono)}
     <table class="bt-trades">
       <thead><tr>
         <th>#</th><th>Direction</th><th>Entry</th><th>SL</th><th>TP1</th>
-        <th>Exit</th><th>Pips</th><th>Result</th><th>Gates</th><th>Opened</th>
+        <th>Exit</th><th>Pips</th><th>Result</th><th id="btGatesHeader">Gates</th><th>Opened</th>
       </tr></thead>
       <tbody id="btTradesList"></tbody>
     </table>
@@ -737,41 +757,45 @@ td.mono{font-family:var(--font-mono)}
     <div class="last-updated" id="lastUpdated">Last updated: --</div>
   </div>
 
-  <!-- ── 1AM CRT (MADO / @Im-speculator) ─────────────────────────────────── -->
-  <div class="table-container" id="crtContainer" style="display:none">
+  <!-- ── VWAP Mean Reversion (M15) ────────────────────────────────────────── -->
+  <div class="table-container" id="vwapMrContainer" style="display:none">
     <div class="trend-controls">
       <div class="trend-control-group" style="min-width:260px">
-        <label>NY Anchors (converted to your SAST)</label>
-        <div id="crtAnchorsLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Loading anchors…</div>
+        <label>📐 VWAP Mean Reversion — M15</label>
+        <div id="vwapMrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Session VWAP (00:00 GMT reset) · sigma bands · efficiency-ratio regime filter · stall confirmation</div>
       </div>
-      <button class="trend-refresh-btn" id="crtRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta" id="crtMeta">5PM CBDR · 9PM Asia · 1AM CRT · Key time 2–4AM NY</div>
+      <button class="trend-refresh-btn" id="vwapMrRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="vwapMrMeta">Majors only · adapted from a US-equity research spec, unvalidated for forex</div>
     </div>
-    <div class="trend-summary" id="crtSummary">Click <b>Refresh Scanner</b> to compute.</div>
-    <table class="trend-table crt-table">
+    <div class="trend-summary" id="vwapMrBestSetup">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table">
       <thead>
         <tr>
           <th>Pair</th>
-          <th>DOL</th>
-          <th>CRT Range</th>
-          <th>1AM Candle</th>
-          <th>Profile</th>
-          <th>OHLC</th>
-          <th>SMT</th>
+          <th>Price</th>
+          <th>VWAP</th>
+          <th>Z-Score</th>
+          <th>ER (Regime)</th>
+          <th>Extension</th>
+          <th>Confirmation</th>
+          <th>Session</th>
           <th>Setup</th>
           <th>Entry</th>
-          <th>Key Time (SAST)</th>
+          <th>SL</th>
+          <th>TP1 (VWAP)</th>
           <th>Grade</th>
         </tr>
       </thead>
-      <tbody id="crtTableBody"><tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="vwapMrTableBody"><tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>1AM CRT (MADO method):</b> 5PM &amp; 9PM NY H4 candles form the CRT range (CBDR + Asia).
-      The 1AM NY H4 candle is the manipulation/expansion. Buy <b>below</b> the 1AM open if low printed first (OLHC).
-      Sell <b>above</b> the 1AM open if high printed first (OHLC). Entry on M15 OB during the
-      <b>2–3AM NY (London open)</b> or <b>3–4AM NY (Silver Bullet)</b> key-time windows.
-      SMT compares EUR/USD ↔ GBP/USD divergence. All times shown are SAST (NY-anchored with auto-DST).
+      <b>VWAP Mean Reversion (M15):</b> fades extensions from a rising/falling session VWAP (resets each 00:00 GMT)
+      using sigma bands, gated by an efficiency-ratio regime filter (range-bound conditions only — trending markets
+      are excluded). Entry requires a stall/reversal confirmation (rejection wick, close back inside the band, or a
+      two-bar reversal pattern) after price extends beyond the sigma threshold. SL sits beyond the extension; TP1
+      targets the VWAP itself, TP2 the opposite band overshoot. Setups are flagged stale once past their time-stop.
+      Adapted from a US-equity research spec — unvalidated for forex, no independent backtest — paper-trade before
+      risking capital.
     </div>
   </div>
 
@@ -4709,11 +4733,20 @@ document.getElementById('journalSetupFilter')?.addEventListener('change', loadJo
 // ── Backtest (Phase F) ───────────────────────────────────────────────────────
 let btChartInstance = null;
 
+function onBtStrategyChange() {
+  const isVmr = document.getElementById('btStrategy').value === 'vwap_mr';
+  document.getElementById('btSetupGroup').style.display    = isVmr ? 'none' : '';
+  document.getElementById('btMinGatesGroup').style.display  = isVmr ? 'none' : '';
+  document.getElementById('btMinGradeGroup').style.display  = isVmr ? '' : 'none';
+  document.getElementById('btExitModeGroup').style.display  = isVmr ? '' : 'none';
+  const hdr = document.getElementById('btGatesHeader');
+  if (hdr) hdr.textContent = isVmr ? 'Grade' : 'Gates';
+}
+
 async function runBacktest() {
+  const strategy = document.getElementById('btStrategy').value;
   const pair     = document.getElementById('btPair').value;
-  const setup    = document.getElementById('btSetup').value;
   const days     = parseInt(document.getElementById('btDays').value);
-  const minGates = parseInt(document.getElementById('btMinGates').value);
   const status   = document.getElementById('btStatus');
 
   const now      = Math.floor(Date.now() / 1000);
@@ -4722,11 +4755,20 @@ async function runBacktest() {
   status.textContent = 'Running…';
   status.style.color = 'var(--yellow)';
 
+  const body = { pair, start, end: now, strategy };
+  if (strategy === 'vwap_mr') {
+    body.min_grade = document.getElementById('btMinGrade').value;
+    body.exit_mode = document.getElementById('btExitMode').value;
+  } else {
+    body.setups = [document.getElementById('btSetup').value];
+    body.min_gates = parseInt(document.getElementById('btMinGates').value);
+  }
+
   try {
     const resp = await fetch(`${SERVICE_BASE}/backtest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pair, start, end: now, setups: [setup], min_gates: minGates }),
+      body: JSON.stringify(body),
     });
     const data = await resp.json();
     if (data.error) { status.textContent = 'Error: ' + data.error; status.style.color = 'var(--red)'; return; }
@@ -4737,6 +4779,7 @@ async function runBacktest() {
     renderBtChart(data.equity_curve);
     renderBtTrades(data.trades);
   } catch (e) {
+    console.error('runBacktest failed:', e);
     status.textContent = 'Service offline'; status.style.color = 'var(--red)';
   }
 }
@@ -4793,6 +4836,7 @@ function renderBtTrades(trades) {
     const dt = new Date(t.ts_open * 1000).toLocaleString('en-ZA', { dateStyle:'short', timeStyle:'short' });
     const pipCol = t.pips == null ? '—' : `<span style="color:${t.pips>=0?'var(--green)':'var(--red)'}">${t.pips>=0?'+':''}${t.pips}</span>`;
     const res = t.result === 'win' ? '<span class="jtag win">WIN</span>' : t.result === 'loss' ? '<span class="jtag loss">LOSS</span>' : t.result === 'be' ? '<span class="jtag be">BE</span>' : '<span class="jtag open">OPEN</span>';
+    const gatesCol = t.grade ? t.grade : `${t.gates??'—'}/7`;
     return `<tr>
       <td style="color:var(--text-muted)">${i+1}</td>
       <td style="color:${t.direction==='bullish'?'var(--green)':'var(--red)'}">${t.direction==='bullish'?'↑ Long':'↓ Short'}</td>
@@ -4802,7 +4846,7 @@ function renderBtTrades(trades) {
       <td class="mono">${t.exit?.toFixed(5)??'—'}</td>
       <td class="mono">${pipCol}</td>
       <td>${res}</td>
-      <td style="color:var(--text-muted)">${t.gates??'—'}/7</td>
+      <td style="color:var(--text-muted)">${gatesCol}</td>
       <td style="color:var(--text-muted);font-size:.7rem">${dt}</td>
     </tr>`;
   }).join('');
@@ -4813,7 +4857,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'crt' || mode === 'btmm123' || mode === 'tdi123';
+    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -4833,18 +4877,18 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
 
     // Scanner containers: show the active one, hide all others
     const btmmContainer    = document.getElementById('btmmTableContainer');
-    const crtContainer     = document.getElementById('crtContainer');
+    const vwapMrContainer  = document.getElementById('vwapMrContainer');
     const btmm123Container = document.getElementById('btmm123Container');
     const tdi123Container  = document.getElementById('tdi123Container');
-    if (btmmContainer)     btmmContainer.style.display     = (mode === 'indicator') ? '' : 'none';
-    if (crtContainer)      crtContainer.style.display      = (mode === 'crt')       ? 'block' : 'none';
-    if (btmm123Container)  btmm123Container.style.display  = (mode === 'btmm123')   ? 'block' : 'none';
-    if (tdi123Container)   tdi123Container.style.display   = (mode === 'tdi123')    ? 'block' : 'none';
+    if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
+    if (vwapMrContainer)  vwapMrContainer.style.display  = (mode === 'vwap_mr')   ? 'block' : 'none';
+    if (btmm123Container) btmm123Container.style.display = (mode === 'btmm123')   ? 'block' : 'none';
+    if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
 
     // Load content for the active mode
     if (mode === 'indicator') render();           // BTMM dashboard
     if (mode === 'journal')   loadJournal();
-    if (mode === 'crt')       loadCrt();
+    if (mode === 'vwap_mr')   loadVwapMr();
     if (mode === 'btmm123')   loadBtmm123();
     if (mode === 'tdi123')    loadTdi123();
   });
@@ -5334,30 +5378,138 @@ function drawIfPattern(p1, p3, fn) {
   return fn();
 }
 
-// ── 1AM CRT loader ──────────────────────────────────────────────────────────
-async function loadCrt() {
-  const tbody   = document.getElementById('crtTableBody');
-  const summary = document.getElementById('crtSummary');
-  const btn     = document.getElementById('crtRefreshBtn');
+// ── VWAP Mean Reversion (M15) loader ────────────────────────────────────────
+async function loadVwapMr() {
+  const tbody   = document.getElementById('vwapMrTableBody');
+  const summary = document.getElementById('vwapMrBestSetup');
+  const btn     = document.getElementById('vwapMrRefreshBtn');
   if (btn) btn.disabled = true;
-  summary.textContent = 'Fetching M15 + daily candles, building NY-aligned H4 buckets…';
-  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  summary.textContent = 'Fetching M15 candles, computing VWAP + sigma bands + regime filter…';
+  tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
-    const resp = await fetch(`${baseUrl}/crt`);
+    const resp = await fetch(`${baseUrl}/vwap-mr`);
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
-    renderCrtTable(data);
+    renderVwapMrTable(data);
   } catch (err) {
-    console.error('CRT load failed', err);
-    summary.innerHTML = `<span style="color:var(--red)">Failed to load 1AM CRT scanner: ${err.message}</span>`;
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+    console.error('VWAP Mean Reversion load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load VWAP Mean Reversion scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
   } finally {
     if (btn) btn.disabled = false;
   }
 }
 
+function _vmrFmtPrice(p, sym) {
+  if (p === undefined || p === null) return '—';
+  if (!sym) return p.toFixed(5);
+  if (sym.includes('JPY')) return p.toFixed(3);
+  return p.toFixed(5);
+}
+
+function _vmrSetupCell(p) {
+  if (p.setup === 'BUY')  return '<span style="color:var(--green);font-weight:700">↑ BUY</span>';
+  if (p.setup === 'SELL') return '<span style="color:var(--red);font-weight:700">↓ SELL</span>';
+  return '<span style="color:var(--text-muted)">—</span>';
+}
+
+function _vmrGradeCell(g) {
+  const colorMap = {A:'var(--green)', B:'var(--cyan)', C:'var(--yellow)', 'NO-TRADE':'var(--text-muted)', 'NO-DATA':'var(--text-muted)'};
+  const c = colorMap[g] || 'var(--text-muted)';
+  const weight = (g === 'A' || g === 'B') ? 700 : 500;
+  return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
+}
+
+function _vmrSessionCell(s) {
+  const colorByStatus = {'ACTIVE':'var(--green)','LONDON':'var(--cyan)','NY-LATE':'var(--yellow)','ASIAN':'var(--text-muted)'};
+  const c = colorByStatus[s] || 'var(--text-muted)';
+  return `<span style="color:${c};font-weight:600">${s || '—'}</span>`;
+}
+
+function _vmrRegimeCell(er, regimeOk) {
+  if (er === null || er === undefined) return '<span style="color:var(--text-muted)">—</span>';
+  const c = regimeOk ? 'var(--green)' : 'var(--red)';
+  return `<span style="color:${c};font-weight:600">${er.toFixed(2)}${regimeOk ? ' ✓' : ' ✗'}</span>`;
+}
+
+function _vmrExtensionCell(ext) {
+  if (!ext) return '<span style="color:var(--text-muted)">—</span>';
+  const dir = ext.direction === 'short' ? '↑ (fade short)' : '↓ (fade long)';
+  return `<span style="font-size:.78rem">z=${ext.z.toFixed(2)} ${dir}</span>`;
+}
+
+function _vmrConfirmationLabel(type) {
+  return {
+    rejection_wick: 'Rejection wick',
+    close_inside_band: 'Close back inside band',
+    two_bar_pattern: 'Two-bar reversal',
+  }[type] || '—';
+}
+
+function _vmrConfirmationCell(conf) {
+  if (!conf) return '<span style="color:var(--text-muted)">—</span>';
+  return `<span style="font-size:.78rem">${_vmrConfirmationLabel(conf.type)}</span>`;
+}
+
+function _vmrBestSetupLine(data) {
+  const b = data.best_setup;
+  if (!b) return 'No strong setups identified currently. Stand down.';
+  const dirColor = b.setup === 'BUY' ? 'var(--green)' : 'var(--red)';
+  const dirLabel = b.setup === 'BUY' ? '↑ BUY' : '↓ SELL';
+  return `<b>Best setup: <span style="color:${dirColor}">${b.symbol} ${dirLabel}</span></b> — `
+    + `Grade ${_vmrGradeCell(b.grade)} (${b.score}/10) · Entry ${_vmrFmtPrice(b.entry, b.symbol)} · `
+    + `SL ${_vmrFmtPrice(b.sl, b.symbol)} · TP1 ${_vmrFmtPrice(b.tp1, b.symbol)} · ${_vmrSessionCell(b.session_status)}`
+    + `<br><span style="font-size:.78rem;color:var(--text-secondary)">${b.notes || ''}</span>`;
+}
+
+function renderVwapMrTable(data) {
+  const tbody   = document.getElementById('vwapMrTableBody');
+  const summary = document.getElementById('vwapMrBestSetup');
+
+  const rows = (data.pairs || []).map(p => {
+    const sym = p.symbol;
+    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : '';
+    const flags = [];
+    if (p.exhaustion_volume) flags.push('exhaustion vol');
+    if (p.fading_volume) flags.push('fading vol');
+    if (p.fresh === false) flags.push('stale (past time-stop)');
+    const titleText = `${p.notes || ''}${flags.length ? ' [' + flags.join(', ') + ']' : ''}`;
+    return `<tr style="${rowStyle}" title="${titleText.replace(/"/g,'&quot;')}">
+      <td><b>${sym}</b></td>
+      <td class="mono">${_vmrFmtPrice(p.price, sym)}</td>
+      <td class="mono" style="font-size:.78rem">${_vmrFmtPrice(p.vwap, sym)}</td>
+      <td class="mono" style="font-size:.78rem">${p.z !== null && p.z !== undefined ? p.z.toFixed(2) : '—'}</td>
+      <td>${_vmrRegimeCell(p.er, p.regime_ok)}</td>
+      <td>${_vmrExtensionCell(p.extension)}</td>
+      <td>${_vmrConfirmationCell(p.confirmation)}</td>
+      <td>${_vmrSessionCell(p.session_status)}</td>
+      <td>${_vmrSetupCell(p)}</td>
+      <td class="mono" style="font-size:.78rem">${_vmrFmtPrice(p.entry, sym)}</td>
+      <td class="mono" style="font-size:.78rem;color:var(--red)">${_vmrFmtPrice(p.sl, sym)}</td>
+      <td class="mono" style="font-size:.78rem;color:var(--green)">${_vmrFmtPrice(p.tp1, sym)}</td>
+      <td>${_vmrGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/10)</span></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="13" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  summary.innerHTML = `${_vmrBestSetupLine(data)}<br>
+    <span style="font-size:.78rem;color:var(--text-secondary)">
+    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
+    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
+    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
+    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span>
+    ${stale}
+    </span>`;
+}
+
+const vwapMrBtn = document.getElementById('vwapMrRefreshBtn');
+if (vwapMrBtn) vwapMrBtn.addEventListener('click', loadVwapMr);
+
+// ── Shared scanner-table helpers (used by BTMM 123, TDI 123, chart overlay) ──
 function _crtFmtPrice(p, sym) {
   if (p === undefined || p === null) return '—';
   if (!sym) return p.toFixed(5);
@@ -5381,95 +5533,6 @@ function _crtGradeCell(g) {
   const weight = (g === 'A' || g === 'B') ? 700 : 500;
   return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
 }
-
-function _crtSmtCell(s) {
-  if (s === 'BULLISH-DIVERGENCE') return '<span style="color:var(--green);font-weight:600">↑ BULL</span>';
-  if (s === 'BEARISH-DIVERGENCE') return '<span style="color:var(--red);font-weight:600">↓ BEAR</span>';
-  if (s === 'BULLISH-DIVERGENCE-PARTNER') return '<span style="color:var(--cyan)" title="Partner pair shows the bullish divergence">↑ partner</span>';
-  if (s === 'BEARISH-DIVERGENCE-PARTNER') return '<span style="color:var(--cyan)" title="Partner pair shows the bearish divergence">↓ partner</span>';
-  return '<span style="color:var(--text-muted)">—</span>';
-}
-
-function _crtKeyTimeCell(p) {
-  const colorByStatus = {
-    'ACTIVE': 'var(--green)', 'WAITING': 'var(--yellow)',
-    'PRE-1AM': 'var(--text-muted)', 'LATE': 'var(--yellow)', 'MISSED': 'var(--text-muted)'
-  };
-  const c = colorByStatus[p.key_time_status] || 'var(--text-muted)';
-  return `<span style="color:${c};font-weight:600">${p.key_time_status}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${p.key_time_window_sast || ''}</span>`;
-}
-
-function _renderCrtAnchorsLine() {
-  // NY hours 17 (CBDR), 21 (Asia), 1 (CRT), 2–4 (Key time) converted to SAST.
-  const cbdr = nyHourToSAST(17), asia = nyHourToSAST(21), crt = nyHourToSAST(1);
-  const kt0  = nyHourToSAST(2),  kt1  = nyHourToSAST(4);
-  const fmt = (h) => `${pad2(h)}:00`;
-  const line = `5PM CBDR → <b>${fmt(cbdr)} SAST</b> · 9PM Asia → <b>${fmt(asia)} SAST</b> · 1AM CRT → <b>${fmt(crt)} SAST</b> · Key time → <b>${fmt(kt0)}–${fmt(kt1)} SAST</b>`;
-  const el = document.getElementById('crtAnchorsLine');
-  if (el) el.innerHTML = line;
-}
-
-function renderCrtTable(data) {
-  const tbody   = document.getElementById('crtTableBody');
-  const summary = document.getElementById('crtSummary');
-  _renderCrtAnchorsLine();
-
-  const rows = (data.pairs || []).map(p => {
-    const sym = p.symbol;
-    const crtRange = (p.crt_high != null && p.crt_low != null)
-      ? `${_crtFmtPrice(p.crt_high, sym)}<br><span style="color:var(--text-muted)">${_crtFmtPrice(p.crt_low, sym)}</span>`
-      : '—';
-    const c1 = p.candle_1am;
-    const candle1amCell = c1
-      ? `<span style="color:${c1.direction === 'bullish' ? 'var(--green)' : c1.direction === 'bearish' ? 'var(--red)' : 'var(--text-muted)'}">${_crtFmtPrice(c1.open, sym)} → ${_crtFmtPrice(c1.close, sym)}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${c1.type || ''}</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
-    const dolColor = p.dol_bias === 'BULLISH' ? 'var(--green)' : p.dol_bias === 'BEARISH' ? 'var(--red)' : 'var(--text-muted)';
-    const profileColor = p.profile_type === 'TYPE_1' || p.profile_type === 'TYPE_2' ? 'var(--green)' : 'var(--text-muted)';
-    const entryCell = p.entry_zone
-      ? `<span style="font-size:.78rem">${p.entry_zone.side === 'above_open' ? 'Sell ≥' : 'Buy ≤'} ${_crtFmtPrice(p.entry_zone.level, sym)}</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
-    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : '';
-    const staleBadge = (p.session_is_live === false)
-      ? ` <span style="font-size:.6rem;background:var(--yellow);color:#0a0a0a;padding:1px 4px;border-radius:3px;vertical-align:middle" title="Analysis from ${p.session_1am_sast} session (no live 1AM data yet)">HISTORICAL</span>`
-      : '';
-    // Provisional: 1AM H4 bucket still accumulating M15 candles — pattern may change
-    const provBadge = p.provisional
-      ? ` <span style="font-size:.6rem;background:rgba(251,191,36,.2);border:1px solid rgba(251,191,36,.5);color:var(--yellow);padding:1px 4px;border-radius:3px;vertical-align:middle" title="1AM H4 candle forming — ${p.m15_count || '?'}/16 M15 candles closed. OHLC pattern may change.">⚠ FORMING</span>`
-      : '';
-    const ohlcCell = `<span style="font-weight:600">${p.ohlc_pattern || '—'}</span>${provBadge}`;
-    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
-      <td><b>${sym}</b>${staleBadge}</td>
-      <td><span style="color:${dolColor};font-weight:600">${p.dol_bias || '—'}</span></td>
-      <td style="font-size:.78rem">${crtRange}</td>
-      <td>${candle1amCell}</td>
-      <td><span style="color:${profileColor};font-weight:600">${p.profile_type || '—'}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${p.profile_label || ''}</span></td>
-      <td>${ohlcCell}</td>
-      <td>${_crtSmtCell(p.smt)}</td>
-      <td>${_crtSetupCell(p)}</td>
-      <td>${entryCell}</td>
-      <td>${_crtKeyTimeCell(p)}</td>
-      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/12)</span></td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="11" style="text-align:center;padding:24px">No data.</td></tr>';
-
-  const stale = (data.stale_pairs && data.stale_pairs.length)
-    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
-  const sastAnchors = data.anchors_sast || {};
-  summary.innerHTML = `
-    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
-    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
-    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
-    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span>
-    &nbsp;|&nbsp;
-    Session anchors (SAST): CBDR ${sastAnchors.cbdr || '—'} · Asia ${sastAnchors.asia || '—'} · 1AM ${sastAnchors.crt_1am || '—'}
-    ${stale}
-  `;
-}
-
-const crtBtn = document.getElementById('crtRefreshBtn');
-if (crtBtn) crtBtn.addEventListener('click', loadCrt);
-_renderCrtAnchorsLine();
 
 // ═════════════════════════════════════════════════════════════════════════════
 // BTMM 123 — loader + renderer (classic 1-2-3, BTMM-doctrine confirmed)
