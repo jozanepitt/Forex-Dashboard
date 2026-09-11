@@ -80,19 +80,26 @@ def test_alert_vwap_mr_setup_suppressed_by_news(monkeypatch):
 
 
 def _partial_row():
-    """A row shape analyze_pair can actually produce: regime failed, so
-    setup is NO-TRADE and there's no confirmation or trade plan yet, but
-    the extension is still populated -- this is the genuinely 'still
-    forming' case the watch alert should be able to report on."""
+    """A row shape analyze_pair can actually produce: regime passed and an
+    extension was found, but confirmation timed out before a stall pattern
+    appeared (vwap_mean_reversion_strategy.analyze_pair returns "NO-TRADE"
+    with extension set and confirmation/score/trade-plan left at their base
+    values in this exact path -- see analyze_pair's `if not confirmation`
+    branch). This is the genuinely 'still forming' case the watch alert
+    should be able to report on. (Corrected 2026-09-11: the previous version
+    paired regime_ok=False with a populated extension, a combination
+    analyze_pair can never produce since it returns before computing the
+    extension when the regime gate fails.)"""
     row = _good_row()
     row["setup"] = "NO-TRADE"
     row["grade"] = "NO-TRADE"
-    row["regime_ok"] = False
-    row["er"] = 0.55
+    row["score"] = 0
+    row["regime_ok"] = True
     row["confirmation"] = None
     row["exhaustion_volume"] = False
     row["fading_volume"] = False
     row["entry"] = row["sl"] = row["tp1"] = row["tp2"] = None
+    row["notes"] = "Extension at bar 19 timed out with no stall confirmation within 6 bars."
     return row
 
 
