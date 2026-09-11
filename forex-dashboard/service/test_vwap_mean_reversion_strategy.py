@@ -82,3 +82,25 @@ def test_d_score_uses_atr_normalisation():
     assert d[12] is None       # ATR not yet available
     assert d[19] is not None
     assert d[19] == pytest.approx((candles[19]["close"] - vwap[19]) / atr[19])
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Efficiency Ratio regime filter — hand-computed (doc's own advice:
+# "unit-test ER against hand-computed values")
+# ──────────────────────────────────────────────────────────────────────
+
+def test_efficiency_ratio_trending_is_near_one():
+    closes = [100.0 + i for i in range(21)]  # strictly increasing by 1 each bar
+    er = m._efficiency_ratio(closes, 20, n=20)
+    assert er == pytest.approx(1.0)
+
+
+def test_efficiency_ratio_choppy_is_near_zero():
+    closes = [100.0 if i % 2 == 0 else 101.0 for i in range(21)]  # alternating
+    er = m._efficiency_ratio(closes, 20, n=20)
+    assert er == pytest.approx(0.0, abs=1e-9)
+
+
+def test_efficiency_ratio_none_before_lookback():
+    closes = [100.0 + i for i in range(10)]
+    assert m._efficiency_ratio(closes, 5, n=20) is None

@@ -164,3 +164,17 @@ def _d_scores(candles: list[dict], vwap: list[float],
         else:
             out.append(None)
     return out
+
+
+def _efficiency_ratio(closes: list[float], i: int, n: int = ER_LOOKBACK) -> Optional[float]:
+    """Kaufman Efficiency Ratio (doc §3.2a):
+    ER_n = |Close_t - Close_{t-n}| / sum(|Close_k - Close_{k-1}|) over the last n bars.
+    Near 1.0 = clean directional movement (trend). Near 0 = chop.
+    None if fewer than n prior bars exist."""
+    if i < n:
+        return None
+    net_change = abs(closes[i] - closes[i - n])
+    path_sum = sum(abs(closes[k] - closes[k - 1]) for k in range(i - n + 1, i + 1))
+    if path_sum <= 1e-12:
+        return 0.0
+    return net_change / path_sum
