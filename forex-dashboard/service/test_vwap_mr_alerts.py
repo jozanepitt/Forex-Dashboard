@@ -77,3 +77,47 @@ def test_alert_vwap_mr_setup_suppressed_by_news(monkeypatch):
     monkeypatch.setattr(alerts.forexfactory, "currencies_in_window", lambda mins, high_only=True: {"USD"})
     alerts.alert_vwap_mr_setup("EUR/USD", _good_row())
     assert len(posted) == 0
+
+
+def _partial_row():
+    """Passes score/grade but fails the regime gate -- should be watched,
+    not alerted."""
+    row = _good_row()
+    row["regime_ok"] = False
+    row["er"] = 0.55
+    return row
+
+
+def test_vwap_mr_watch_posts_when_something_is_missing(monkeypatch):
+    posted = []
+    monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
+    monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
+    monkeypatch.setattr(alerts, "VWAP_MR_WATCH_ALERTS_ENABLED", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_ALERTS_ENABLED", True)
+    alerts.alert_vwap_mr_watch("EUR/USD", _partial_row())
+    assert len(posted) == 1
+    assert "👀" in posted[0]["title"]
+
+
+def test_vwap_mr_watch_skips_when_real_alert_covers_it(monkeypatch):
+    posted = []
+    monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
+    monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
+    monkeypatch.setattr(alerts, "VWAP_MR_WATCH_ALERTS_ENABLED", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_ALERTS_ENABLED", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 9)
+    alerts.alert_vwap_mr_watch("EUR/USD", _good_row(score=10))
+    assert len(posted) == 0
+
+
+def test_vwap_mr_watch_still_posts_when_real_alert_disabled(monkeypatch):
+    """Critical-fix behavior from the 2026-09-10 TDI123/BTMM123 review:
+    an all-pass row must still notify if the real alert's own switch is off."""
+    posted = []
+    monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
+    monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
+    monkeypatch.setattr(alerts, "VWAP_MR_WATCH_ALERTS_ENABLED", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_ALERTS_ENABLED", False)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 9)
+    alerts.alert_vwap_mr_watch("EUR/USD", _good_row(score=10))
+    assert len(posted) == 1

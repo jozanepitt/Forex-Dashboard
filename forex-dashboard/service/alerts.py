@@ -1485,3 +1485,85 @@ def alert_vwap_mr_setup(pair: str, row: dict, is_test: bool = False):
             _mark_sent(pair, rule)
         log.info("VWAP_MR alert sent%s: %s %s grade=%s score=%d",
                  " (TEST)" if is_test else "", pair, setup, grade, row.get("score", 0))
+
+
+def _vwap_mr_watch_reasons(pair: str, row: dict) -> list[tuple[str, bool, str]]:
+    """Checklist mirroring alert_vwap_mr_setup's gates, in the same order."""
+    checks: list[tuple[str, bool, str]] = []
+
+    regime_ok = bool(row.get("regime_ok"))
+    er = row.get("er")
+    checks.append(("Regime filter (ER < 0.35)", regime_ok,
+                   f"{er:.2f}" if er is not None else "unavailable"))
+
+    ext = row.get("extension")
+    checks.append(("Extension (|z| >= 2.0)", bool(ext),
+                   f"z={ext['z']:.2f}" if ext else "none yet"))
+
+    conf = row.get("confirmation")
+    checks.append(("Stall confirmation", bool(conf),
+                   conf["type"] if conf else "not yet / timed out"))
+
+    score = row.get("score") or 0
+    checks.append((f"Score >= {VWAP_MR_MIN_SCORE}/10", score >= VWAP_MR_MIN_SCORE, f"{score}/10"))
+
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+    plan_complete = bool(entry and sl and tp1)
+    checks.append(("Trade plan complete", plan_complete, "ok" if plan_complete else "incomplete"))
+
+    if plan_complete:
+        setup = row.get("setup")
+        rr_ok = _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair)
+        checks.append(("R:R >= 0.8", rr_ok, "ok" if rr_ok else "below minimum"))
+
+    if VWAP_MR_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception:  # noqa: BLE001
+            blocked = set()
+        news_clear = not _news_blocks_pair(pair, blocked)
+        checks.append(("No high-impact news window", news_clear,
+                       "clear" if news_clear else "blocked within 60m"))
+
+    return checks
+
+
+def alert_vwap_mr_watch(pair: str, row: dict):
+    """Post a 'still forming' embed for VWAP Mean Reversion setups that
+    don't yet clear every gate in alert_vwap_mr_setup. Independent of
+    VWAP_MR_ALERTS_ENABLED by design, matching the TDI123/BTMM123 watch
+    pattern (2026-09-10) -- including its Critical fix: skip on an all-pass
+    result only when the real alert's own switch is actually enabled."""
+    if not VWAP_MR_WATCH_ALERTS_ENABLED:
+        return
+
+    setup = row.get("setup")
+    if setup not in ("BUY", "SELL"):
+        return
+
+    try:
+        checks = _vwap_mr_watch_reasons(pair, row)
+    except Exception as e:  # noqa: BLE001
+        log.warning("VWAP_MR watch checklist crashed for %s: %s", pair, e)
+        return
+
+    if VWAP_MR_ALERTS_ENABLED and all(passed for _, passed, _ in checks):
+        return  # everything passes and the real alert is live -- it already fired this
+
+    rule = f"vwap_mr_watch_{setup.lower()}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    lines = [f"{'✅' if ok else '❌'} {label} — {detail}" for label, ok, detail in checks]
+
+    embed = {
+        "title":       f"👀 {arrow} {pair} — VWAP Mean Reversion {setup} watching",
+        "description": "Still forming — not a trade signal yet.\n" + "\n".join(lines),
+        "color":       _COLOURS["watch"],
+        "fields":      [{"name": "Grade", "value": f"**{row.get('grade', 'NO-TRADE')} ({row.get('score', 0)}/10)**", "inline": True}],
+        "footer":      {"text": f"VWAP Mean Reversion (M15) · Monitoring only · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("VWAP_MR watch alert sent: %s %s", pair, setup)
