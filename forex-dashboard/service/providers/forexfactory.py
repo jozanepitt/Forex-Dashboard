@@ -13,9 +13,11 @@ log = logging.getLogger("forexfactory")
 
 _FEED_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
 _CACHE_TTL = 3600  # re-fetch at most once per hour
+_FAIL_RETRY_SECS = 300  # back off 5 min between retries after a failed fetch
 
 _cache: list[dict] = []
 _cache_ts: float = 0.0
+_last_attempt_ts: float = 0.0
 
 
 def _fetch_feed() -> list[dict]:
@@ -70,10 +72,19 @@ def _parse_ts(date_str: str, time_str: str) -> Optional[int]:
 
 
 def get_events(force_refresh: bool = False) -> list[dict]:
-    """Return all events from the current-week feed (cached for 1 hour)."""
-    global _cache, _cache_ts
+    """Return all events from the current-week feed. Successful fetches are
+    cached for 1 hour; a failed fetch backs off to a 5-minute retry interval
+    instead of retrying on every call -- previously the cache timestamp was
+    only updated on success, so a persistent failure (e.g. upstream rate
+    limiting) triggered a retry on literally every call, which kept the
+    upstream feed permanently rate-limited and left the news-filter gate on
+    every alert type silently fail-open (2026-09-11)."""
+    global _cache, _cache_ts, _last_attempt_ts
     now = time.time()
-    if force_refresh or now - _cache_ts > _CACHE_TTL or not _cache:
+    cache_fresh = bool(_cache) and (now - _cache_ts <= _CACHE_TTL)
+    retry_due = now - _last_attempt_ts > _FAIL_RETRY_SECS
+    if force_refresh or (not cache_fresh and retry_due):
+        _last_attempt_ts = now
         try:
             _cache = _fetch_feed()
             _cache_ts = now
