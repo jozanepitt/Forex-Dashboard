@@ -1500,6 +1500,10 @@ def _vwap_mr_watch_reasons(pair: str, row: dict) -> list[tuple[str, bool, str]]:
     checks.append(("Extension (|z| >= 2.0)", bool(ext),
                    f"z={ext['z']:.2f}" if ext else "none yet"))
 
+    exhaustion = bool(row.get("exhaustion_volume"))
+    checks.append(("Exhaustion volume (>1.5x avg)", exhaustion,
+                   "confirmed" if exhaustion else "not present"))
+
     conf = row.get("confirmation")
     checks.append(("Stall confirmation", bool(conf),
                    conf["type"] if conf else "not yet / timed out"))
@@ -1538,8 +1542,16 @@ def alert_vwap_mr_watch(pair: str, row: dict):
         return
 
     setup = row.get("setup")
+    ext = row.get("extension")
     if setup not in ("BUY", "SELL"):
-        return
+        # No fully-formed setup yet, but an extension still gives a direction
+        # to watch -- without this, the watch alert could only ever fire for
+        # a setup where regime+extension+confirmation had ALL already
+        # passed, making "still forming" a false description (final review
+        # finding, 2026-09-11).
+        if not ext:
+            return
+        setup = "SELL" if ext["direction"] == "short" else "BUY"
 
     try:
         checks = _vwap_mr_watch_reasons(pair, row)

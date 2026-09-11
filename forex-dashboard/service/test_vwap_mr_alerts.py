@@ -80,11 +80,19 @@ def test_alert_vwap_mr_setup_suppressed_by_news(monkeypatch):
 
 
 def _partial_row():
-    """Passes score/grade but fails the regime gate -- should be watched,
-    not alerted."""
+    """A row shape analyze_pair can actually produce: regime failed, so
+    setup is NO-TRADE and there's no confirmation or trade plan yet, but
+    the extension is still populated -- this is the genuinely 'still
+    forming' case the watch alert should be able to report on."""
     row = _good_row()
+    row["setup"] = "NO-TRADE"
+    row["grade"] = "NO-TRADE"
     row["regime_ok"] = False
     row["er"] = 0.55
+    row["confirmation"] = None
+    row["exhaustion_volume"] = False
+    row["fading_volume"] = False
+    row["entry"] = row["sl"] = row["tp1"] = row["tp2"] = None
     return row
 
 
