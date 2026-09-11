@@ -323,3 +323,49 @@ def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
     score += session_points.get(session_status, 0)
     grade = "A" if score >= 8 else "B" if score >= 6 else "C" if score >= 4 else "NO-TRADE"
     return score, grade
+
+
+def _calc_stop_and_targets(candles: list[dict], extension: dict, confirmation: dict,
+                           vwap: list[float], sigma: list[float], symbol: str) -> dict:
+    """Stop = max(structural_distance, 0.75 x ATR14) (doc §3.4). Targets:
+    TP1 = VWAP (z=0), TP2 = overshoot at z = +/-0.75 (doc gives a z=-0.5 to
+    -1.0 range for T2; 0.75 is the chosen midpoint default — no backtest
+    infrastructure exists here to select within that range, see spec).
+    Time stop shown as a bar-index badge only (deviation: no position is
+    tracked to actually exit — see spec deviation #18)."""
+    ext_idx = extension["idx"]
+    direction = extension["direction"]
+    setup = "SELL" if direction == "short" else "BUY"
+    last = candles[-1]
+    entry = last["close"]
+    pip = instruments.pip_size(symbol, entry)
+    ext_bar = candles[ext_idx]
+
+    atr14 = _atr(candles, period=ATR_PERIOD) or (10 * pip)
+    atr_distance = STOP_ATR_MULT * atr14
+
+    if setup == "SELL":
+        structural_level = ext_bar["high"] + pip
+        structural_distance = abs(structural_level - entry)
+        sl_distance = max(structural_distance, atr_distance)
+        sl = entry + sl_distance
+    else:
+        structural_level = ext_bar["low"] - pip
+        structural_distance = abs(entry - structural_level)
+        sl_distance = max(structural_distance, atr_distance)
+        sl = entry - sl_distance
+
+    vwap_now = vwap[-1]
+    sigma_now = sigma[-1] or 0.0
+    tp1 = vwap_now
+    tp2 = (vwap_now - T2_Z_OVERSHOOT * sigma_now if setup == "SELL"
+           else vwap_now + T2_Z_OVERSHOOT * sigma_now)
+
+    def _pips(a: float, b: float) -> float:
+        return round(abs(a - b) / pip, 1)
+
+    return {
+        "setup": setup, "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+        "sl_pips": _pips(entry, sl), "tp1_pips": _pips(entry, tp1), "tp2_pips": _pips(entry, tp2),
+        "time_stop_bar_idx": confirmation["idx"] + TIME_STOP_BARS,
+    }

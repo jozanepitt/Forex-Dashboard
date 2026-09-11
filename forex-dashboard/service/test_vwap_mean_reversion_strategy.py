@@ -297,3 +297,39 @@ def test_score_and_grade_boundary_b():
     score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON")
     assert score == 7   # 3 base + 2 exhaustion + 0 fading + 1 confirmation + 1 session
     assert grade == "B"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Stop and target calculation
+# ──────────────────────────────────────────────────────────────────────
+
+def test_calc_stop_and_targets_sell():
+    candles = [_bar(i * 900, 1.1005, 1.0995, 1.1000, vol=10) for i in range(19)]
+    candles.append(_bar(19 * 900, 1.1050, 1.1010, 1.1020, vol=10))   # extension, high=1.1050
+    candles.append(_bar(20 * 900, 1.1030, 1.1015, 1.1018, vol=8))    # confirmation
+    extension = {"idx": 19, "direction": "short", "z": 2.5}
+    confirmation = {"idx": 20, "type": "rejection_wick", "bars_since_extension": 1}
+    vwap = m._vwap_series(candles)
+    sigma = m._sigma_series(candles, vwap)
+    plan = m._calc_stop_and_targets(candles, extension, confirmation, vwap, sigma, "EUR/USD")
+    assert plan["setup"] == "SELL"
+    assert plan["entry"] == candles[-1]["close"]
+    assert plan["sl"] > plan["entry"]           # stop above entry for a short
+    assert plan["tp1"] == pytest.approx(vwap[-1])
+    assert plan["tp2"] < plan["tp1"]            # overshoot below VWAP for a short
+    assert plan["time_stop_bar_idx"] == 20 + m.TIME_STOP_BARS
+
+
+def test_calc_stop_and_targets_buy():
+    candles = [_bar(i * 900, 1.1005, 1.0995, 1.1000, vol=10) for i in range(19)]
+    candles.append(_bar(19 * 900, 1.0990, 1.0950, 1.0970, vol=10))   # extension, low=1.0950
+    candles.append(_bar(20 * 900, 1.0985, 1.0965, 1.0980, vol=8))    # confirmation
+    extension = {"idx": 19, "direction": "long", "z": -2.5}
+    confirmation = {"idx": 20, "type": "close_inside_band", "bars_since_extension": 1}
+    vwap = m._vwap_series(candles)
+    sigma = m._sigma_series(candles, vwap)
+    plan = m._calc_stop_and_targets(candles, extension, confirmation, vwap, sigma, "EUR/USD")
+    assert plan["setup"] == "BUY"
+    assert plan["sl"] < plan["entry"]           # stop below entry for a long
+    assert plan["tp1"] == pytest.approx(vwap[-1])
+    assert plan["tp2"] > plan["tp1"]            # overshoot above VWAP for a long
