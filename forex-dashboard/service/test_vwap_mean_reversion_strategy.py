@@ -314,6 +314,7 @@ def test_calc_stop_and_targets_sell():
     plan = m._calc_stop_and_targets(candles, extension, confirmation, vwap, sigma, "EUR/USD")
     assert plan["setup"] == "SELL"
     assert plan["entry"] == candles[-1]["close"]
+    assert plan["sl"] == pytest.approx(1.1051, abs=1e-6)  # exact: structural distance dominates
     assert plan["sl"] > plan["entry"]           # stop above entry for a short
     assert plan["tp1"] == pytest.approx(vwap[-1])
     assert plan["tp2"] < plan["tp1"]            # overshoot below VWAP for a short
@@ -330,6 +331,7 @@ def test_calc_stop_and_targets_buy():
     sigma = m._sigma_series(candles, vwap)
     plan = m._calc_stop_and_targets(candles, extension, confirmation, vwap, sigma, "EUR/USD")
     assert plan["setup"] == "BUY"
+    assert plan["sl"] == pytest.approx(1.0949, abs=1e-6)  # exact: structural distance dominates
     assert plan["sl"] < plan["entry"]           # stop below entry for a long
     assert plan["tp1"] == pytest.approx(vwap[-1])
     assert plan["tp2"] > plan["tp1"]            # overshoot above VWAP for a long
