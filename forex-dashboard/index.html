@@ -426,6 +426,7 @@ td.mono{font-family:var(--font-mono)}
 
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
+  <button class="mode-tab" data-mode="crt">🕐 1AM CRT</button>
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="btmm123">🎯 BTMM 123</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
@@ -755,6 +756,44 @@ td.mono{font-family:var(--font-mono)}
       <span style="margin-left:auto;font-size:.65rem;color:var(--text-muted)">Click any row for detailed chart & analysis</span>
     </div>
     <div class="last-updated" id="lastUpdated">Last updated: --</div>
+  </div>
+
+  <!-- ── 1AM CRT ────────────────────────────────────────────────────────── -->
+  <div class="table-container" id="crtContainer" style="display:none">
+    <div class="trend-controls">
+      <div class="trend-control-group" style="min-width:260px">
+        <label>NY Anchors (converted to your SAST)</label>
+        <div id="crtAnchorsLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Loading anchors…</div>
+      </div>
+      <button class="trend-refresh-btn" id="crtRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="crtMeta">5PM CBDR · 9PM Asia · 1AM CRT · Key time 2–4AM NY</div>
+    </div>
+    <div class="trend-summary" id="crtSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table crt-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>DOL</th>
+          <th>CRT Range</th>
+          <th>1AM Candle</th>
+          <th>Profile</th>
+          <th>OHLC</th>
+          <th>SMT</th>
+          <th>Setup</th>
+          <th>Entry</th>
+          <th>Key Time (SAST)</th>
+          <th>Grade</th>
+        </tr>
+      </thead>
+      <tbody id="crtTableBody"><tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>1AM CRT (MADO method):</b> 5PM &amp; 9PM NY H4 candles form the CRT range (CBDR + Asia).
+      The 1AM NY H4 candle is the manipulation/expansion. Buy <b>below</b> the 1AM open if low printed first (OLHC).
+      Sell <b>above</b> the 1AM open if high printed first (OHLC). Entry on M15 OB during the
+      <b>2–3AM NY (London open)</b> or <b>3–4AM NY (Silver Bullet)</b> key-time windows.
+      SMT compares EUR/USD ↔ GBP/USD divergence. All times shown are SAST (NY-anchored with auto-DST).
+    </div>
   </div>
 
   <!-- ── VWAP Mean Reversion (M15) ────────────────────────────────────────── -->
@@ -4857,7 +4896,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123';
+    const isScanner = mode === 'crt' || mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -4877,10 +4916,12 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
 
     // Scanner containers: show the active one, hide all others
     const btmmContainer    = document.getElementById('btmmTableContainer');
+    const crtContainer     = document.getElementById('crtContainer');
     const vwapMrContainer  = document.getElementById('vwapMrContainer');
     const btmm123Container = document.getElementById('btmm123Container');
     const tdi123Container  = document.getElementById('tdi123Container');
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
+    if (crtContainer)     crtContainer.style.display     = (mode === 'crt')       ? 'block' : 'none';
     if (vwapMrContainer)  vwapMrContainer.style.display  = (mode === 'vwap_mr')   ? 'block' : 'none';
     if (btmm123Container) btmm123Container.style.display = (mode === 'btmm123')   ? 'block' : 'none';
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
@@ -4888,6 +4929,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     // Load content for the active mode
     if (mode === 'indicator') render();           // BTMM dashboard
     if (mode === 'journal')   loadJournal();
+    if (mode === 'crt')       loadCrt();
     if (mode === 'vwap_mr')   loadVwapMr();
     if (mode === 'btmm123')   loadBtmm123();
     if (mode === 'tdi123')    loadTdi123();
@@ -5533,6 +5575,118 @@ function _crtGradeCell(g) {
   const weight = (g === 'A' || g === 'B') ? 700 : 500;
   return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
 }
+
+async function loadCrt() {
+  const tbody   = document.getElementById('crtTableBody');
+  const summary = document.getElementById('crtSummary');
+  const btn     = document.getElementById('crtRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Fetching M15 + daily candles, building NY-aligned H4 buckets…';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const resp = await fetch(`${baseUrl}/crt`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    renderCrtTable(data);
+  } catch (err) {
+    console.error('CRT load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load 1AM CRT scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _crtSmtCell(s) {
+  if (s === 'BULLISH-DIVERGENCE') return '<span style="color:var(--green);font-weight:600">↑ BULL</span>';
+  if (s === 'BEARISH-DIVERGENCE') return '<span style="color:var(--red);font-weight:600">↓ BEAR</span>';
+  if (s === 'BULLISH-DIVERGENCE-PARTNER') return '<span style="color:var(--cyan)" title="Partner pair shows the bullish divergence">↑ partner</span>';
+  if (s === 'BEARISH-DIVERGENCE-PARTNER') return '<span style="color:var(--cyan)" title="Partner pair shows the bearish divergence">↓ partner</span>';
+  return '<span style="color:var(--text-muted)">—</span>';
+}
+
+function _crtKeyTimeCell(p) {
+  const colorByStatus = {
+    'ACTIVE': 'var(--green)', 'WAITING': 'var(--yellow)',
+    'PRE-1AM': 'var(--text-muted)', 'LATE': 'var(--yellow)', 'MISSED': 'var(--text-muted)'
+  };
+  const c = colorByStatus[p.key_time_status] || 'var(--text-muted)';
+  return `<span style="color:${c};font-weight:600">${p.key_time_status}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${p.key_time_window_sast || ''}</span>`;
+}
+
+function _renderCrtAnchorsLine() {
+  // NY hours 17 (CBDR), 21 (Asia), 1 (CRT), 2–4 (Key time) converted to SAST.
+  const cbdr = nyHourToSAST(17), asia = nyHourToSAST(21), crt = nyHourToSAST(1);
+  const kt0  = nyHourToSAST(2),  kt1  = nyHourToSAST(4);
+  const fmt = (h) => `${pad2(h)}:00`;
+  const line = `5PM CBDR → <b>${fmt(cbdr)} SAST</b> · 9PM Asia → <b>${fmt(asia)} SAST</b> · 1AM CRT → <b>${fmt(crt)} SAST</b> · Key time → <b>${fmt(kt0)}–${fmt(kt1)} SAST</b>`;
+  const el = document.getElementById('crtAnchorsLine');
+  if (el) el.innerHTML = line;
+}
+
+function renderCrtTable(data) {
+  const tbody   = document.getElementById('crtTableBody');
+  const summary = document.getElementById('crtSummary');
+  _renderCrtAnchorsLine();
+
+  const rows = (data.pairs || []).map(p => {
+    const sym = p.symbol;
+    const crtRange = (p.crt_high != null && p.crt_low != null)
+      ? `${_crtFmtPrice(p.crt_high, sym)}<br><span style="color:var(--text-muted)">${_crtFmtPrice(p.crt_low, sym)}</span>`
+      : '—';
+    const c1 = p.candle_1am;
+    const candle1amCell = c1
+      ? `<span style="color:${c1.direction === 'bullish' ? 'var(--green)' : c1.direction === 'bearish' ? 'var(--red)' : 'var(--text-muted)'}">${_crtFmtPrice(c1.open, sym)} → ${_crtFmtPrice(c1.close, sym)}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${c1.type || ''}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const dolColor = p.dol_bias === 'BULLISH' ? 'var(--green)' : p.dol_bias === 'BEARISH' ? 'var(--red)' : 'var(--text-muted)';
+    const profileColor = p.profile_type === 'TYPE_1' || p.profile_type === 'TYPE_2' ? 'var(--green)' : 'var(--text-muted)';
+    const entryCell = p.entry_zone
+      ? `<span style="font-size:.78rem">${p.entry_zone.side === 'above_open' ? 'Sell ≥' : 'Buy ≤'} ${_crtFmtPrice(p.entry_zone.level, sym)}</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+    const rowStyle = p.grade === 'A' ? 'background:rgba(34,197,94,.06)' : '';
+    const staleBadge = (p.session_is_live === false)
+      ? ` <span style="font-size:.6rem;background:var(--yellow);color:#0a0a0a;padding:1px 4px;border-radius:3px;vertical-align:middle" title="Analysis from ${p.session_1am_sast} session (no live 1AM data yet)">HISTORICAL</span>`
+      : '';
+    // Provisional: 1AM H4 bucket still accumulating M15 candles — pattern may change
+    const provBadge = p.provisional
+      ? ` <span style="font-size:.6rem;background:rgba(251,191,36,.2);border:1px solid rgba(251,191,36,.5);color:var(--yellow);padding:1px 4px;border-radius:3px;vertical-align:middle" title="1AM H4 candle forming — ${p.m15_count || '?'}/16 M15 candles closed. OHLC pattern may change.">⚠ FORMING</span>`
+      : '';
+    const ohlcCell = `<span style="font-weight:600">${p.ohlc_pattern || '—'}</span>${provBadge}`;
+    return `<tr style="${rowStyle}" title="${(p.notes || '').replace(/"/g,'&quot;')}">
+      <td><b>${sym}</b>${staleBadge}</td>
+      <td><span style="color:${dolColor};font-weight:600">${p.dol_bias || '—'}</span></td>
+      <td style="font-size:.78rem">${crtRange}</td>
+      <td>${candle1amCell}</td>
+      <td><span style="color:${profileColor};font-weight:600">${p.profile_type || '—'}</span><br><span style="font-size:.7rem;color:var(--text-muted)">${p.profile_label || ''}</span></td>
+      <td>${ohlcCell}</td>
+      <td>${_crtSmtCell(p.smt)}</td>
+      <td>${_crtSetupCell(p)}</td>
+      <td>${entryCell}</td>
+      <td>${_crtKeyTimeCell(p)}</td>
+      <td>${_crtGradeCell(p.grade)} <span style="font-size:.7rem;color:var(--text-muted)">(${p.score}/12)</span></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="11" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  const sastAnchors = data.anchors_sast || {};
+  summary.innerHTML = `
+    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
+    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
+    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
+    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span>
+    &nbsp;|&nbsp;
+    Session anchors (SAST): CBDR ${sastAnchors.cbdr || '—'} · Asia ${sastAnchors.asia || '—'} · 1AM ${sastAnchors.crt_1am || '—'}
+    ${stale}
+  `;
+}
+
+const crtBtn = document.getElementById('crtRefreshBtn');
+if (crtBtn) crtBtn.addEventListener('click', loadCrt);
+_renderCrtAnchorsLine();
 
 // ═════════════════════════════════════════════════════════════════════════════
 // BTMM 123 — loader + renderer (classic 1-2-3, BTMM-doctrine confirmed)
