@@ -106,6 +106,7 @@ def test_vwap_mr_watch_skips_when_real_alert_covers_it(monkeypatch):
     monkeypatch.setattr(alerts, "VWAP_MR_WATCH_ALERTS_ENABLED", True)
     monkeypatch.setattr(alerts, "VWAP_MR_ALERTS_ENABLED", True)
     monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 9)
+    monkeypatch.setattr(alerts.forexfactory, "currencies_in_window", lambda mins, high_only=True: set())
     alerts.alert_vwap_mr_watch("EUR/USD", _good_row(score=10))
     assert len(posted) == 0
 
