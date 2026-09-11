@@ -163,3 +163,54 @@ def test_bars_into_session_crosses_calendar_day_boundary():
 
     # Verify that a bar in day 1 returns only day 1 count
     assert m._bars_into_session(candles, 3) == 4  # bars 0-3 inclusive = 4 bars on day 1
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Stall/rejection confirmation — the doc's "fiddliest logic" (§8 build
+# order note), each of the 3 variants tested in isolation
+# ──────────────────────────────────────────────────────────────────────
+
+def test_confirmation_close_inside_band():
+    extension = {"idx": 5, "direction": "short", "z": 2.5}
+    candles = [_bar(i * 900, 1.1050, 1.1030, 1.1040, vol=100) for i in range(7)]
+    z = [None] * 6 + [1.5]   # bar 6: |z|=1.5 < 2.0 -> back inside the band
+    result = m._check_confirmation(candles, z, extension)
+    assert result["type"] == "close_inside_band"
+    assert result["idx"] == 6
+    assert result["bars_since_extension"] == 1
+
+
+def test_confirmation_rejection_wick():
+    extension = {"idx": 5, "direction": "short", "z": 2.5}
+    candles = [_bar(i * 900, 1.1050, 1.1030, 1.1040, vol=100) for i in range(6)]
+    # bar 6: range 0.0045, wick (high - max(open,close)) = 0.0040 -> 88.9% of range
+    candles.append(_bar(6 * 900, 1.1080, 1.1035, 1.1038, open_=1.1040, vol=80))
+    z = [None] * len(candles)
+    result = m._check_confirmation(candles, z, extension)
+    assert result["type"] == "rejection_wick"
+    assert result["idx"] == 6
+    assert result["bars_since_extension"] == 1
+
+
+def test_confirmation_two_bar_pattern():
+    extension = {"idx": 5, "direction": "short", "z": 2.5}
+    # ext bar (idx 5) high = 1.1060
+    candles = [_bar(i * 900, 1.1060, 1.1030, 1.1040, vol=100) for i in range(6)]
+    candles.append(_bar(6 * 900, 1.1050, 1.1020, 1.1040, open_=1.1035, vol=90))  # lower high #1
+    candles.append(_bar(7 * 900, 1.1040, 1.1015, 1.1025, open_=1.1030, vol=90))  # lower high #2
+    z = [None] * len(candles)
+    result = m._check_confirmation(candles, z, extension)
+    assert result["type"] == "two_bar_pattern"
+    assert result["idx"] == 7
+    assert result["bars_since_extension"] == 2
+
+
+def test_confirmation_times_out():
+    extension = {"idx": 5, "direction": "short", "z": 2.5}
+    candles = [_bar(i * 900, 1.1060, 1.1030, 1.1040, vol=100) for i in range(6)]
+    for i in range(6, 12):
+        # close near the high (small wick) and high held flat (no lower-high streak)
+        candles.append(_bar(i * 900, 1.1060, 1.1030, 1.1058, open_=1.1055, vol=100))
+    z = [None] * len(candles)
+    result = m._check_confirmation(candles, z, extension)
+    assert result is None

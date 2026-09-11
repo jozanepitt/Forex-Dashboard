@@ -213,3 +213,59 @@ def _find_extension(candles: list[dict], z: list[Optional[float]]) -> Optional[d
         if zi <= -Z_EXTENSION_THRESHOLD:
             return {"idx": i, "direction": "long", "z": zi}
     return None
+
+
+def _check_confirmation(candles: list[dict], z: list[Optional[float]],
+                        extension: dict) -> Optional[dict]:
+    """Stall/rejection confirmation (doc §3.3.3), any of:
+      (a) a bar closes back inside the band (|z| < threshold)
+      (b) a rejection wick >= 50% of that bar's total range, on the side
+          that fades the extension
+      (c) two consecutive bars with lower highs (short) / higher lows (long)
+          following the extreme
+    Searched within CONFIRMATION_TIMEOUT_BARS of the extension bar; returns
+    None (setup void) if nothing fires in that window (doc §3.3 timeout)."""
+    ext_idx = extension["idx"]
+    direction = extension["direction"]
+    n = len(candles)
+    last_idx = n - 1
+    end = min(last_idx, ext_idx + CONFIRMATION_TIMEOUT_BARS)
+
+    streak = 0
+    prev_high = candles[ext_idx]["high"]
+    prev_low = candles[ext_idx]["low"]
+
+    for k in range(ext_idx + 1, end + 1):
+        c = candles[k]
+        zk = z[k]
+
+        if zk is not None and abs(zk) < Z_EXTENSION_THRESHOLD:
+            return {"idx": k, "type": "close_inside_band", "bars_since_extension": k - ext_idx}
+
+        rng = c["high"] - c["low"]
+        if rng > 1e-9:
+            if direction == "short":
+                wick = c["high"] - max(c["open"], c["close"])
+            else:
+                wick = min(c["open"], c["close"]) - c["low"]
+            if wick / rng >= 0.5:
+                return {"idx": k, "type": "rejection_wick", "bars_since_extension": k - ext_idx}
+
+        if direction == "short":
+            if c["high"] < prev_high:
+                streak += 1
+                if streak >= 2:
+                    return {"idx": k, "type": "two_bar_pattern", "bars_since_extension": k - ext_idx}
+            else:
+                streak = 0
+            prev_high = c["high"]
+        else:
+            if c["low"] > prev_low:
+                streak += 1
+                if streak >= 2:
+                    return {"idx": k, "type": "two_bar_pattern", "bars_since_extension": k - ext_idx}
+            else:
+                streak = 0
+            prev_low = c["low"]
+
+    return None
