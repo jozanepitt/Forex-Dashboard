@@ -437,14 +437,59 @@ def test_analyze_pair_produces_confirmed_buy():
 
 def test_analyze_pair_no_trade_when_confirmation_times_out():
     """Extension present but price just keeps extending (trend, not stall)
-    -- confirmation never fires within 6 bars -> NO-TRADE, not a crash."""
-    candles, ts, price = _build_choppy_baseline()
-    for i in range(10):
-        price += 0.0006   # keeps extending every bar, never stalls
+    -- confirmation never fires within 6 bars -> NO-TRADE via the timeout
+    branch specifically (not the insufficient-data or regime-fail gates).
+
+    Fix note (review round): the original version called
+    _build_choppy_baseline() with no `n` (defaulting to 28), so 28 + 10 =
+    38 total candles -- below MIN_CANDLES_REQUIRED=40, so analyze_pair
+    short-circuited on "Insufficient candle history" and the assertion
+    passed for the wrong reason (gate 1, not gate 5). It also used a
+    10-bar / 0.0006-per-bar trend, which fails the regime gate (ER blows
+    out on any nontrivial single-direction lookback -- see
+    test_analyze_pair_no_trade_when_regime_fails), so even with enough
+    candles it would have hit gate 3, not gate 5.
+
+    This version uses _build_choppy_baseline(n=40) (>= MIN_CANDLES_REQUIRED
+    once the 6 trend bars are appended) and a much smaller per-bar delta
+    (0.00003 vs 0.0006) so the trailing-20-bar ER stays under the 0.35
+    regime threshold while the cumulative move still clears the z>=2.0
+    extension threshold every bar (this baseline's session-cumulative sigma
+    is tiny, so even a few 0.00003 steps register as a large z).
+
+    Structural note on what this test can and cannot exercise: because
+    _find_extension always returns the MOST RECENT bar (scanning backward)
+    that crosses the z threshold, any bar after the "true" extension that
+    also stays >= 2.0 (i.e. avoids the close-inside-band confirmation type)
+    is, by construction, itself a valid extension candidate and gets picked
+    as THE extension instead -- so a still-extending trend like this one
+    always resolves to "extension found at the newest bar, zero bars left
+    to search" (_check_confirmation's loop range is empty, returns None).
+    That is still gate 5 (the timeout branch) firing for real -- confirmed
+    below via regime_ok=True, extension is not None, confirmation is None,
+    and the "timed out" wording in notes -- it just cannot, under this
+    production logic, also exercise a multi-iteration loop body in the same
+    assertion; that would require crossing a UTC day boundary (resetting
+    VWAP/sigma) to disqualify newer bars from extension-selection while
+    still feeding them through confirmation checks, which is out of scope
+    for a test-data-only fix."""
+    candles, ts, price = _build_choppy_baseline(n=40)
+    for i in range(6):
+        price += 0.00003   # keeps extending every bar, never stalls
         candles.append(_bar(ts, price + 0.0002, price - 0.0004, price, vol=15))
         ts += 900
     row = m.analyze_pair("EUR/USD", candles)
     assert row["setup"] == "NO-TRADE"
+    assert row["regime_ok"] is True, (
+        f"expected regime gate to pass so the timeout branch is what's "
+        f"actually under test -- er={row.get('er')} notes={row.get('notes')!r}"
+    )
+    assert row["extension"] is not None, (
+        f"expected an extension to be detected -- z={row.get('z')} "
+        f"notes={row.get('notes')!r}"
+    )
+    assert row["confirmation"] is None
+    assert "timed out" in row["notes"], row["notes"]
 
 
 def test_analyze_pair_no_trade_when_regime_fails():
