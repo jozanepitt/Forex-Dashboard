@@ -27,13 +27,40 @@ while ($true) {
     try {
         $up = Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue
         if (-not $up) {
-            # Clear any zombie app.py, then relaunch detached.
-            Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" |
-                Where-Object { $_.CommandLine -like "*app.py*" } |
-                ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }
+            # Clear any zombie app.py, then verify each one is actually gone before relaunching.
+            # A silently-failed kill here previously left the old process alive alongside a
+            # freshly relaunched one, doubling every scheduled job (and every Discord alert).
+            $zombies = Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" |
+                Where-Object { $_.CommandLine -like "*app.py*" }
 
-            $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "`"$pyw`" app.py"; CurrentDirectory = $dir }
-            Write-Log "service was DOWN -> relaunched (rc=$($r.ReturnValue) pid=$($r.ProcessId))"
+            $blocked = $false
+            foreach ($z in $zombies) {
+                try {
+                    Stop-Process -Id $z.ProcessId -Force -ErrorAction Stop
+                    Write-Log "killed zombie app.py (pid $($z.ProcessId))"
+                } catch {
+                    Write-Log "FAILED to kill zombie app.py (pid $($z.ProcessId)): $($_.Exception.Message)"
+                    $blocked = $true
+                }
+            }
+
+            if ($zombies) {
+                Start-Sleep -Milliseconds 1500   # give Windows a moment to fully release the process
+                foreach ($z in $zombies) {
+                    if (Get-Process -Id $z.ProcessId -ErrorAction SilentlyContinue) {
+                        Write-Log "zombie app.py (pid $($z.ProcessId)) still alive after kill - skipping relaunch this cycle"
+                        $blocked = $true
+                    }
+                }
+            }
+
+            if ($blocked) {
+                # Don't stack a new process on top of one we couldn't confirm dead;
+                # the next loop iteration (3 min) will retry the kill.
+            } else {
+                $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "`"$pyw`" app.py"; CurrentDirectory = $dir }
+                Write-Log "service was DOWN -> relaunched (rc=$($r.ReturnValue) pid=$($r.ProcessId))"
+            }
         }
     }
     catch {
