@@ -145,3 +145,21 @@ def test_find_extension_ignores_stale_extension_outside_window():
     z = [None] * 30
     z[20] = 2.8
     assert m._find_extension(candles, z) is None
+
+
+def test_bars_into_session_crosses_calendar_day_boundary():
+    """Verify _bars_into_session correctly counts only bars on the same UTC
+    calendar day, NOT cumulative array position. This test spans two calendar
+    days to ensure the date-comparison branch is exercised and correct."""
+    # Day 1: 5 bars starting at epoch 0 (1970-01-01 00:00 UTC)
+    day1_bars = [_bar(i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(5)]
+    # Day 2: 8 bars starting at ts_utc = 86400 + small offset (1970-01-02 00:15 UTC)
+    day2_bars = [_bar(86400 + i * 900, 1.1000, 1.0990, 1.0995, vol=10) for i in range(8)]
+    candles = day1_bars + day2_bars
+
+    # Last bar is at index 12 (5 from day1 + 8 from day2)
+    # _bars_into_session should return 8 (only the day2 count), not 13
+    assert m._bars_into_session(candles, 12) == 8
+
+    # Verify that a bar in day 1 returns only day 1 count
+    assert m._bars_into_session(candles, 3) == 4  # bars 0-3 inclusive = 4 bars on day 1
