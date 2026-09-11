@@ -13,10 +13,12 @@ from flask_socketio import SocketIO
 
 import alerts
 import backtest as bt
+import vwap_mean_reversion_backtest
 import btmm_123
 import cache
 import crt_strategy
 import tdi_cycle_123
+import vwap_mean_reversion_strategy
 import fetcher
 import scheduler
 from providers import forexfactory
@@ -173,6 +175,45 @@ def crt():
     result["cached_at"] = int(now)
     _CRT_CACHE["payload"] = result
     _CRT_CACHE["ts"] = now
+    return jsonify(result)
+
+
+# 5-minute TTL cache for /vwap-mr — M15-based, same rationale as /crt.
+_VWAP_MR_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_VWAP_MR_TTL_SECS = 300
+
+
+@app.get("/vwap-mr")
+def vwap_mr():
+    """VWAP Mean Reversion scanner (M15) across the major-pairs universe."""
+    import time as _t
+    from concurrent.futures import ThreadPoolExecutor
+
+    now = _t.time()
+    if _VWAP_MR_CACHE["payload"] is not None and (now - _VWAP_MR_CACHE["ts"]) < _VWAP_MR_TTL_SECS:
+        return jsonify(_VWAP_MR_CACHE["payload"])
+
+    universe = vwap_mean_reversion_strategy.VWAP_MR_UNIVERSE
+    jobs: list[tuple[str, str]] = [(sym, "15min") for sym in universe]
+
+    def _fetch(job):
+        sym, iv = job
+        bars, stale = fetcher.get_candles(sym, iv, limit=400)
+        return sym, bars, stale
+
+    candles_by_pair: dict[str, dict] = {sym: {"m15": []} for sym in universe}
+    stale_set: set[str] = set()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sym, bars, stale in pool.map(_fetch, jobs):
+            candles_by_pair[sym]["m15"] = bars
+            if stale:
+                stale_set.add(sym)
+
+    result = vwap_mean_reversion_strategy.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _VWAP_MR_CACHE["payload"] = result
+    _VWAP_MR_CACHE["ts"] = now
     return jsonify(result)
 
 
@@ -553,16 +594,26 @@ def run_backtest():
     pair  = (body.get("pair") or "EUR/USD").upper()
     start = body.get("start")
     end   = body.get("end")
+    strategy = body.get("strategy", "btmm")
     if not start or not end:
         return jsonify({"error": "start and end timestamps required"}), 400
     try:
-        result = bt.run(
-            pair=pair,
-            start_ts=int(start),
-            end_ts=int(end),
-            setups=body.get("setups", ["safety"]),
-            min_gates=int(body.get("min_gates", 5)),
-        )
+        if strategy == "vwap_mr":
+            result = vwap_mean_reversion_backtest.run(
+                pair=pair,
+                start_ts=int(start),
+                end_ts=int(end),
+                min_grade=body.get("min_grade", "B"),
+                exit_mode=body.get("exit_mode", "tp1"),
+            )
+        else:
+            result = bt.run(
+                pair=pair,
+                start_ts=int(start),
+                end_ts=int(end),
+                setups=body.get("setups", ["safety"]),
+                min_gates=int(body.get("min_gates", 5)),
+            )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     return jsonify(result)
