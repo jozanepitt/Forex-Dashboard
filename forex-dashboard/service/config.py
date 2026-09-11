@@ -122,7 +122,22 @@ BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "t
 # docs/superpowers/specs/2026-09-10-vwap-mean-reversion-strategy-design.md
 # for the full rationale and every deviation from the source document.
 # MIN_SCORE=9 restricts alerts to best-confidence setups (9/10 and 10/10):
-# only the highest-confidence trades trigger Discord.
+# only the highest-confidence trades trigger Discord. Side effect worth
+# knowing (final review finding, 2026-09-11): the max score without
+# exhaustion volume is 8, and the max score in the ASIAN session is 8 -- so
+# at MIN_SCORE=9 this is a de-facto hard requirement for exhaustion volume
+# AND a de-facto exclusion of the ASIAN session, even though both factors
+# are deliberately "scored, not gated" in the strategy module itself (see
+# spec deviations #8 and #19). This is an intentional alert-layer tightening
+# on top of the scanner's own looser scoring, not a bug in either layer --
+# lower this value if you want ASIAN-session or no-exhaustion setups to
+# reach Discord again.
+# ALERTS_ENABLED defaults true (unlike BTMM123, which defaults false as a
+# from-scratch strategy with zero external grounding): this strategy is
+# based on an external, if unvalidated-for-forex, published methodology,
+# and shipping it alerts-on was an explicit user request when this strategy
+# was built, mirroring the same default the VWAP+9EMA strategy it replaces
+# also shipped with.
 VWAP_MR_ALERTS_ENABLED = os.environ.get("VWAP_MR_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 VWAP_MR_GRADE_A_ONLY = os.environ.get("VWAP_MR_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 VWAP_MR_MIN_SCORE = int(os.environ.get("VWAP_MR_MIN_SCORE", "9"))
