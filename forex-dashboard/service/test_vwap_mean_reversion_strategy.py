@@ -335,3 +335,142 @@ def test_calc_stop_and_targets_buy():
     assert plan["sl"] < plan["entry"]           # stop below entry for a long
     assert plan["tp1"] == pytest.approx(vwap[-1])
     assert plan["tp2"] > plan["tp1"]            # overshoot above VWAP for a long
+
+
+# ──────────────────────────────────────────────────────────────────────
+# analyze_pair / analyze_universe — end-to-end pipeline
+# ──────────────────────────────────────────────────────────────────────
+
+def test_analyze_pair_insufficient_data_is_no_trade():
+    bars = [_bar(i * 900, 1.1001, 1.0999, 1.1000, vol=10) for i in range(10)]
+    row = m.analyze_pair("EUR/USD", bars)
+    assert row["setup"] == "NO-TRADE"
+    assert row["grade"] == "NO-DATA"
+    assert row["score"] == 0
+
+
+def _build_choppy_baseline(n=28, start_ts=0, start_price=1.10000):
+    """n bars of tiny back-and-forth oscillation -- keeps ER low (choppy),
+    all on the same UTC day starting at ts=0 (1970-01-01 00:00 UTC)."""
+    candles = []
+    ts = start_ts
+    price = start_price
+    for i in range(n):
+        delta = 0.00005 if i % 2 == 0 else -0.00005
+        o = price
+        c = price + delta
+        hi = max(o, c) + 0.00002
+        lo = min(o, c) - 0.00002
+        candles.append(_bar(ts, hi, lo, c, open_=o, vol=10))
+        price = c
+        ts += 900
+    return candles, ts, price
+
+
+def _build_short_setup_series():
+    """Choppy baseline, then a high-volume spike (extension) and a
+    rejection-wick confirmation bar the next bar -- should produce a
+    confirmed SELL. If this doesn't trip both the regime gate and the
+    z>=2.0 threshold, print row['er']/row['z']/row['notes'] and widen the
+    spike (currently +0.0035) or shrink the baseline oscillation. Baseline
+    is 40 bars (not the 28-bar default) so the 42-bar total clears
+    MIN_CANDLES_REQUIRED (40) -- with the 28-bar default, analyze_pair
+    short-circuits on "insufficient candle history" before the regime/z
+    logic is even reached."""
+    candles, ts, price = _build_choppy_baseline(n=40)
+    ext_open = price
+    ext_close = price + 0.0035
+    candles.append(_bar(ts, ext_close + 0.0002, ext_open - 0.0002, ext_close,
+                        open_=ext_open, vol=40))
+    ts += 900
+    conf_high = ext_close + 0.0010
+    # Pullback tuned to 0.0022 (from the brief's initial 0.0015): a 0.0015
+    # pullback still leaves the confirmation bar's own |z| >= 2.0, so
+    # _find_extension (which scans newest-to-oldest and returns the FIRST
+    # bar over threshold) latches onto the confirmation bar itself as "the
+    # extension", leaving no bars left to search for confirmation -> the
+    # setup times out. See task-7-report.md for the full derivation.
+    conf_close = ext_close - 0.0022
+    candles.append(_bar(ts, conf_high, conf_close - 0.0002, conf_close,
+                        open_=ext_close, vol=15))
+    return candles
+
+
+def _build_long_setup_series():
+    """Mirror of _build_short_setup_series for a BUY."""
+    candles, ts, price = _build_choppy_baseline(n=40)
+    ext_open = price
+    ext_close = price - 0.0035
+    candles.append(_bar(ts, ext_open + 0.0002, ext_close - 0.0002, ext_close,
+                        open_=ext_open, vol=40))
+    ts += 900
+    conf_low = ext_close - 0.0010
+    conf_close = ext_close + 0.0022
+    candles.append(_bar(ts, conf_close + 0.0002, conf_low, conf_close,
+                        open_=ext_close, vol=15))
+    return candles
+
+
+def test_analyze_pair_produces_confirmed_sell():
+    candles = _build_short_setup_series()
+    row = m.analyze_pair("EUR/USD", candles)
+    assert row["setup"] == "SELL", (
+        f"expected SELL, got {row['setup']} -- er={row.get('er')} z={row.get('z')} "
+        f"notes={row.get('notes')!r}. Tune the extension size in "
+        f"_build_short_setup_series if this fails."
+    )
+    assert row["grade"] in ("A", "B", "C")
+    assert row["entry"] is not None and row["sl"] is not None and row["tp1"] is not None
+    assert row["sl"] > row["entry"]
+
+
+def test_analyze_pair_produces_confirmed_buy():
+    candles = _build_long_setup_series()
+    row = m.analyze_pair("EUR/USD", candles)
+    assert row["setup"] == "BUY", (
+        f"expected BUY, got {row['setup']} -- er={row.get('er')} z={row.get('z')} "
+        f"notes={row.get('notes')!r}. Tune the extension size in "
+        f"_build_long_setup_series if this fails."
+    )
+    assert row["sl"] < row["entry"]
+
+
+def test_analyze_pair_no_trade_when_confirmation_times_out():
+    """Extension present but price just keeps extending (trend, not stall)
+    -- confirmation never fires within 6 bars -> NO-TRADE, not a crash."""
+    candles, ts, price = _build_choppy_baseline()
+    for i in range(10):
+        price += 0.0006   # keeps extending every bar, never stalls
+        candles.append(_bar(ts, price + 0.0002, price - 0.0004, price, vol=15))
+        ts += 900
+    row = m.analyze_pair("EUR/USD", candles)
+    assert row["setup"] == "NO-TRADE"
+
+
+def test_analyze_pair_no_trade_when_regime_fails():
+    """A cleanly trending market (ER stays near 1.0 the whole way) must be
+    blocked by the regime gate regardless of whether an extension also
+    exists -- the doc's 'mandatory, not optional' regime filter (this
+    project's hard-gate choice, see spec). One-directional, constant-delta
+    closes give ER ~= 1.0 by the same derivation as test_efficiency_ratio_
+    trending_is_near_one in Task 2."""
+    candles = []
+    ts = 0
+    price = 1.10000
+    for i in range(40):
+        price += 0.0002   # steady one-directional trend -> ER stays high
+        candles.append(_bar(ts, price + 0.0001, price - 0.0001, price, vol=10))
+        ts += 900
+    row = m.analyze_pair("EUR/USD", candles)
+    assert row["setup"] == "NO-TRADE"
+    assert row["regime_ok"] is False
+    assert "Regime filter blocked" in row["notes"]
+
+
+def test_analyze_universe_shape():
+    candles_by_pair = {sym: {"m15": []} for sym in m.VWAP_MR_UNIVERSE}
+    candles_by_pair["EUR/USD"]["m15"] = _build_short_setup_series()
+    result = m.analyze_universe(candles_by_pair)
+    assert result["universe"] == m.VWAP_MR_UNIVERSE
+    assert len(result["pairs"]) == len(m.VWAP_MR_UNIVERSE)
+    assert result["sells"] >= 1

@@ -369,3 +369,121 @@ def _calc_stop_and_targets(candles: list[dict], extension: dict, confirmation: d
         "sl_pips": _pips(entry, sl), "tp1_pips": _pips(entry, tp1), "tp2_pips": _pips(entry, tp2),
         "time_stop_bar_idx": confirmation["idx"] + TIME_STOP_BARS,
     }
+
+
+_SESSION_ORDER = {"ACTIVE": 0, "LONDON": 1, "NY-LATE": 1, "ASIAN": 2}
+
+
+def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
+    base = {
+        "symbol": symbol, "setup": "NO-TRADE", "grade": "NO-DATA", "score": 0,
+        "price": None, "vwap": None, "sigma": None, "z": None, "d": None,
+        "er": None, "regime_ok": None, "session_status": None,
+        "extension": None, "confirmation": None,
+        "exhaustion_volume": False, "fading_volume": False,
+        "entry": None, "sl": None, "tp1": None, "tp2": None,
+        "sl_pips": None, "tp1_pips": None, "tp2_pips": None,
+        "fresh": None, "candle_time": None,
+        "notes": "Insufficient candle history.",
+    }
+    if not m15_candles or len(m15_candles) < MIN_CANDLES_REQUIRED:
+        return base
+
+    closes = [c["close"] for c in m15_candles]
+    vwap = _vwap_series(m15_candles)
+    sigma = _sigma_series(m15_candles, vwap)
+    z = _z_scores(m15_candles, vwap, sigma)
+    atr_series = _atr_series(m15_candles, ATR_PERIOD)
+    d = _d_scores(m15_candles, vwap, atr_series)
+
+    i = len(m15_candles) - 1
+    last = m15_candles[i]
+
+    er = _efficiency_ratio(closes, i, ER_LOOKBACK)
+    regime_ok = (er is not None) and (er < ER_REGIME_THRESHOLD)
+
+    hour_utc = datetime.fromtimestamp(last["ts_utc"], tz=timezone.utc).hour
+    session_status = _session_status(hour_utc)
+
+    out = dict(base)
+    out.update({
+        "price": last["close"], "vwap": vwap[i], "sigma": sigma[i], "z": z[i], "d": d[i],
+        "er": er, "regime_ok": regime_ok, "session_status": session_status,
+        "candle_time": last.get("datetime"),
+    })
+
+    if not regime_ok:
+        out["grade"] = "NO-TRADE"
+        out["notes"] = (
+            f"Regime filter blocked: ER={er:.2f} >= {ER_REGIME_THRESHOLD} (trending, not choppy)."
+            if er is not None else "Regime filter unavailable (insufficient history)."
+        )
+        return out
+
+    extension = _find_extension(m15_candles, z)
+    if not extension:
+        out["grade"] = "NO-TRADE"
+        out["notes"] = "No extension beyond +/-2.0 sigma in the recent window."
+        return out
+
+    confirmation = _check_confirmation(m15_candles, z, extension)
+    out["extension"] = extension
+    if not confirmation:
+        out["grade"] = "NO-TRADE"
+        out["notes"] = (
+            f"Extension at bar {extension['idx']} timed out with no stall "
+            f"confirmation within {CONFIRMATION_TIMEOUT_BARS} bars."
+        )
+        return out
+
+    exhaustion = _exhaustion_volume(m15_candles, extension["idx"])
+    fading = _fading_volume(m15_candles, extension["idx"], confirmation["idx"])
+    score, grade = _score_and_grade(exhaustion, fading, confirmation["type"], session_status)
+    plan = _calc_stop_and_targets(m15_candles, extension, confirmation, vwap, sigma, symbol)
+    fresh = i <= plan["time_stop_bar_idx"]
+
+    notes = (
+        f"{plan['setup']} confirmed: extension z={extension['z']:.2f} at bar "
+        f"{extension['idx']}, {confirmation['type']} confirmation "
+        f"{confirmation['bars_since_extension']} bar(s) later."
+    )
+    if exhaustion:
+        notes += " Exhaustion volume confirmed."
+    if fading:
+        notes += " Fading volume on confirmation bar."
+    if not fresh:
+        notes += " Past the time-stop window (stale)."
+
+    out.update({
+        "setup": plan["setup"], "grade": grade, "score": score,
+        "confirmation": confirmation,
+        "exhaustion_volume": exhaustion, "fading_volume": fading,
+        "entry": plan["entry"], "sl": plan["sl"], "tp1": plan["tp1"], "tp2": plan["tp2"],
+        "sl_pips": plan["sl_pips"], "tp1_pips": plan["tp1_pips"], "tp2_pips": plan["tp2_pips"],
+        "fresh": fresh, "notes": notes,
+    })
+    return out
+
+
+def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
+    """Run analyze_pair for every pair in VWAP_MR_UNIVERSE."""
+    pairs_out = [
+        analyze_pair(sym, candles_by_pair.get(sym, {}).get("m15", []))
+        for sym in VWAP_MR_UNIVERSE
+    ]
+
+    buys = sum(1 for p in pairs_out if p["setup"] == "BUY")
+    sells = sum(1 for p in pairs_out if p["setup"] == "SELL")
+    grade_a = sum(1 for p in pairs_out if p["grade"] == "A")
+    grade_b = sum(1 for p in pairs_out if p["grade"] == "B")
+
+    candidates = [p for p in pairs_out if p["setup"] in ("BUY", "SELL")]
+    candidates.sort(key=lambda p: (-p["score"], _SESSION_ORDER.get(p["session_status"], 2)))
+    best_setup = candidates[0] if candidates else None
+
+    return {
+        "universe": VWAP_MR_UNIVERSE,
+        "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "buys": buys, "sells": sells, "grade_a": grade_a, "grade_b": grade_b,
+        "best_setup": best_setup, "pairs": pairs_out,
+    }
