@@ -243,3 +243,51 @@ def test_confirmation_two_bar_pattern_long_direction():
     assert result["type"] == "two_bar_pattern"
     assert result["idx"] == 7
     assert result["bars_since_extension"] == 2
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Exhaustion / fading volume, session tagging, scoring
+# ──────────────────────────────────────────────────────────────────────
+
+def test_exhaustion_volume_true_when_spiking():
+    candles = [_bar(i * 900, 1.1005, 1.0995, 1.1000, vol=10) for i in range(20)]
+    candles[19]["volume"] = 20   # > 1.5 x avg(10) = 15
+    assert m._exhaustion_volume(candles, 19) is True
+
+
+def test_exhaustion_volume_false_when_normal():
+    candles = [_bar(i * 900, 1.1005, 1.0995, 1.1000, vol=10) for i in range(20)]
+    assert m._exhaustion_volume(candles, 19) is False
+
+
+def test_fading_volume():
+    candles = [_bar(i * 900, 1.1, 1.09, 1.095, vol=10) for i in range(5)]
+    candles[3]["volume"] = 20
+    candles[4]["volume"] = 8
+    assert m._fading_volume(candles, 3, 4) is True
+    assert m._fading_volume(candles, 3, 3) is False
+
+
+def test_session_status_buckets():
+    assert m._session_status(14) == "ACTIVE"
+    assert m._session_status(9) == "LONDON"
+    assert m._session_status(18) == "NY-LATE"
+    assert m._session_status(2) == "ASIAN"
+
+
+def test_score_and_grade_max_is_ten_grade_a():
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE")
+    assert score == 10
+    assert grade == "A"
+
+
+def test_score_and_grade_minimum_is_three_grade_c():
+    score, grade = m._score_and_grade(False, False, "unknown", "ASIAN")
+    assert score == 3
+    assert grade == "C"
+
+
+def test_score_and_grade_boundary_b():
+    score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON")
+    assert score == 7   # 3 base + 2 exhaustion + 0 fading + 1 confirmation + 1 session
+    assert grade == "B"

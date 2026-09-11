@@ -269,3 +269,57 @@ def _check_confirmation(candles: list[dict], z: list[Optional[float]],
             prev_low = c["low"]
 
     return None
+
+
+def _exhaustion_volume(candles: list[dict], ext_idx: int) -> bool:
+    """Extension-bar volume > 1.5x the 20-bar average (doc §3.3.2). Scored,
+    not a hard gate — deviation: forex tick-volume is too noisy to trust
+    as a binary gate (see spec deviation #8)."""
+    lookback = candles[max(0, ext_idx - 20):ext_idx]
+    if not lookback:
+        return False
+    avg_vol = sum((c.get("volume") or 0) for c in lookback) / len(lookback)
+    if avg_vol <= 0:
+        return False
+    ext_vol = candles[ext_idx].get("volume") or 0
+    return ext_vol > EXHAUSTION_VOL_MULT * avg_vol
+
+
+def _fading_volume(candles: list[dict], ext_idx: int, confirm_idx: int) -> bool:
+    """Confirmation-bar volume < extension-bar volume (doc §3.3.4). Scored,
+    same tick-volume-reliability reasoning as _exhaustion_volume."""
+    ext_vol = candles[ext_idx].get("volume") or 0
+    confirm_vol = candles[confirm_idx].get("volume") or 0
+    return bool(ext_vol) and confirm_vol < ext_vol
+
+
+def _session_status(hour_utc: int) -> str:
+    """Informational session bucket, reused unchanged from the retired
+    VWAP+9EMA scanner. Deviation from doc §3.5 (US-market session close):
+    forex trades continuously, so time-of-day is scored, never a hard
+    exclusion (doc §4 itself: 'treat time-of-day as something you measure,
+    not something you assume')."""
+    if 13 <= hour_utc < 17:
+        return "ACTIVE"       # London-NY overlap
+    if 8 <= hour_utc < 13:
+        return "LONDON"
+    if 17 <= hour_utc < 21:
+        return "NY-LATE"
+    return "ASIAN"
+
+
+def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
+                     session_status: str) -> tuple[int, str]:
+    """Score out of 10 (matches the retired VWAP+9EMA's convention).
+    Base 3 = a real confirmed setup exists at all."""
+    score = 3
+    if exhaustion:
+        score += 2
+    if fading:
+        score += 1
+    conf_points = {"rejection_wick": 2, "close_inside_band": 1, "two_bar_pattern": 1}
+    score += conf_points.get(confirmation_type, 0)
+    session_points = {"ACTIVE": 2, "LONDON": 1, "NY-LATE": 1, "ASIAN": 0}
+    score += session_points.get(session_status, 0)
+    grade = "A" if score >= 8 else "B" if score >= 6 else "C"
+    return score, grade
