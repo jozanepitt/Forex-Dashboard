@@ -187,16 +187,17 @@ def test_should_alert_grade_a_always():
     assert _should_alert_btmm123({"grade": "A", "in_active_session": True}) is True
 
 
-def test_should_alert_grade_b_allowed_by_default():
-    """A+B convention like CRT/TDI123: Grade B alerts unless restricted."""
-    assert _should_alert_btmm123({"grade": "B", "in_active_session": True}) is True
+def test_should_alert_grade_b_blocked_by_default():
+    """Default is Grade-A-only (2026-09-13: restored per user request — BTMM123
+    was drifting to A+B, too many low-conviction signals hitting Discord)."""
+    assert _should_alert_btmm123({"grade": "B", "in_active_session": True}) is False
 
 
-def test_should_alert_grade_b_blocked_when_a_only(monkeypatch):
-    """BTMM123_GRADE_A_ONLY=true restricts to Grade A (kill-switch)."""
+def test_should_alert_grade_b_allowed_when_a_only_disabled(monkeypatch):
+    """BTMM123_GRADE_A_ONLY=false opts back into the A+B convention."""
     import alerts
-    monkeypatch.setattr(alerts, "BTMM123_GRADE_A_ONLY", True)
-    assert alerts._should_alert_btmm123({"grade": "B", "in_active_session": True}) is False
+    monkeypatch.setattr(alerts, "BTMM123_GRADE_A_ONLY", False)
+    assert alerts._should_alert_btmm123({"grade": "B", "in_active_session": True}) is True
     assert alerts._should_alert_btmm123({"grade": "A", "in_active_session": True}) is True
 
 

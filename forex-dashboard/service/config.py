@@ -92,12 +92,14 @@ TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
 # its outcome (win at TP1 / loss at SL) from cached candles each refresh, so the
 # dashboard builds a REAL track record instead of relying on backtests.
 TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower() in ("1", "true", "yes")
-# WATCH (default ON): post a grey "still forming" embed for A/B setups that
-# don't yet clear every gate above, listing exactly what's missing, so a
-# setup can be monitored on Discord as it develops instead of only on the
-# dashboard. Independent of TDI123_ALERTS_ENABLED — never duplicates a real
-# alert (skips silently once every gate has actually passed).
-TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+# WATCH (default OFF — 2026-09-13: disabled per user request, was firing
+# "still forming" signals before they were ready and drowning out real
+# alerts): post a grey "still forming" embed for A/B setups that don't yet
+# clear every gate above, listing exactly what's missing, so a setup can be
+# monitored on Discord as it develops instead of only on the dashboard.
+# Independent of TDI123_ALERTS_ENABLED — never duplicates a real alert
+# (skips silently once every gate has actually passed).
+TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 
 # BTMM 123 — classic 1-2-3 price action confirmed by BTMM doctrine (EMA Level
 # cascade + stop hunt + Asian range) instead of a TDI/oscillator dependency.
@@ -109,13 +111,15 @@ TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "tru
 BTMM123_ALERTS_ENABLED = os.environ.get("BTMM123_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 BTMM123_SESSION_FILTER = os.environ.get("BTMM123_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
 BTMM123_NEWS_FILTER = os.environ.get("BTMM123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
-# Grade gate — same convention as CRT/TDI123: default false = Grade A + B
-# both sent to Discord. Set "true" to restrict to Grade A only.
-BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
-# WATCH (default ON): same "still forming" monitoring embed as TDI123_WATCH_
-# ALERTS_ENABLED, deliberately independent of BTMM123_ALERTS_ENABLED — lets
-# you watch A/B setups develop even while real BTMM123 alerts stay off.
-BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+# Grade gate — default true (2026-09-13: restored per user request — BTMM123
+# was drifting to A+B, user wants only the highest-tier Grade A setups sent).
+# Set "false" to allow Grade A + B again.
+BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+# WATCH (default OFF — 2026-09-13: disabled per user request, same reason as
+# TDI123_WATCH_ALERTS_ENABLED above): same "still forming" monitoring embed,
+# deliberately independent of BTMM123_ALERTS_ENABLED — lets you watch A/B
+# setups develop even while real BTMM123 alerts stay off, if re-enabled.
+BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 
 # VWAP Mean Reversion (M15) — replaces VWAP+9EMA (2026-09-11). Adapted from
 # an external US-equity research spec; see
