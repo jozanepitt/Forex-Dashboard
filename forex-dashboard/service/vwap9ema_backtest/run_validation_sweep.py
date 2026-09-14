@@ -189,10 +189,10 @@ def render_report(results: list, window_start: str, window_end: str) -> str:
             "~0 (a floating-point edge case in `run_day()`'s risk calculation, "
             "not a bug in this report). It does not affect any out-of-sample "
             "number or pass/fail verdict above — the affected trade falls in the "
-            "in-sample portion of the data. Flagged rather than fixed here "
-            "because this report only changes how results are displayed, not how "
-            "they are computed; see the report's concerns section for a suggested "
-            "follow-up."
+            "in-sample portion of the data. Flagged rather than fixed here because "
+            "this report only changes how results are displayed, not how they are "
+            "computed — a fix to the underlying risk calculation, if warranted, is "
+            "a separate follow-up."
         )
         lines.append("")
 

@@ -122,7 +122,7 @@ Closest to passing: **USTECm/London/vp-climax** (OOS expR +0.043, PF 1.07) and *
 | NZDUSDm | NY | vp-filtered | -0.523 (n=426) | -0.237 (n=465) |
 | NZDUSDm | NY | vp-climax | -0.289 (n=126) | -0.334 (n=127) |
 
-† This year's raw computed expectancy for this cell is an extreme outlier (multiple orders of magnitude outside any plausible R value) caused by a single trade whose computed stop distance rounds to ~0 (a floating-point edge case in `run_day()`'s risk calculation, not a bug in this report). It does not affect any out-of-sample number or pass/fail verdict above — the affected trade falls in the in-sample portion of the data. Flagged rather than fixed here because this report only changes how results are displayed, not how they are computed; see the report's concerns section for a suggested follow-up.
+† This year's raw computed expectancy for this cell is an extreme outlier (multiple orders of magnitude outside any plausible R value) caused by a single trade whose computed stop distance rounds to ~0 (a floating-point edge case in `run_day()`'s risk calculation, not a bug in this report). It does not affect any out-of-sample number or pass/fail verdict above — the affected trade falls in the in-sample portion of the data. Flagged rather than fixed here because this report only changes how results are displayed, not how they are computed — a fix to the underlying risk calculation, if warranted, is a separate follow-up.
 
 ## Deferred scope
 
