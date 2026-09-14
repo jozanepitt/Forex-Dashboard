@@ -106,3 +106,24 @@ def test_analyze_universe_shape():
 
 def test_universe_constant():
     assert m.VWAP9EMA_UNIVERSE == ["USTECm", "AUDUSDm"]
+
+
+def test_entry_gap_past_swing_extreme_is_no_trade():
+    """Entry bar gaps below swing low (BUY case), inverting the risk setup.
+
+    Constructed from the happy-path fixture by setting opens[7] to 100.75
+    (below sw=100.8). Signal is still detected on bar 6, but entry on bar 7
+    gaps down, creating stop >= entry (100.805 >= 100.75) -- caught by the
+    defensive guard and skipped as NO-TRADE.
+
+    Hand-verified:
+      - sw = min(lows[6], lows[5]) = min(100.85, 100.8) = 100.8
+      - entry = opens[7] = 100.75 (gap below sw)
+      - stop = sw - 0.10*(entry-sw) = 100.8 - 0.10*(-0.05) = 100.805
+      - Guard check: BUY needs stop < entry: 100.805 < 100.75? NO -> skip
+    """
+    candles = _buy_signal_series()
+    candles[-1]["open"] = 100.75  # gap down entry (was 101.05)
+    row = m.analyze_pair("USTECm", candles)
+    assert row["setup"] == "NO-TRADE"
+    assert "wrong side" in row["notes"].lower()

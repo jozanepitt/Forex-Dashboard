@@ -129,6 +129,12 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
     else:
         sw = max(highs[i], highs[i - 1])
         stop = sw + STOP_BUFFER * (sw - entry)
+
+    # Defensive guard: stop must be on the correct side of entry
+    if (sig == 1 and stop >= entry) or (sig == -1 and stop <= entry):
+        out["notes"] = "Signal confirmed but computed stop is on the wrong side of entry (extreme entry gap) -- skipped."
+        return out
+
     risk = abs(entry - stop)
     if risk <= 0:
         out["notes"] = "Signal confirmed but computed risk is zero (degenerate stop) -- skipped."
