@@ -37,3 +37,8 @@ service/guardian.log
 *.log
 .DS_Store
 Thumbs.db
+
+# VWAP+9EMA MT5 backtest tooling — local data/results only, not the report
+service/vwap9ema_backtest/data/*.csv
+service/vwap9ema_backtest/results/*.png
+service/vwap9ema_backtest/__pycache__/
