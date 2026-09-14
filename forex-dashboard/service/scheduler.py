@@ -20,6 +20,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import alerts
 import fetcher
 from btmm_core import active_kill_zone
+import vwap9ema_strategy
 from config import BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_BACKFILL, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
 
 log = logging.getLogger("scheduler")
@@ -100,6 +101,14 @@ def refresh_all():
     log.info("refresh_all: done in %.1fs (%d/%d ok)", time.time() - t0, updated, len(PRIORITY_PAIRS))
     if updated:
         _record_refresh(time.time())  # mark healthy only when we actually got fresh data
+
+    # Fetch M5 candles for the VWAP+9EMA universe (2 symbols only -- cheap).
+    # No other live strategy uses M5; every other fetch above is M15/1h/4h/1day.
+    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
+        try:
+            _fetch_guarded(sym, "5min", limit=100)
+        except Exception as e:
+            log.warning("VWAP9EMA M5 fetch failed for %s: %s", sym, e)
 
     # Fire kill zone open alert on session transitions.
     # Suppressed in BTMM A+-only mode (user wants A+ setups only, nothing else).
