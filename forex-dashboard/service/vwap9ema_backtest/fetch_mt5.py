@@ -61,11 +61,32 @@ def main():
         if not mt5.symbol_select(sym, True):
             print(f"!! {sym}: cannot select (check exact name via --list)"); continue
         info = mt5.symbol_info(sym)
-        rates = mt5.copy_rates_range(sym, TF, d0, d1)
-        if rates is None or len(rates)==0:
-            print(f"!! {sym}: no data ({mt5.last_error()})"); continue
-        df = pd.DataFrame(rates)
-        df['time'] = pd.to_datetime(df['time'], unit='s')   # broker SERVER time
+
+        # Fetch data in 90-day chunks to stay under MT5's ~44k-bar copy_rates_range ceiling
+        dfs = []
+        chunk_days = 90
+        current = d0
+        while current < d1:
+            window_end = current + dt.timedelta(days=chunk_days)
+            if window_end > d1:
+                window_end = d1
+            rates = mt5.copy_rates_range(sym, TF, current, window_end)
+            if rates is None or len(rates) == 0:
+                print(f"!! {sym}: no data for window {current.date()}..{window_end.date()} ({mt5.last_error()})")
+            else:
+                chunk_df = pd.DataFrame(rates)
+                chunk_df['time'] = pd.to_datetime(chunk_df['time'], unit='s')
+                dfs.append(chunk_df)
+            current = window_end
+
+        if len(dfs) == 0:
+            print(f"!! {sym}: no data"); continue
+
+        df = pd.concat(dfs, ignore_index=True)
+        # Drop duplicates at window boundaries
+        df = df.drop_duplicates(subset=['time'], keep='first')
+        # Sort by time ascending
+        df = df.sort_values('time').reset_index(drop=True)
         df = df.rename(columns={'spread':'spread_points'})
         df['point'] = info.point
         keep = ['time','open','high','low','close','tick_volume','spread_points','point']
