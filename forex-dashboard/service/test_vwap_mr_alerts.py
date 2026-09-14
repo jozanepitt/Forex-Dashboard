@@ -79,6 +79,43 @@ def test_alert_vwap_mr_setup_suppressed_by_news(monkeypatch):
     assert len(posted) == 0
 
 
+# ──────────────────────────────────────────────────────────────────────
+# _should_alert_vwap_mr grade gating (2026-09-14): grade is now
+# A/B+/B/C/NO-TRADE. The A-only gate must block B+ exactly like B, not
+# just literal "B" — a regression here would let B+ setups leak past
+# VWAP_MR_GRADE_A_ONLY=True.
+# ──────────────────────────────────────────────────────────────────────
+
+def test_should_alert_vwap_mr_blocks_b_plus_when_a_only(monkeypatch):
+    monkeypatch.setattr(alerts, "VWAP_MR_GRADE_A_ONLY", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 0)
+    assert alerts._should_alert_vwap_mr(_good_row(grade="B+", score=10)) is False
+
+
+def test_should_alert_vwap_mr_blocks_b_when_a_only(monkeypatch):
+    monkeypatch.setattr(alerts, "VWAP_MR_GRADE_A_ONLY", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 0)
+    assert alerts._should_alert_vwap_mr(_good_row(grade="B", score=10)) is False
+
+
+def test_should_alert_vwap_mr_allows_a_when_a_only(monkeypatch):
+    monkeypatch.setattr(alerts, "VWAP_MR_GRADE_A_ONLY", True)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 0)
+    assert alerts._should_alert_vwap_mr(_good_row(grade="A", score=10)) is True
+
+
+def test_should_alert_vwap_mr_allows_b_plus_when_a_only_disabled(monkeypatch):
+    monkeypatch.setattr(alerts, "VWAP_MR_GRADE_A_ONLY", False)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 0)
+    assert alerts._should_alert_vwap_mr(_good_row(grade="B+", score=10)) is True
+
+
+def test_should_alert_vwap_mr_always_blocks_grade_c(monkeypatch):
+    monkeypatch.setattr(alerts, "VWAP_MR_GRADE_A_ONLY", False)
+    monkeypatch.setattr(alerts, "VWAP_MR_MIN_SCORE", 0)
+    assert alerts._should_alert_vwap_mr(_good_row(grade="C", score=10)) is False
+
+
 def _partial_row():
     """A row shape analyze_pair can actually produce: regime passed and an
     extension was found, but confirmation timed out before a stall pattern

@@ -275,62 +275,71 @@ def test_session_status_buckets():
     assert m._session_status(2) == "ASIAN"
 
 
-def test_score_and_grade_max_is_ten_grade_a():
-    # z=3.2 (deep extension, "great") — required for A, see depth-cap tests below.
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 3.2)
+def test_score_formula_max_is_ten():
+    # Score formula is unchanged and independent of grade (see the
+    # confirmation-type/depth grading tests below).
+    score, _grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 3.2)
     assert score == 10
-    assert grade == "A"
 
 
-def test_score_and_grade_below_c_floor_is_no_trade():
-    score, grade = m._score_and_grade(False, False, "unknown", "ASIAN", 2.1)
-    assert score == 3
-    assert grade == "NO-TRADE"
-
-
-def test_score_and_grade_at_c_floor_is_c():
-    score, grade = m._score_and_grade(False, False, "close_inside_band", "ASIAN", 2.1)
+def test_score_at_c_floor():
+    score, _grade = m._score_and_grade(False, False, "close_inside_band", "ASIAN", 2.1)
     assert score == 4   # 3 base + 0 exhaustion + 0 fading + 1 confirmation + 0 session
-    assert grade == "C"
 
 
-def test_score_and_grade_boundary_b():
-    score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON", 2.1)
+def test_score_boundary_seven():
+    score, _grade = m._score_and_grade(True, False, "close_inside_band", "LONDON", 2.1)
     assert score == 7   # 3 base + 2 exhaustion + 0 fading + 1 confirmation + 1 session
-    assert grade == "B"
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Extension-depth grade cap (2026-09-14): |z| >= 2.0 is "good" (entry
-# gate, unchanged), |z| >= 3.0 is "great" — only a deep extension can
-# reach Grade A. 2.0-2.9 sigma caps out at B no matter how strong the
-# rest of the score is.
+# Grade (2026-09-14, user request): determined purely by confirmation
+# type + extension depth, decoupled from the numeric score entirely.
+# Only close_inside_band can reach A/B+/B: |z|>=3.0 -> A, |z|>=2.5 -> B+,
+# |z|>=2.0 -> B. Any other confirmation type -> C, regardless of depth
+# or score.
 # ──────────────────────────────────────────────────────────────────────
 
-def test_shallow_extension_caps_a_grade_score_down_to_b():
-    # Same score-10 inputs as the max-grade test above, but z=2.3 (shallow).
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 2.3)
-    assert score == 10          # the raw score is untouched by the cap
-    assert grade == "B"         # but the grade is capped
+def test_grade_a_requires_close_inside_band_and_three_sigma():
+    assert m._grade_from_confirmation_and_depth("close_inside_band", 3.0) == "A"
+    assert m._grade_from_confirmation_and_depth("close_inside_band", 4.5) == "A"
 
 
-def test_extension_at_exactly_three_sigma_keeps_a():
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 3.0)
-    assert grade == "A"
+def test_grade_b_plus_at_two_point_five_sigma():
+    assert m._grade_from_confirmation_and_depth("close_inside_band", 2.5) == "B+"
+    assert m._grade_from_confirmation_and_depth("close_inside_band", 2.99) == "B+"
 
 
-def test_extension_just_under_three_sigma_caps_to_b():
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 2.99)
-    assert grade == "B"
+def test_grade_b_at_two_sigma_the_entry_gate_floor():
+    assert m._grade_from_confirmation_and_depth("close_inside_band", 2.0) == "B"
+    assert m._grade_from_confirmation_and_depth("close_inside_band", 2.49) == "B"
 
 
-def test_negative_z_uses_absolute_depth_for_the_cap():
+def test_grade_negative_z_uses_absolute_depth():
     # Extensions above VWAP report z >= +2.0; below VWAP report z <= -2.0.
-    # The cap must key off depth (magnitude), not sign.
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", -3.5)
+    # Grading must key off depth (magnitude), not sign.
+    assert m._grade_from_confirmation_and_depth("close_inside_band", -3.5) == "A"
+    assert m._grade_from_confirmation_and_depth("close_inside_band", -2.6) == "B+"
+    assert m._grade_from_confirmation_and_depth("close_inside_band", -2.1) == "B"
+
+
+def test_grade_c_for_other_confirmation_types_regardless_of_depth():
+    # rejection_wick and two_bar_pattern never reach A/B+/B under this
+    # rule, even at a very deep (5.0 sigma) extension — only
+    # close_inside_band does.
+    assert m._grade_from_confirmation_and_depth("rejection_wick", 5.0) == "C"
+    assert m._grade_from_confirmation_and_depth("two_bar_pattern", 5.0) == "C"
+
+
+def test_score_and_grade_are_independent():
+    # A high score with the "wrong" confirmation type still grades C;
+    # a low score with close_inside_band at deep extension still grades A.
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 5.0)
+    assert score == 10
+    assert grade == "C"
+    score, grade = m._score_and_grade(False, False, "close_inside_band", "ASIAN", 3.5)
+    assert score == 4
     assert grade == "A"
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", -2.4)
-    assert grade == "B"
 
 
 def test_depth_tier_label_great_at_three_sigma():
@@ -346,15 +355,6 @@ def test_depth_tier_label_strong_at_two_point_five_sigma():
 def test_depth_tier_label_good_at_two_sigma():
     assert m._depth_tier_label(2.0) == "good"
     assert m._depth_tier_label(-2.4) == "good"
-
-
-def test_depth_cap_does_not_affect_b_or_lower_grades():
-    # A setup that only scores B on its own merits stays B regardless of
-    # how deep the extension is — the cap only ever downgrades A, never
-    # upgrades anything.
-    score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON", 4.0)
-    assert score == 7
-    assert grade == "B"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -477,7 +477,7 @@ def test_analyze_pair_produces_confirmed_sell():
         f"notes={row.get('notes')!r}. Tune the extension size in "
         f"_build_short_setup_series if this fails."
     )
-    assert row["grade"] in ("A", "B", "C")
+    assert row["grade"] in ("A", "B+", "B", "C")
     assert row["entry"] is not None and row["sl"] is not None and row["tp1"] is not None
     assert row["sl"] > row["entry"]
 

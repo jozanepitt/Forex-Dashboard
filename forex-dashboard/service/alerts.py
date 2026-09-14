@@ -1375,10 +1375,17 @@ def alert_btmm123_watch(pair: str, row: dict):
 
 def _should_alert_vwap_mr(row: dict) -> bool:
     """Hard floor: only fire on score >= VWAP_MR_MIN_SCORE (default 9/10),
-    regardless of grade label. Grade C and NO-TRADE never alert."""
-    if row.get("grade") not in ("A", "B"):
+    regardless of grade label. Grade C and NO-TRADE never alert.
+
+    Grade is now A/B+/B/C/NO-TRADE (2026-09-14: added B+, a
+    close_inside_band-confirmed setup with a 2.5-2.99 sigma extension —
+    see _grade_from_confirmation_and_depth in vwap_mean_reversion_strategy.py).
+    The A-only gate below checks `!= "A"` rather than `== "B"` specifically
+    so it correctly blocks B+ too, not just B."""
+    grade = row.get("grade")
+    if grade not in ("A", "B+", "B"):
         return False
-    if VWAP_MR_GRADE_A_ONLY and row.get("grade") == "B":
+    if VWAP_MR_GRADE_A_ONLY and grade != "A":
         return False
     return (row.get("score") or 0) >= VWAP_MR_MIN_SCORE
 

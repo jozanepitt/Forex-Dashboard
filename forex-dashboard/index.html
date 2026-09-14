@@ -5458,9 +5458,9 @@ function _vmrSetupCell(p) {
 }
 
 function _vmrGradeCell(g) {
-  const colorMap = {A:'var(--green)', B:'var(--cyan)', C:'var(--yellow)', 'NO-TRADE':'var(--text-muted)', 'NO-DATA':'var(--text-muted)'};
+  const colorMap = {A:'var(--green)', 'B+':'var(--cyan)', B:'var(--cyan)', C:'var(--yellow)', 'NO-TRADE':'var(--text-muted)', 'NO-DATA':'var(--text-muted)'};
   const c = colorMap[g] || 'var(--text-muted)';
-  const weight = (g === 'A' || g === 'B') ? 700 : 500;
+  const weight = (g === 'A' || g === 'B+' || g === 'B') ? 700 : 500;
   return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
 }
 

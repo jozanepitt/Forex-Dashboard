@@ -309,10 +309,10 @@ def _session_status(hour_utc: int) -> str:
 
 
 def _depth_tier_label(z_extension: float) -> str:
-    """Informational-only label for how deep the extension is (2026-09-14,
-    user request) — never gates alerting or changes the `grade` field
-    (that stays strictly A/B/C/NO-TRADE). "great" >= 3.0 sigma, "strong"
-    >= 2.5 sigma, "good" >= 2.0 sigma (the entry gate itself)."""
+    """Informational label for how deep the extension is. "great" >= 3.0
+    sigma, "strong" >= 2.5 sigma, "good" >= 2.0 sigma (the entry gate
+    itself). Mirrors the thresholds _grade_from_confirmation_and_depth
+    uses, but this label applies regardless of confirmation type."""
     depth = abs(z_extension)
     if depth >= 3.0:
         return "great"
@@ -321,18 +321,39 @@ def _depth_tier_label(z_extension: float) -> str:
     return "good"
 
 
+def _grade_from_confirmation_and_depth(confirmation_type: str, z_extension: float) -> str:
+    """Grade determined purely by confirmation type and extension depth
+    (2026-09-14, user request — replaces the prior score-threshold-based
+    grading entirely). This is deliberately decoupled from the numeric
+    `score` field, which still drives VWAP_MR_MIN_SCORE alert gating and
+    the dashboard's "/10" display unchanged.
+
+    Only a "close back inside band" confirmation can reach A/B+/B — the
+    user judged it the cleanest signal, and explicitly excluded
+    rejection_wick/two_bar_pattern from this tiering:
+      |z| >= 3.0 sigma + close_inside_band -> A  ("great")
+      |z| >= 2.5 sigma + close_inside_band -> B+ ("strong")
+      |z| >= 2.0 sigma + close_inside_band -> B  ("good", matches the entry gate)
+    Any other confirmation type is a real, confirmed setup that doesn't
+    meet this bar -> C. (The user didn't specify this fallback grade;
+    C was chosen since the setup is real but doesn't qualify for A/B+/B,
+    and NO-TRADE elsewhere specifically means "no extension" or
+    "confirmation timed out", which isn't the case here.)"""
+    if confirmation_type == "close_inside_band":
+        depth = abs(z_extension)
+        if depth >= 3.0:
+            return "A"
+        if depth >= 2.5:
+            return "B+"
+        return "B"
+    return "C"
+
+
 def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
                      session_status: str, z_extension: float) -> tuple[int, str]:
     """Score out of 10 (matches the retired VWAP+9EMA's convention).
-    Base 3 = a real confirmed setup exists at all.
-
-    Extension-depth grade cap (2026-09-14, user request): the entry gate
-    (Z_EXTENSION_THRESHOLD) only requires |z| >= 2.0 ("good"), but a
-    setup can only be graded A when the extension is truly deep,
-    |z| >= 3.0 ("great") — a 2.0-2.9 sigma extension caps out at B
-    regardless of how the rest of the score adds up. This only ever
-    downgrades A to B; it never upgrades a grade the score formula
-    didn't already earn."""
+    Base 3 = a real confirmed setup exists at all. `grade` is computed
+    independently — see _grade_from_confirmation_and_depth."""
     score = 3
     if exhaustion:
         score += 2
@@ -342,9 +363,7 @@ def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
     score += conf_points.get(confirmation_type, 0)
     session_points = {"ACTIVE": 2, "LONDON": 1, "NY-LATE": 1, "ASIAN": 0}
     score += session_points.get(session_status, 0)
-    grade = "A" if score >= 8 else "B" if score >= 6 else "C" if score >= 4 else "NO-TRADE"
-    if grade == "A" and abs(z_extension) < 3.0:
-        grade = "B"
+    grade = _grade_from_confirmation_and_depth(confirmation_type, z_extension)
     return score, grade
 
 
