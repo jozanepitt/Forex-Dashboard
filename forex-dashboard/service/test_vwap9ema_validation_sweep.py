@@ -52,3 +52,17 @@ def test_fails_when_oos_has_zero_trades():
     oos = dict(n=0)
     years = {2023: dict(exp_r=0.1)}
     assert passes_acceptance(oos, years) is False
+
+
+def test_passes_at_exact_boundary_values():
+    """Exact-inclusive boundaries should pass: n=150, pf=1.2."""
+    oos = dict(n=150, exp_r=0.1, pf=1.2)
+    years = {2023: dict(exp_r=0.1), 2024: dict(exp_r=0.05)}
+    assert passes_acceptance(oos, years) is True
+
+
+def test_fails_with_fifty_fifty_year_split():
+    """50/50 tie in per-year positivity (1 of 2 years) should fail (strict majority required)."""
+    oos = dict(n=200, exp_r=0.15, pf=1.5)
+    years = {2023: dict(exp_r=0.1), 2024: dict(exp_r=-0.1)}
+    assert passes_acceptance(oos, years) is False
