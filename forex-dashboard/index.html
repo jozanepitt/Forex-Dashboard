@@ -765,7 +765,7 @@ td.mono{font-family:var(--font-mono)}
     </div>
     <div class="trend-controls">
       <button class="trend-refresh-btn" id="vwap9emaRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta">VWAP+9EMA vp-climax · USTECm/AUDUSDm · London session only</div>
+      <div class="trend-meta">VWAP+9EMA vp-climax · USTEC/AUD-USD · London session only</div>
     </div>
     <div class="trend-summary" id="vwap9emaSummary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table">
@@ -5602,13 +5602,12 @@ function renderVwap9emaTable(data) {
   const summary = document.getElementById('vwap9emaSummary');
 
   const rows = (data.pairs || []).map(p => {
-    const setupColor = p.setup === 'BUY' ? 'var(--green)' : p.setup === 'SELL' ? 'var(--red)' : 'var(--text-muted)';
     const sessionCell = p.in_active_session
       ? '<span style="color:var(--green)">London — active</span>'
       : '<span style="color:var(--text-muted)">Outside session</span>';
     return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
       <td><b>${p.symbol}</b></td>
-      <td><span style="color:${setupColor};font-weight:700">${p.setup}</span></td>
+      <td>${_crtSetupCell(p)}</td>
       <td>${p.entry != null ? _crtFmtPrice(p.entry, p.symbol) : '—'}</td>
       <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
       <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
