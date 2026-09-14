@@ -155,6 +155,15 @@ VWAP_MR_WATCH_ALERTS_ENABLED = os.environ.get("VWAP_MR_WATCH_ALERTS_ENABLED", "f
 # alerts._news_blocks_pair), applied at the alert layer (see spec deviation #11).
 VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
+# VWAP+9EMA (live, replaces 1AM CRT) — UNVALIDATED strategy, failed its own
+# honest backtest (0/48, see docs/superpowers/specs/2026-09-13-vwap9ema-mt5-
+# validation-design.md). Built anyway per explicit user decision for manual
+# trading with their own judgment (see docs/superpowers/specs/2026-09-14-
+# vwap9ema-live-replaces-1am-crt-design.md). No grade-only flag: there are no
+# grade tiers to filter by. No watch-alerts: deliberately not adding "still
+# forming" noise to a strategy with zero validated edge.
+VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+
 
 def load_keys():
     """Return list of {name, value} for keys defined in env.

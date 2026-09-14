@@ -20,6 +20,7 @@ from config import (
     BTMM123_GRADE_A_ONLY, BTMM123_WATCH_ALERTS_ENABLED,
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
+    VWAP9EMA_ALERTS_ENABLED,
 )
 from providers import forexfactory
 
@@ -1474,3 +1475,44 @@ def alert_vwap_mr_watch(pair: str, row: dict):
     if _post_discord(embed):
         _mark_sent(pair, rule)
         log.info("VWAP_MR watch alert sent: %s %s", pair, setup)
+
+
+def alert_vwap9ema_setup(pair: str, row: dict):
+    """Fire when the live VWAP+9EMA scanner (vp-climax variant) confirms a
+    BUY/SELL setup. UNVALIDATED strategy -- see vwap9ema_strategy.py's
+    module docstring. Every embed carries a visible warning so this can
+    never be confused with a proven Grade-A signal from another strategy.
+    """
+    if not VWAP9EMA_ALERTS_ENABLED:
+        return
+    setup = row.get("setup")
+    if setup not in ("BUY", "SELL"):
+        return
+
+    rule = f"vwap9ema_{setup.lower()}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+
+    embed = {
+        "title": f"{arrow} {pair} — VWAP+9EMA {setup}",
+        "description": (
+            "⚠ **UNVALIDATED strategy — failed backtest (0/48).** "
+            "Not a Grade-A signal like your other alerts. Trade at your own judgment.\n\n"
+            + (row.get("notes") or "")
+        ),
+        "color": colour,
+        "fields": [
+            {"name": "Setup", "value": f"**{setup}**", "inline": True},
+            {"name": "Entry", "value": f"`{_fmt_price(entry, pair)}`" if entry is not None else "—", "inline": True},
+            {"name": "Stop Loss", "value": f"`{_fmt_price(sl, pair)}`" if sl is not None else "—", "inline": True},
+            {"name": "Target", "value": f"`{_fmt_price(tp1, pair)}`" if tp1 is not None else "—", "inline": True},
+        ],
+        "footer": {"text": f"VWAP+9EMA (unvalidated) · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("VWAP9EMA alert sent: %s %s (UNVALIDATED strategy)", pair, setup)

@@ -153,6 +153,12 @@ def refresh_all():
     except Exception as e:
         log.warning("VWAP Mean Reversion alerts failed: %s", e)
 
+    # Run live VWAP+9EMA scanner (UNVALIDATED — failed backtest 0/48) + Discord alerts
+    try:
+        _run_vwap9ema_alerts()
+    except Exception as e:
+        log.warning("VWAP9EMA alerts failed: %s", e)
+
     # Notify dashboard subscribers via WebSocket. Late import keeps scheduler importable
     # standalone (e.g. for tests) without pulling Flask-SocketIO into the import graph.
     try:
@@ -237,6 +243,24 @@ def _run_vwap_mr_alerts():
             alerts.alert_vwap_mr_watch(row["symbol"], row)
         except Exception as e:
             log.debug("VWAP_MR watch eval failed for %s: %s", row.get("symbol"), e)
+
+
+def _run_vwap9ema_alerts():
+    """Run the live VWAP+9EMA scanner (UNVALIDATED — failed backtest 0/48)
+    against the cache and fire Discord alerts for confirmed setups."""
+    import cache
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m5": cache.read_candles(sym, "5min", limit=100),
+        }
+    result = vwap9ema_strategy.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        try:
+            alerts.alert_vwap9ema_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("VWAP9EMA alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 def _run_tdi123_alerts():
