@@ -57,12 +57,7 @@ BTMM_ALERTS_ENABLED = os.environ.get("BTMM_ALERTS_ENABLED", "true").lower() in (
 # full (noisier) BTMM alert set back.
 BTMM_APLUS_ONLY = os.environ.get("BTMM_APLUS_ONLY", "true").lower() in ("1", "true", "yes")
 
-# 1AM CRT grade gate — separate from the SNR flag above because CRT fires fewer
-# setups and Grade B setups are acceptable signals there (they don't push as many
-# alerts as SNR). Default false = A + B both sent to Discord.
-CRT_GRADE_A_ONLY = os.environ.get("CRT_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
-
-# 5AM CRT grade gate — NY Open kill-zone session. A + B (default false, same as 1AM CRT).
+# 5AM CRT grade gate — NY Open kill-zone session. A + B (default false).
 CRT_5AM_GRADE_A_ONLY = os.environ.get("CRT_5AM_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 
 # TDI Cycle 123 — improvements-on-BTMM scanner (FSO_TDI + 123 Peak + divergence).

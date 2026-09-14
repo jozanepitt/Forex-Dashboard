@@ -119,12 +119,6 @@ def refresh_all():
         except Exception as e:
             log.warning("alerts failed: %s", e)
 
-    # Run 1AM CRT scanner + Discord alerts
-    try:
-        _run_crt_alerts()
-    except Exception as e:
-        log.warning("CRT alerts failed: %s", e)
-
     # Run 5AM CRT scanner + Discord alerts (NY Open kill zone)
     try:
         _run_crt_5am_alerts()
@@ -188,25 +182,6 @@ def _run_alerts():
             )
         except Exception as e:
             log.debug("alert eval failed for %s: %s", sym, e)
-
-
-def _run_crt_alerts():
-    """Run the 1AM CRT scanner against the cache and fire Discord alerts for A/B grades
-    that fall inside the WAITING or ACTIVE key-time window of a live session."""
-    import cache
-    import crt_strategy
-
-    candles_by_pair: dict[str, dict] = {}
-    for sym in crt_strategy.CRT_UNIVERSE:
-        candles_by_pair[sym] = {
-            "m15": cache.read_candles(sym, "15min", limit=400),
-        }
-    result = crt_strategy.analyze_universe(candles_by_pair)
-    for row in result.get("pairs", []):
-        try:
-            alerts.alert_crt_setup(row["symbol"], row)
-        except Exception as e:
-            log.debug("CRT alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 def _run_crt_5am_alerts():

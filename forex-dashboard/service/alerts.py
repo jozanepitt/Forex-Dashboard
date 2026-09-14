@@ -11,7 +11,7 @@ from typing import Optional
 import requests
 import instruments
 from config import (
-    DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY, CRT_GRADE_A_ONLY,
+    DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY,
     CRT_5AM_GRADE_A_ONLY, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
     TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
@@ -448,118 +448,6 @@ def _build_crt_trade_plan(pair: str, row: dict, setup: str, candle_key: str) -> 
 
     return {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "risk": risk,
             "rr1": 2.0, "rr2": 3.0, "ob_used": entry_ob is not None}
-
-
-def alert_crt_setup(pair: str, row: dict):
-    """Fire when a 1AM CRT scanner row reaches A/B grade in a tradeable key-time window.
-
-    `row` is one element from crt_strategy.analyze_universe()['pairs'].
-    Throttled to one alert per (pair, setup direction) per session — the rule key includes
-    the session date so re-firing across sessions is allowed but not within a session.
-    """
-    setup    = row.get("setup")          # 'BUY' / 'SELL' / 'NO-TRADE'
-    grade    = row.get("grade")          # 'A' / 'B' / 'C' / 'NO-TRADE' / 'NO-DATA'
-    kt       = row.get("key_time_status")  # 'PRE-1AM' / 'WAITING' / 'ACTIVE' / 'LATE' / 'MISSED'
-    is_live  = row.get("session_is_live", True)
-    session  = row.get("session_1am_sast", "")
-    if setup not in ("BUY", "SELL"):
-        return
-    allowed_grades = ("A",) if CRT_GRADE_A_ONLY else ("A", "B")
-    if grade not in allowed_grades:
-        if grade == "B":
-            log.debug("CRT SUPPRESSED %s: Grade B (A-only mode)", pair)
-        return
-    if kt not in ("WAITING", "ACTIVE"):
-        return
-    if not is_live:
-        return
-
-    rule = f"crt_{setup.lower()}_{session.replace(' ', '_').replace(':', '')}"
-    if _is_throttled(pair, rule):
-        return
-
-    arrow = "📈" if setup == "BUY" else "📉"
-    grade_badge = "⭐ " if grade == "A" else ""
-    colour = 0xFFD700 if grade == "A" else (_COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"])
-    entry_zone = row.get("entry_zone") or {}
-    entry_side = entry_zone.get("side", "")
-    entry_level = entry_zone.get("level")
-    entry_str = (
-        f"{'Sell ≥' if entry_side == 'above_open' else 'Buy ≤' if entry_side == 'below_open' else '—'} "
-        f"`{_fmt_price(entry_level)}`" if entry_level is not None else "—"
-    )
-
-    c1 = row.get("candle_1am") or {}
-    crt_hi, crt_lo = row.get("crt_high"), row.get("crt_low")
-    crt_str = f"`{_fmt_price(crt_hi)}` / `{_fmt_price(crt_lo)}`" if (crt_hi and crt_lo) else "—"
-
-    # Guard: _fmt_price crashes on None — candle_1am should always be populated when
-    # setup is BUY/SELL, but be defensive in case of data gaps.
-    c1_open  = c1.get("open")
-    c1_close = c1.get("close")
-    c1_str   = (
-        f"O `{_fmt_price(c1_open)}` → C `{_fmt_price(c1_close)}` ({c1.get('type', '?')})"
-        if c1_open is not None and c1_close is not None else "—"
-    )
-
-    # SMT label — simplify partner-led variants for readability
-    smt_raw = row.get("smt", "NONE")
-    smt_label = {
-        "BULLISH-DIVERGENCE":         "🟢 Bullish divergence",
-        "BEARISH-DIVERGENCE":         "🔴 Bearish divergence",
-        "BULLISH-DIVERGENCE-PARTNER": "🟡 Partner bullish div",
-        "BEARISH-DIVERGENCE-PARTNER": "🟡 Partner bearish div",
-        "NONE":                       "—",
-    }.get(smt_raw, smt_raw)
-
-    # Build trade plan (entry/SL/TP1@1:2/TP2@1:3 per MADO 1AM CRT PDF page 22)
-    plan = _build_crt_trade_plan(pair, row, setup, candle_key="candle_1am")
-    if plan:
-        plan_str = (
-            f"Entry `{_fmt_price(plan['entry'])}` · SL `{_fmt_price(plan['sl'])}`\n"
-            f"TP1 `{_fmt_price(plan['tp1'])}` (1:{plan['rr1']:.0f}) · "
-            f"TP2 `{_fmt_price(plan['tp2'])}` (1:{plan['rr2']:.0f})"
-        )
-        plan_source = "M15 OB" if plan["ob_used"] else "1AM open"
-    else:
-        plan_str = "—"
-        plan_source = "—"
-
-    # Intraday profile from new 1AM detector (normal_protraction / delayed_protraction)
-    intra = row.get("intraday_profile") or {}
-    intra_str = intra.get("label", "—") if isinstance(intra, dict) else "—"
-
-    fields = [
-        {"name": "Setup",        "value": f"**{setup}**",                                            "inline": True},
-        {"name": "Grade",        "value": f"{grade_badge}**{grade} ({row.get('score', 0)}/10)**",    "inline": True},
-        {"name": "Key Time",     "value": f"**{kt}** · {row.get('key_time_window_sast', '')}",       "inline": True},
-        {"name": "Trade Plan",   "value": plan_str,                                                   "inline": False},
-        {"name": "Entry Source", "value": plan_source,                                                "inline": True},
-        {"name": "Entry Zone",   "value": entry_str,                                                  "inline": True},
-        {"name": "1AM Candle",   "value": c1_str,                                                     "inline": True},
-        {"name": "CRT H/L",      "value": crt_str,                                                    "inline": True},
-        {"name": "Market Profile","value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
-        {"name": "Intraday",     "value": intra_str,                                                  "inline": True},
-        {"name": "DOL Bias",     "value": row.get("dol_bias", "?") or "—",                           "inline": True},
-        {"name": "SMT",          "value": smt_label,                                                  "inline": True},
-        {"name": "OHLC Pattern", "value": row.get("ohlc_pattern", "?"),                               "inline": True},
-    ]
-
-    provisional = row.get("provisional", False)
-    m15_count   = row.get("m15_count", 0)
-    prov_suffix = f"  ⚠ forming ({m15_count}/16 M15s)" if provisional else ""
-
-    embed = {
-        "title":       f"{arrow} {grade_badge}{pair} — 1AM CRT {setup}{prov_suffix}",
-        "description": row.get("notes") or "1AM CRT scanner confluence reached A/B grade.",
-        "color":       colour,
-        "fields":      fields,
-        "footer":      {"text": f"1AM CRT · session {session} SAST · {_now_utc_str()} ({_now_sast_str()} SAST)"},
-    }
-    if _post_discord(embed):
-        _mark_sent(pair, rule)
-        log.info("CRT alert sent: %s %s grade=%s kt=%s session=%s",
-                 pair, setup, grade, kt, session)
 
 
 def alert_crt_5am_setup(pair: str, row: dict):

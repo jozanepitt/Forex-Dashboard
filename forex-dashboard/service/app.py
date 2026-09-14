@@ -16,7 +16,6 @@ import backtest as bt
 import vwap_mean_reversion_backtest
 import btmm_123
 import cache
-import crt_strategy
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
 import fetcher
@@ -127,55 +126,6 @@ def candles(symbol: str):
         "stale":    stale,
         "candles":  bars,
     })
-
-
-# 5-minute TTL cache for /crt — analyses are computed against H4-aligned candles
-# that only change every 4 hours. 5 min keeps tab-clicks instant, shields MT5 from
-# refresh storms, and avoids long blocking fetches when multiple tabs click rapidly.
-# The 15-min scheduler refresh keeps data fresh anyway.
-_CRT_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
-_CRT_TTL_SECS = 300
-
-
-@app.get("/crt")
-def crt():
-    """1AM CRT scanner across the universe.
-
-    Uses `fetcher.get_candles()` (live MT5 with TwelveData/Stooq fallback) for the
-    same data path as the BTMM tab. Fetches run in parallel
-    (ThreadPoolExecutor, 8 workers); inside the MT5 client a per-instance lock
-    serializes the actual IPC calls so concurrent symbols don't race on
-    `symbol_select`. Result memoized for 30s.
-    """
-    import time as _t
-    from concurrent.futures import ThreadPoolExecutor
-
-    now = _t.time()
-    if _CRT_CACHE["payload"] is not None and (now - _CRT_CACHE["ts"]) < _CRT_TTL_SECS:
-        return jsonify(_CRT_CACHE["payload"])
-
-    universe = crt_strategy.CRT_UNIVERSE
-    jobs: list[tuple[str, str]] = [(sym, "15min") for sym in universe]
-
-    def _fetch(job):
-        sym, iv = job
-        bars, stale = fetcher.get_candles(sym, iv, limit=400)
-        return sym, bars, stale
-
-    candles_by_pair: dict[str, dict] = {sym: {"m15": []} for sym in universe}
-    stale_set: set[str] = set()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for sym, bars, stale in pool.map(_fetch, jobs):
-            candles_by_pair[sym]["m15"] = bars
-            if stale:
-                stale_set.add(sym)
-
-    result = crt_strategy.analyze_universe(candles_by_pair)
-    result["stale_pairs"] = sorted(stale_set)
-    result["cached_at"] = int(now)
-    _CRT_CACHE["payload"] = result
-    _CRT_CACHE["ts"] = now
-    return jsonify(result)
 
 
 # 5-minute TTL cache for /vwap-mr — M15-based, same rationale as /crt.
