@@ -426,6 +426,7 @@ td.mono{font-family:var(--font-mono)}
 
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
+  <button class="mode-tab" data-mode="vwap9ema">⚠ VWAP+9EMA</button>
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="btmm123">🎯 BTMM 123</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
@@ -755,6 +756,38 @@ td.mono{font-family:var(--font-mono)}
       <span style="margin-left:auto;font-size:.65rem;color:var(--text-muted)">Click any row for detailed chart & analysis</span>
     </div>
     <div class="last-updated" id="lastUpdated">Last updated: --</div>
+  </div>
+
+  <!-- ── VWAP+9EMA (live, UNVALIDATED — failed backtest 0/48) ──────────────── -->
+  <div class="table-container" id="vwap9emaContainer" style="display:none">
+    <div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:var(--red);padding:10px 14px;border-radius:6px;margin-bottom:12px;font-weight:600">
+      ⚠ Unvalidated — failed the honest MT5 backtest (0/48 combinations passed). Trade at your own judgment.
+    </div>
+    <div class="trend-controls">
+      <button class="trend-refresh-btn" id="vwap9emaRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta">VWAP+9EMA vp-climax · USTECm/AUDUSDm · London session only</div>
+    </div>
+    <div class="trend-summary" id="vwap9emaSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Setup</th>
+          <th>Entry</th>
+          <th>Stop</th>
+          <th>Target</th>
+          <th>Session</th>
+        </tr>
+      </thead>
+      <tbody id="vwap9emaTableBody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>VWAP+9EMA (vp-climax variant, ema=9, rr=2.0):</b> pullback to the 9 EMA that rejects
+      in the VWAP trend direction, filtered by session volume profile (value area / POC proximity)
+      plus a volume-climax confirmation on the entry bar. Scoped to USTECm and AUDUSDm, London
+      session (UTC 07:00–15:00) only — the only two symbol/session combinations that ever showed
+      positive out-of-sample expectancy in the honest backtest, and even those failed on profit factor.
+    </div>
   </div>
 
   <!-- ── VWAP Mean Reversion (M15) ────────────────────────────────────────── -->
@@ -4857,7 +4890,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123';
+    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123' || mode === 'vwap9ema';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -4880,10 +4913,12 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     const vwapMrContainer  = document.getElementById('vwapMrContainer');
     const btmm123Container = document.getElementById('btmm123Container');
     const tdi123Container  = document.getElementById('tdi123Container');
+    const vwap9emaContainer = document.getElementById('vwap9emaContainer');
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
     if (vwapMrContainer)  vwapMrContainer.style.display  = (mode === 'vwap_mr')   ? 'block' : 'none';
     if (btmm123Container) btmm123Container.style.display = (mode === 'btmm123')   ? 'block' : 'none';
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
+    if (vwap9emaContainer) vwap9emaContainer.style.display = (mode === 'vwap9ema') ? 'block' : 'none';
 
     // Load content for the active mode
     if (mode === 'indicator') render();           // BTMM dashboard
@@ -4891,6 +4926,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'vwap_mr')   loadVwapMr();
     if (mode === 'btmm123')   loadBtmm123();
     if (mode === 'tdi123')    loadTdi123();
+    if (mode === 'vwap9ema')  loadVwap9ema();
   });
 });
 
@@ -5533,6 +5569,61 @@ function _crtGradeCell(g) {
   const weight = (g === 'A' || g === 'B') ? 700 : 500;
   return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// VWAP+9EMA (live, UNVALIDATED — failed backtest 0/48) — loader + renderer
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function loadVwap9ema() {
+  const tbody   = document.getElementById('vwap9emaTableBody');
+  const summary = document.getElementById('vwap9emaSummary');
+  const btn     = document.getElementById('vwap9emaRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Fetching M5 candles…';
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const resp = await fetch(`${baseUrl}/vwap9ema`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    renderVwap9emaTable(data);
+  } catch (err) {
+    console.error('VWAP+9EMA load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load VWAP+9EMA scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderVwap9emaTable(data) {
+  const tbody   = document.getElementById('vwap9emaTableBody');
+  const summary = document.getElementById('vwap9emaSummary');
+
+  const rows = (data.pairs || []).map(p => {
+    const setupColor = p.setup === 'BUY' ? 'var(--green)' : p.setup === 'SELL' ? 'var(--red)' : 'var(--text-muted)';
+    const sessionCell = p.in_active_session
+      ? '<span style="color:var(--green)">London — active</span>'
+      : '<span style="color:var(--text-muted)">Outside session</span>';
+    return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
+      <td><b>${p.symbol}</b></td>
+      <td><span style="color:${setupColor};font-weight:700">${p.setup}</span></td>
+      <td>${p.entry != null ? _crtFmtPrice(p.entry, p.symbol) : '—'}</td>
+      <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
+      <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
+      <td>${sessionCell}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
+    `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span>${stale}`;
+}
+
+document.getElementById('vwap9emaRefreshBtn')?.addEventListener('click', loadVwap9ema);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // BTMM 123 — loader + renderer (classic 1-2-3, BTMM-doctrine confirmed)

@@ -18,6 +18,7 @@ import btmm_123
 import cache
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
+import vwap9ema_strategy
 import fetcher
 import scheduler
 from providers import forexfactory
@@ -126,6 +127,40 @@ def candles(symbol: str):
         "stale":    stale,
         "candles":  bars,
     })
+
+
+# 5-minute TTL cache for /vwap9ema — M5-based, matches the VWAP+9EMA scanner's
+# own timeframe. UNVALIDATED strategy — see vwap9ema_strategy.py's docstring.
+_VWAP9EMA_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_VWAP9EMA_TTL_SECS = 300
+
+
+@app.get("/vwap9ema")
+def vwap9ema():
+    """Live VWAP+9EMA scanner (vp-climax variant) — UNVALIDATED, failed its
+    own honest backtest (0/48). Narrow universe (2 symbols), London session
+    only. See vwap9ema_strategy.py's module docstring for the full caveat.
+    """
+    import time as _t
+
+    now = _t.time()
+    if _VWAP9EMA_CACHE["payload"] is not None and (now - _VWAP9EMA_CACHE["ts"]) < _VWAP9EMA_TTL_SECS:
+        return jsonify(_VWAP9EMA_CACHE["payload"])
+
+    candles_by_pair: dict[str, dict] = {}
+    stale_set: set[str] = set()
+    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
+        bars, stale = fetcher.get_candles(sym, "5min", limit=100)
+        candles_by_pair[sym] = {"m5": bars}
+        if stale:
+            stale_set.add(sym)
+
+    result = vwap9ema_strategy.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _VWAP9EMA_CACHE["payload"] = result
+    _VWAP9EMA_CACHE["ts"] = now
+    return jsonify(result)
 
 
 # 5-minute TTL cache for /vwap-mr — M15-based, same rationale as /crt.
