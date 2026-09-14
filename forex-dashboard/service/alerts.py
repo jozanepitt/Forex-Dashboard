@@ -1489,13 +1489,21 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     if setup not in ("BUY", "SELL"):
         return
 
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("VWAP9EMA SUPPRESSED %s: incomplete trade plan", pair)
+        return
+
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.warning("VWAP9EMA alert BLOCKED for %s: bad R:R", pair)
+        return
+
     rule = f"vwap9ema_{setup.lower()}"
     if _is_throttled(pair, rule):
         return
 
     arrow = "📈" if setup == "BUY" else "📉"
     colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
-    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
 
     embed = {
         "title": f"{arrow} {pair} — VWAP+9EMA {setup}",
