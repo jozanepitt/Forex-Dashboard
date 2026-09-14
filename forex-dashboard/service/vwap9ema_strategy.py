@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent / "vwap9ema_backtest"))
 from volume_profile import compute_session_volume_profile, price_passes_vp_filter  # noqa: E402
 from backtest_mt5 import ema  # noqa: E402
 
-VWAP9EMA_UNIVERSE = ["USTECm", "AUDUSDm"]
+VWAP9EMA_UNIVERSE = ["USTEC", "AUD/USD"]
 EMA_LEN = 9
 RR = 2.0
 STOP_BUFFER = 0.10

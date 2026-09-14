@@ -105,7 +105,7 @@ def test_analyze_universe_shape():
 
 
 def test_universe_constant():
-    assert m.VWAP9EMA_UNIVERSE == ["USTECm", "AUDUSDm"]
+    assert m.VWAP9EMA_UNIVERSE == ["USTEC", "AUD/USD"]
 
 
 def test_entry_gap_past_swing_extreme_is_no_trade():
