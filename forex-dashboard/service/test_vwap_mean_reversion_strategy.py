@@ -276,26 +276,84 @@ def test_session_status_buckets():
 
 
 def test_score_and_grade_max_is_ten_grade_a():
-    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE")
+    # z=3.2 (deep extension, "great") — required for A, see depth-cap tests below.
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 3.2)
     assert score == 10
     assert grade == "A"
 
 
 def test_score_and_grade_below_c_floor_is_no_trade():
-    score, grade = m._score_and_grade(False, False, "unknown", "ASIAN")
+    score, grade = m._score_and_grade(False, False, "unknown", "ASIAN", 2.1)
     assert score == 3
     assert grade == "NO-TRADE"
 
 
 def test_score_and_grade_at_c_floor_is_c():
-    score, grade = m._score_and_grade(False, False, "close_inside_band", "ASIAN")
+    score, grade = m._score_and_grade(False, False, "close_inside_band", "ASIAN", 2.1)
     assert score == 4   # 3 base + 0 exhaustion + 0 fading + 1 confirmation + 0 session
     assert grade == "C"
 
 
 def test_score_and_grade_boundary_b():
-    score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON")
+    score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON", 2.1)
     assert score == 7   # 3 base + 2 exhaustion + 0 fading + 1 confirmation + 1 session
+    assert grade == "B"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Extension-depth grade cap (2026-09-14): |z| >= 2.0 is "good" (entry
+# gate, unchanged), |z| >= 3.0 is "great" — only a deep extension can
+# reach Grade A. 2.0-2.9 sigma caps out at B no matter how strong the
+# rest of the score is.
+# ──────────────────────────────────────────────────────────────────────
+
+def test_shallow_extension_caps_a_grade_score_down_to_b():
+    # Same score-10 inputs as the max-grade test above, but z=2.3 (shallow).
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 2.3)
+    assert score == 10          # the raw score is untouched by the cap
+    assert grade == "B"         # but the grade is capped
+
+
+def test_extension_at_exactly_three_sigma_keeps_a():
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 3.0)
+    assert grade == "A"
+
+
+def test_extension_just_under_three_sigma_caps_to_b():
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", 2.99)
+    assert grade == "B"
+
+
+def test_negative_z_uses_absolute_depth_for_the_cap():
+    # Extensions above VWAP report z >= +2.0; below VWAP report z <= -2.0.
+    # The cap must key off depth (magnitude), not sign.
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", -3.5)
+    assert grade == "A"
+    score, grade = m._score_and_grade(True, True, "rejection_wick", "ACTIVE", -2.4)
+    assert grade == "B"
+
+
+def test_depth_tier_label_great_at_three_sigma():
+    assert m._depth_tier_label(3.0) == "great"
+    assert m._depth_tier_label(-4.1) == "great"
+
+
+def test_depth_tier_label_strong_at_two_point_five_sigma():
+    assert m._depth_tier_label(2.5) == "strong"
+    assert m._depth_tier_label(-2.9) == "strong"
+
+
+def test_depth_tier_label_good_at_two_sigma():
+    assert m._depth_tier_label(2.0) == "good"
+    assert m._depth_tier_label(-2.4) == "good"
+
+
+def test_depth_cap_does_not_affect_b_or_lower_grades():
+    # A setup that only scores B on its own merits stays B regardless of
+    # how deep the extension is — the cap only ever downgrades A, never
+    # upgrades anything.
+    score, grade = m._score_and_grade(True, False, "close_inside_band", "LONDON", 4.0)
+    assert score == 7
     assert grade == "B"
 
 

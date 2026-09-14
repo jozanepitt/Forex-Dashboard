@@ -308,10 +308,31 @@ def _session_status(hour_utc: int) -> str:
     return "ASIAN"
 
 
+def _depth_tier_label(z_extension: float) -> str:
+    """Informational-only label for how deep the extension is (2026-09-14,
+    user request) — never gates alerting or changes the `grade` field
+    (that stays strictly A/B/C/NO-TRADE). "great" >= 3.0 sigma, "strong"
+    >= 2.5 sigma, "good" >= 2.0 sigma (the entry gate itself)."""
+    depth = abs(z_extension)
+    if depth >= 3.0:
+        return "great"
+    if depth >= 2.5:
+        return "strong"
+    return "good"
+
+
 def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
-                     session_status: str) -> tuple[int, str]:
+                     session_status: str, z_extension: float) -> tuple[int, str]:
     """Score out of 10 (matches the retired VWAP+9EMA's convention).
-    Base 3 = a real confirmed setup exists at all."""
+    Base 3 = a real confirmed setup exists at all.
+
+    Extension-depth grade cap (2026-09-14, user request): the entry gate
+    (Z_EXTENSION_THRESHOLD) only requires |z| >= 2.0 ("good"), but a
+    setup can only be graded A when the extension is truly deep,
+    |z| >= 3.0 ("great") — a 2.0-2.9 sigma extension caps out at B
+    regardless of how the rest of the score adds up. This only ever
+    downgrades A to B; it never upgrades a grade the score formula
+    didn't already earn."""
     score = 3
     if exhaustion:
         score += 2
@@ -322,6 +343,8 @@ def _score_and_grade(exhaustion: bool, fading: bool, confirmation_type: str,
     session_points = {"ACTIVE": 2, "LONDON": 1, "NY-LATE": 1, "ASIAN": 0}
     score += session_points.get(session_status, 0)
     grade = "A" if score >= 8 else "B" if score >= 6 else "C" if score >= 4 else "NO-TRADE"
+    if grade == "A" and abs(z_extension) < 3.0:
+        grade = "B"
     return score, grade
 
 
@@ -438,12 +461,13 @@ def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
 
     exhaustion = _exhaustion_volume(m15_candles, extension["idx"])
     fading = _fading_volume(m15_candles, extension["idx"], confirmation["idx"])
-    score, grade = _score_and_grade(exhaustion, fading, confirmation["type"], session_status)
+    score, grade = _score_and_grade(exhaustion, fading, confirmation["type"], session_status, extension["z"])
+    depth_tier = _depth_tier_label(extension["z"])
     plan = _calc_stop_and_targets(m15_candles, extension, confirmation, vwap, sigma, symbol)
     fresh = i <= plan["time_stop_bar_idx"]
 
     notes = (
-        f"{plan['setup']} confirmed: extension z={extension['z']:.2f} at bar "
+        f"{plan['setup']} confirmed: extension z={extension['z']:.2f} ({depth_tier}) at bar "
         f"{extension['idx']}, {confirmation['type']} confirmation "
         f"{confirmation['bars_since_extension']} bar(s) later."
     )
@@ -456,6 +480,7 @@ def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
 
     out.update({
         "setup": plan["setup"], "grade": grade, "score": score,
+        "depth_tier": depth_tier,
         "confirmation": confirmation,
         "exhaustion_volume": exhaustion, "fading_volume": fading,
         "entry": plan["entry"], "sl": plan["sl"], "tp1": plan["tp1"], "tp2": plan["tp2"],

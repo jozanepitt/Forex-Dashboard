@@ -143,9 +143,17 @@ BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "f
 # was built, mirroring the same default the VWAP+9EMA strategy it replaces
 # also shipped with.
 VWAP_MR_ALERTS_ENABLED = os.environ.get("VWAP_MR_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
-VWAP_MR_GRADE_A_ONLY = os.environ.get("VWAP_MR_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+# GRADE_A_ONLY default true (2026-09-14: restored per user request, same
+# signal-fatigue fix as BTMM123/TDI123 two days earlier — B/C setups no
+# longer alert). Note grade A itself now also requires a deep (>=3.0 sigma)
+# extension, not just score>=8 — see _score_and_grade's depth cap in
+# vwap_mean_reversion_strategy.py.
+VWAP_MR_GRADE_A_ONLY = os.environ.get("VWAP_MR_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
 VWAP_MR_MIN_SCORE = int(os.environ.get("VWAP_MR_MIN_SCORE", "9"))
-VWAP_MR_WATCH_ALERTS_ENABLED = os.environ.get("VWAP_MR_WATCH_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+# WATCH default false (2026-09-14: disabled per user request — was posting
+# "still forming" embeds even for Grade NO-TRADE (0/10) setups, same
+# premature-signal issue fixed for TDI123/BTMM123 on 2026-09-12).
+VWAP_MR_WATCH_ALERTS_ENABLED = os.environ.get("VWAP_MR_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 # News gate (doc §3.2/§3.3.5): suppress if either of the pair's currencies
 # has a high-impact ForexFactory event within 60 min. Reuses the exact same
 # infrastructure as TDI123/BTMM123 (forexfactory.currencies_in_window +
