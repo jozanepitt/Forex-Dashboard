@@ -36,15 +36,28 @@ EMA_LEN = 9
 RR = 2.0
 STOP_BUFFER = 0.10
 VOLUME_CLIMAX_MULT = 1.3
-# London session in UTC. Exness MT5 stamps bar times in UTC directly (offset
+# London+NY session in UTC, per explicit user request ("between London and NY
+# session only those 2"). Exness MT5 stamps bar times in UTC directly (offset
 # = 0s, confirmed live -- see providers/exness_mt5.py's module docstring and
-# service.log's per-connection "offset=0s"). The backtest's SESSIONS["London"]
-# = (9, 17) is therefore already UTC 9-17, not broker-server-time needing a
-# +2 conversion -- this constant must match that raw window exactly, since
-# it is the only thing standing between "scanning what was validated" and
-# "scanning 2 hours of never-tested market".
+# service.log's per-connection "offset=0s"), so these are raw UTC hours, not
+# broker-server-time needing a +2 conversion.
+#
+# This matches backtest_mt5.py's SESSIONS["Both"] = (9, 23) -- the UNION of
+# SESSIONS["London"] = (9, 17) and SESSIONS["NY"] = (15, 23) (they overlap
+# 15-17, so the union is one continuous span, no gap).
+#
+# IMPORTANT: "Both" was never itself run in the 48-combination validation
+# sweep (VALIDATION_RESULTS.md) -- only "London" and "NY" were tested as
+# SEPARATE windows, never their union. The near-miss numbers quoted
+# elsewhere (USTEC/AUD-USD, vp-climax, +0.043/+0.017 expR) are for LONDON
+# ONLY; the same sweep's NY-only numbers for those same two pairs were
+# worse (USTEC NY vp-climax: -0.116 expR/PF 0.80; AUD-USD NY vp-climax:
+# -0.204 expR/PF 0.68). Widening to 9-23 UTC means every NY-session hour
+# (17-23) now scanned live has ZERO backtest support at all for any pair,
+# not just a failed one -- an explicit, informed user choice, same pattern
+# as the earlier full-universe expansion.
 SESSION_START_UTC = 9
-SESSION_END_UTC = 17
+SESSION_END_UTC = 23
 MIN_BARS = 12  # matches backtest_mt5.run_day()'s own floor (n<12 -> return []); below this the EMA hasn't converged
 
 
@@ -76,7 +89,7 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
 
     if not m5_candles or not _in_session(m5_candles[-1]["ts_utc"]):
         out["in_active_session"] = False
-        out["notes"] = f"Outside London session (UTC {SESSION_START_UTC:02d}:00-{SESSION_END_UTC:02d}:00)."
+        out["notes"] = f"Outside London+NY session (UTC {SESSION_START_UTC:02d}:00-{SESSION_END_UTC:02d}:00)."
         return out
     out["in_active_session"] = True
 

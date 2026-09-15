@@ -4,17 +4,24 @@ This strategy failed its own honest backtest (0/48, see
 docs/superpowers/specs/2026-09-13-vwap9ema-mt5-validation-design.md) —
 it is built anyway per explicit user decision (see
 docs/superpowers/specs/2026-09-14-vwap9ema-live-replaces-1am-crt-design.md),
-labeled unvalidated everywhere, and (per a later explicit user request)
-scanning the same full pair universe as TDI123/BTMM123. These tests check
-the LIVE ADAPTATION logic (most-recent-bar signal detection, day/session
-filtering, entry/stop/target wiring) — the underlying VWAP/EMA/volume-profile
-math is already hand-verified in service/test_vwap9ema_volume_profile.py
-and service/test_vwap9ema_backtest_math.py and is not re-derived here,
+labeled unvalidated everywhere, and (per later explicit user requests)
+scanning the same full pair universe as TDI123/BTMM123, across the
+combined London+NY session window rather than London alone. These tests
+check the LIVE ADAPTATION logic (most-recent-bar signal detection,
+day/session filtering, entry/stop/target wiring) — the underlying
+VWAP/EMA/volume-profile math is already hand-verified in
+service/test_vwap9ema_volume_profile.py and
+service/test_vwap9ema_backtest_math.py and is not re-derived here,
 matching the convention every other live strategy's test file already
 follows.
 
-Session window is UTC 09:00-17:00 (Exness MT5 stamps bars in raw UTC,
+Session window is UTC 09:00-23:00 (Exness MT5 stamps bars in raw UTC,
 offset=0s, confirmed live -- see vwap9ema_strategy.py's module docstring).
+This is backtest_mt5.py's SESSIONS["Both"], the union of "London" (9-17)
+and "NY" (15-23) -- NOT itself a validated combination (only "London" and
+"NY" were run separately in the 48-combo sweep); see vwap9ema_strategy.py's
+module comment for the exact near-miss numbers this widening moves away
+from.
 MIN_BARS=12 matches backtest_mt5.run_day()'s own floor (n<12 -> no trades).
 
 The 12-bar BUY-signal fixture below is a 4-bar flat consolidation prefix
@@ -49,8 +56,8 @@ def _ts(day_hour_min):
 
 
 def _buy_signal_series():
-    """12 M5 bars, 10:00-10:55 UTC on 2026-01-05 (inside the 09:00-17:00
-    London window): 4 flat consolidation bars (typ=100.8 each, padding bar
+    """12 M5 bars, 10:00-10:55 UTC on 2026-01-05 (inside the 09:00-23:00
+    London+NY window): 4 flat consolidation bars (typ=100.8 each, padding bar
     count past MIN_BARS=12 without affecting the signal window), then the
     original 8-bar pattern -- a shallow dip that pierces the 9-EMA and
     rejects up, with the entry bar (last bar) landing back inside the
@@ -106,10 +113,13 @@ def test_no_signal_on_flat_series():
     assert "pullback" in row["notes"].lower() or "signal" in row["notes"].lower()
 
 
-def test_outside_london_session_is_no_trade():
+def test_outside_london_ny_session_is_no_trade():
+    """+12h (10:00 -> 22:00 UTC) is no longer outside session now that the
+    window is 09:00-23:00 (London+NY) -- +16h (10:00 -> 02:00 UTC next day)
+    is genuinely outside it."""
     candles = _buy_signal_series()
     for c in candles:
-        c["ts_utc"] += int(dt.timedelta(hours=12).total_seconds())  # 10:00-10:55 -> 22:00-22:55 UTC
+        c["ts_utc"] += int(dt.timedelta(hours=16).total_seconds())  # 10:00-10:55 -> 02:00-02:55 UTC
     row = m.analyze_pair("USTECm", candles)
     assert row["setup"] == "NO-TRADE"
     assert row["in_active_session"] is False
