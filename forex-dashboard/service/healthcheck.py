@@ -87,7 +87,7 @@ def main() -> int:
         check("Discord webhook valid", False, str(e))
 
     # 4. Dashboard endpoints return data
-    for ep in ("/btmm123",):
+    for ep in ("/btmm123", "/vwap9ema"):
         try:
             st, body = _get(ep, timeout=180)
             n = len(body.get("pairs", []))
@@ -100,6 +100,7 @@ def main() -> int:
         import alerts
         import cache
         import btmm_123
+        import vwap9ema_strategy
 
         sent = []
         alerts._post_discord = lambda e: (sent.append(1) or True)  # type: ignore
@@ -121,6 +122,10 @@ def main() -> int:
         _drive(btmm_123.BTMM123_UNIVERSE,
                {"1h": ("1h", 3200), "4h": ("4h", 200), "m15": ("15min", 3200)},
                (btmm_123.analyze_universe, alerts.alert_btmm123_setup))
+
+        _drive(vwap9ema_strategy.VWAP9EMA_UNIVERSE,
+               {"m5": ("5min", 100)},
+               (vwap9ema_strategy.analyze_universe, alerts.alert_vwap9ema_setup))
 
         check("alert pipeline runs clean", errs == 0,
               f"{len(sent)} setups would fire, {errs} errors")

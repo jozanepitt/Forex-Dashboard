@@ -102,9 +102,12 @@ def refresh_all():
     if updated:
         _record_refresh(time.time())  # mark healthy only when we actually got fresh data
 
-    # Fetch M5 candles for the VWAP+9EMA universe (2 symbols only -- cheap).
+    # Fetch M5 candles for the VWAP+9EMA universe (full PRIORITY_PAIRS list --
+    # paced same as the main fetch loop above so this doesn't hammer MT5).
     # No other live strategy uses M5; every other fetch above is M15/1h/4h/1day.
-    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
+    for i, sym in enumerate(vwap9ema_strategy.VWAP9EMA_UNIVERSE):
+        if i > 0:
+            time.sleep(FANOUT_DELAY_SECS)
         try:
             _fetch_guarded(sym, "5min", limit=100)
         except Exception as e:

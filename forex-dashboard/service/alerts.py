@@ -1505,11 +1505,18 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     arrow = "📈" if setup == "BUY" else "📉"
     colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
 
+    backtested_note = (
+        "" if pair in ("USTEC", "AUD/USD") else
+        "\n⚠ This pair was **never backtested at all** (only USTEC/AUD-USD were) — "
+        "this signal runs the identical unvalidated rule with zero historical evidence."
+    )
+
     embed = {
         "title": f"{arrow} {pair} — VWAP+9EMA {setup}",
         "description": (
             "⚠ **UNVALIDATED strategy — failed backtest (0/48).** "
-            "Not a Grade-A signal like your other alerts. Trade at your own judgment.\n\n"
+            "Not a Grade-A signal like your other alerts. Trade at your own judgment."
+            + backtested_note + "\n\n"
             + (row.get("notes") or "")
         ),
         "color": colour,
@@ -1519,7 +1526,7 @@ def alert_vwap9ema_setup(pair: str, row: dict):
             {"name": "Stop Loss", "value": f"`{_fmt_price(sl, pair)}`" if sl is not None else "—", "inline": True},
             {"name": "Target", "value": f"`{_fmt_price(tp1, pair)}`" if tp1 is not None else "—", "inline": True},
         ],
-        "footer": {"text": f"VWAP+9EMA (unvalidated) · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+        "footer": {"text": f"VWAP+9EMA (unvalidated) · entry is raw mid-price, no spread adjustment · {_now_utc_str()} ({_now_sast_str()} SAST)"},
     }
     if _post_discord(embed):
         _mark_sent(pair, rule)

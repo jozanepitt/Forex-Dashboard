@@ -25,18 +25,27 @@ sys.path.insert(0, str(Path(__file__).parent / "vwap9ema_backtest"))
 from volume_profile import compute_session_volume_profile, price_passes_vp_filter  # noqa: E402
 from backtest_mt5 import ema  # noqa: E402
 
-VWAP9EMA_UNIVERSE = ["USTEC", "AUD/USD"]
+from config import PRIORITY_PAIRS  # noqa: E402
+
+# Full PRIORITY_PAIRS universe per explicit user request (same pairs TDI123/
+# BTMM123 scan). Only USTEC/AUD-USD were ever backtested (0/48, see module
+# docstring); every other pair here runs the identical UNVALIDATED rule with
+# ZERO backtesting at all, not just a failed one.
+VWAP9EMA_UNIVERSE = list(PRIORITY_PAIRS)
 EMA_LEN = 9
 RR = 2.0
 STOP_BUFFER = 0.10
 VOLUME_CLIMAX_MULT = 1.3
-# London session in UTC. The backtest defined this as broker server hours
-# 9-17 assuming Exness ~= UTC+2 (giving UTC 7-15). Verify this against the
-# CURRENT live broker offset (same check fetch_mt5.py's detect_server_offset
-# already does) before trusting it long-term -- broker offsets can drift.
-SESSION_START_UTC = 7
-SESSION_END_UTC = 15
-MIN_BARS = 8  # need at least i>=3 (signal bar) plus i+1 (entry bar); 8 gives headroom
+# London session in UTC. Exness MT5 stamps bar times in UTC directly (offset
+# = 0s, confirmed live -- see providers/exness_mt5.py's module docstring and
+# service.log's per-connection "offset=0s"). The backtest's SESSIONS["London"]
+# = (9, 17) is therefore already UTC 9-17, not broker-server-time needing a
+# +2 conversion -- this constant must match that raw window exactly, since
+# it is the only thing standing between "scanning what was validated" and
+# "scanning 2 hours of never-tested market".
+SESSION_START_UTC = 9
+SESSION_END_UTC = 17
+MIN_BARS = 12  # matches backtest_mt5.run_day()'s own floor (n<12 -> return []); below this the EMA hasn't converged
 
 
 def _in_session(ts_utc: int) -> bool:
