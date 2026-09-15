@@ -87,7 +87,7 @@ def main() -> int:
         check("Discord webhook valid", False, str(e))
 
     # 4. Dashboard endpoints return data
-    for ep in ("/btmm123", "/vwap9ema"):
+    for ep in ("/btmm123", "/vwap9ema", "/tdi123", "/vwap-mr"):
         try:
             st, body = _get(ep, timeout=180)
             n = len(body.get("pairs", []))
@@ -101,6 +101,9 @@ def main() -> int:
         import cache
         import btmm_123
         import vwap9ema_strategy
+        import tdi_cycle_123
+        import vwap_mean_reversion_strategy
+        from config import DEFAULT_BACKFILL
 
         sent = []
         alerts._post_discord = lambda e: (sent.append(1) or True)  # type: ignore
@@ -126,6 +129,14 @@ def main() -> int:
         _drive(vwap9ema_strategy.VWAP9EMA_UNIVERSE,
                {"m5": ("5min", 100)},
                (vwap9ema_strategy.analyze_universe, alerts.alert_vwap9ema_setup))
+
+        _drive(tdi_cycle_123.TDI123_UNIVERSE,
+               {"1h": ("1h", DEFAULT_BACKFILL), "4h": ("4h", 200), "1d": ("1day", 60), "m15": ("15min", DEFAULT_BACKFILL)},
+               (tdi_cycle_123.analyze_universe, alerts.alert_tdi123_setup))
+
+        _drive(vwap_mean_reversion_strategy.VWAP_MR_UNIVERSE,
+               {"m15": ("15min", 400)},
+               (vwap_mean_reversion_strategy.analyze_universe, alerts.alert_vwap_mr_setup))
 
         check("alert pipeline runs clean", errs == 0,
               f"{len(sent)} setups would fire, {errs} errors")
