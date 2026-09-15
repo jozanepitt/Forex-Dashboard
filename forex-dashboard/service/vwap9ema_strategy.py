@@ -76,7 +76,7 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
 
     if not m5_candles or not _in_session(m5_candles[-1]["ts_utc"]):
         out["in_active_session"] = False
-        out["notes"] = "Outside London session (UTC 07:00-15:00)."
+        out["notes"] = f"Outside London session (UTC {SESSION_START_UTC:02d}:00-{SESSION_END_UTC:02d}:00)."
         return out
     out["in_active_session"] = True
 
