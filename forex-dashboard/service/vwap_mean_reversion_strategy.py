@@ -41,6 +41,9 @@ from tdi_cycle_123 import _atr
 
 VWAP_MR_UNIVERSE = [
     "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "USD/CAD", "NZD/USD",
+    "USTEC",  # Nasdaq -- the source spec was written for US equity index
+    # futures/ETFs (ES/NQ/SPY/QQQ) in the first place; this is closer to
+    # its native instrument than any forex major is.
 ]
 
 MIN_BARS_BEFORE_SIGNAL = 15

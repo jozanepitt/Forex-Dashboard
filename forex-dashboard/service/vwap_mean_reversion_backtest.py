@@ -48,7 +48,7 @@ def run(pair: str, start_ts: int, end_ts: int,
     Returns the same {stats, equity_curve, trades} shape as backtest.run().
     """
     if pair not in vwap_mean_reversion_strategy.VWAP_MR_UNIVERSE:
-        return {"error": f"VWAP Mean Reversion only supports majors: {', '.join(vwap_mean_reversion_strategy.VWAP_MR_UNIVERSE)}"}
+        return {"error": f"VWAP Mean Reversion only supports: {', '.join(vwap_mean_reversion_strategy.VWAP_MR_UNIVERSE)}"}
     if exit_mode not in ("tp1", "tp2"):
         return {"error": f"unknown exit_mode '{exit_mode}'"}
 
