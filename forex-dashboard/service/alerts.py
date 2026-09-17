@@ -543,9 +543,13 @@ def alert_crt_5am_setup(pair: str, row: dict):
         {"name": "OHLC Pattern", "value": row.get("ohlc_pattern", "?"),                                 "inline": True},
     ]
 
+    # This counts M15 sub-bars printed so far in the still-forming H4 anchor
+    # candle (M15_PER_H4 = 16) — data completeness, NOT the confluence score.
+    # Previously rendered as "(N/16 M15s)", which sits right next to the real
+    # "Grade B (N/12)" score field and reads as a second, conflicting score.
     provisional = row.get("provisional", False)
     m15_count   = row.get("m15_count", 0)
-    prov_suffix = f"  ⚠ forming ({m15_count}/16 M15s)" if provisional else ""
+    prov_suffix = f"  ⚠ anchor still forming ({m15_count}/16 M15 bars printed)" if provisional else ""
 
     embed = {
         "title":       f"{arrow} {grade_badge}{pair} — 5AM CRT {setup}{prov_suffix}",
