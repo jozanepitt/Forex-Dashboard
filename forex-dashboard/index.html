@@ -5807,15 +5807,32 @@ async function openBtmm123Chart(symbol, timeframe) {
   body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading ${tf} candles…</div>`;
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  // /btmm123/detail recomputes EMA-800 + swings + weekly pivots from a live
+  // candle fetch, so it's inherently slow (~10-20s normally) — and the local
+  // dev server processes requests one at a time, so it queues behind the
+  // page's own 21-pair polling cycle (and any other open tab's). Without a
+  // client-side timeout, a busy server left this modal stuck on "Loading…"
+  // forever with no feedback. Abort and surface an explicit message instead.
+  const DETAIL_TIMEOUT_MS = 45000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);
   try {
     const encoded = encodeURIComponent(symbol);
-    const resp = await fetch(`${baseUrl}/btmm123/detail?symbol=${encoded}&timeframe=${tf}`);
+    const resp = await fetch(`${baseUrl}/btmm123/detail?symbol=${encoded}&timeframe=${tf}`,
+                              { signal: controller.signal });
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
     title.textContent = `${symbol} — BTMM 123 [${data.timeframe || tf}]`;
     body.innerHTML = renderBtmm123ChartSvg(data);
   } catch (err) {
-    body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${err.message}</div>`;
+    const timedOut = err.name === 'AbortError';
+    const msg = timedOut
+      ? `Timed out after ${DETAIL_TIMEOUT_MS / 1000}s — the service is likely busy with other requests ` +
+        `(a scanner refresh, or another tab polling candles). Close extra tabs and try again.`
+      : err.message;
+    body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${msg}</div>`;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
