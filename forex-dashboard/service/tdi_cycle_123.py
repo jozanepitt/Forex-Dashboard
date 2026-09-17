@@ -826,6 +826,19 @@ def _analyze_timeframe(
         grade = "C"
         notes.append("grade capped: poor pivot location")
 
+    # StrictlyCorrect's own foundational rule (not a score, a hard requirement):
+    # "ONLY WHEN THE BASELINE ENTERS AN EXTREME, IS WHEN WE TRADE." TDI extreme
+    # was previously just one of several scored components (+2/+3 of 15), so a
+    # setup could reach grade A/B on divergence + signal cross + HTF alignment +
+    # freshness alone, with the baseline/RSI never having reached 37/63 or
+    # 32/68 at all — e.g. a live GBP/AUD H1 setup hit grade B (score 8) with
+    # tdi_extreme.present == False. Without this extreme, the source material
+    # says there is no setup to trade, so force NO-TRADE rather than merely
+    # capping the grade.
+    if not extreme["present"]:
+        grade = "NO-TRADE"
+        notes.append("no-trade: TDI baseline/RSI never reached an extreme at p3")
+
     if grade == "NO-TRADE":
         setup = "NO-TRADE"
     else:
