@@ -343,6 +343,9 @@ td.mono{font-family:var(--font-mono)}
 .tdi123-summary-tile:not(span){cursor:pointer}
 .tdi123-summary-tile:not(span):hover{background:var(--bg-elevated)}
 .tdi123-summary-tile b{color:#ec4899}
+.btmm123-summary-tile{display:inline-block;padding:6px 12px;margin-right:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);font-size:.72rem;transition:all .2s;cursor:pointer}
+.btmm123-summary-tile:hover{background:var(--bg-elevated)}
+.btmm123-summary-tile b{color:#ec4899}
 #backtestView{display:none;padding:0 24px 24px}
 #backtestView.active{display:block}
 .bt-header{display:flex;align-items:center;gap:12px;margin:16px 0 14px;flex-wrap:wrap}
@@ -4942,7 +4945,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // TDI123 filter state
-let tdi123Filter = 'all'; // 'all', 'a', 'b', 'c'
+let tdi123Filter = 'ab'; // 'all', 'ab', 'a', 'b' — default hides C/NO-TRADE noise
 let tdi123Data = null;
 
 async function loadTdi123() {
@@ -4962,7 +4965,7 @@ async function loadTdi123() {
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
     tdi123Data = data;
-    tdi123Filter = 'all';
+    tdi123Filter = 'ab';
     renderTdi123Table(data);
   } catch (err) {
     console.error('TDI123 load failed', err);
@@ -5010,17 +5013,21 @@ function renderTdi123Table(data) {
   const summary = document.getElementById('tdi123Summary');
   const pairs = data.pairs || [];
 
-  // Summary tiles (clickable filters)
+  // Summary tiles (clickable filters). Default view is "A+B only" — C and
+  // NO-TRADE rows are noise most of the time; "All" is one click away for
+  // manually checking C-grades.
   const tileAll = tdi123Filter === 'all' ? 'style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+  const tileAB  = tdi123Filter === 'ab'  ? 'style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
   const tileA = tdi123Filter === 'a' ? 'style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
   const tileB = tdi123Filter === 'b' ? 'style="background:var(--cyan-bg);border:1px solid var(--cyan-border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
 
   summary.innerHTML =
-    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll}>🎯 <b>${pairs.length}</b> pairs scanned</button>` +
-    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll} style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</button>` +
-    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll} style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="ab" ${tileAB}>🎯 <b>${pairs.length}</b> pairs scanned</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="ab" ${tileAB} style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="ab" ${tileAB} style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</button>` +
     `<button class="tdi123-summary-tile" data-tdi123-filter="a" ${tileA} style="color:var(--green)">⭐ <b>${data.grade_a || 0}</b> Grade A</button>` +
     `<button class="tdi123-summary-tile" data-tdi123-filter="b" ${tileB} style="color:var(--cyan)"><b>${data.grade_b || 0}</b> Grade B</button>` +
+    `<button class="tdi123-summary-tile" data-tdi123-filter="all" ${tileAll} style="color:var(--text-muted)">show all (incl. C/NO-TRADE)</button>` +
     `<span class="tdi123-summary-tile">${data.now_ny || ''}</span>` +
     ((data.stale_pairs && data.stale_pairs.length)
         ? `<span class="tdi123-summary-tile" style="color:var(--yellow)">stale: ${data.stale_pairs.join(', ')}</span>` : '');
@@ -5053,6 +5060,7 @@ function renderTdi123Table(data) {
   });
 
   // Apply grade filter
+  if (tdi123Filter === 'ab') sorted = sorted.filter(p => p.grade === 'A' || p.grade === 'B');
   if (tdi123Filter === 'a') sorted = sorted.filter(p => p.grade === 'A');
   if (tdi123Filter === 'b') sorted = sorted.filter(p => p.grade === 'B');
 
@@ -5635,6 +5643,10 @@ document.getElementById('vwap9emaRefreshBtn')?.addEventListener('click', loadVwa
 // BTMM 123 — loader + renderer (classic 1-2-3, BTMM-doctrine confirmed)
 // ═════════════════════════════════════════════════════════════════════════════
 
+// BTMM123 filter state — same convention as TDI123's: default hides C/NO-TRADE noise.
+let btmm123Filter = 'ab'; // 'all', 'ab', 'a', 'b'
+let btmm123Data = null;
+
 async function loadBtmm123() {
   const tbody   = document.getElementById('btmm123TableBody');
   const summary = document.getElementById('btmm123Summary');
@@ -5651,6 +5663,8 @@ async function loadBtmm123() {
     clearTimeout(tmr);
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
     const data = await resp.json();
+    btmm123Data = data;
+    btmm123Filter = 'ab';
     renderBtmm123Table(data);
   } catch (err) {
     console.error('BTMM123 load failed', err);
@@ -5767,14 +5781,19 @@ function renderBtmm123Table(data) {
   // Best setups first: A grades, then B, then C, then NO-TRADE; within a
   // grade, highest score first — instead of the fixed PRIORITY_PAIRS order.
   const gradeRank = {A: 0, B: 1, C: 2, 'NO-TRADE': 3, 'NO-DATA': 4};
-  const sorted = flatRows.slice().sort((a, b) => {
+  let sorted = flatRows.slice().sort((a, b) => {
     const ra = gradeRank[a.grade] ?? 5;
     const rb = gradeRank[b.grade] ?? 5;
     if (ra !== rb) return ra - rb;
     return (b.score || 0) - (a.score || 0);
   });
 
-  tbody.innerHTML = sorted.map(rowHtml).join('') || '<tr><td colspan="15" style="text-align:center;padding:24px">No data.</td></tr>';
+  // Apply grade filter — default 'ab' hides C/NO-TRADE noise (same convention as TDI123).
+  if (btmm123Filter === 'ab') sorted = sorted.filter(p => p.grade === 'A' || p.grade === 'B');
+  if (btmm123Filter === 'a')  sorted = sorted.filter(p => p.grade === 'A');
+  if (btmm123Filter === 'b')  sorted = sorted.filter(p => p.grade === 'B');
+
+  tbody.innerHTML = sorted.map(rowHtml).join('') || '<tr><td colspan="15" style="text-align:center;padding:24px">No rows at this filter.</td></tr>';
 
   tbody.querySelectorAll('button[data-btmm123-sym]').forEach(btn => {
     btn.addEventListener('click', () => openBtmm123Chart(btn.dataset.btmm123Sym, btn.dataset.btmm123Tf));
@@ -5784,14 +5803,30 @@ function renderBtmm123Table(data) {
     ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
   const resets = (data.pairs || []).filter(p => p.setup_type === 'reset' && (p.setup === 'BUY' || p.setup === 'SELL')).length
     + (data.pairs || []).filter(p => p.m15 && p.m15.setup_type === 'reset' && (p.m15.setup === 'BUY' || p.m15.setup === 'SELL')).length;
-  summary.innerHTML = `
-    <span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> ·
-    <span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> ·
-    <span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> ·
-    <span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span>
-    ${resets ? ` · <span style="color:var(--yellow);font-weight:600">${resets} Re-set</span>` : ''}
-    ${stale}
-  `;
+
+  // Summary tiles (clickable filters), same convention as TDI123's.
+  const tileAll = btmm123Filter === 'all' ? 'style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+  const tileAB  = btmm123Filter === 'ab'  ? 'style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+  const tileA   = btmm123Filter === 'a'   ? 'style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+  const tileB   = btmm123Filter === 'b'   ? 'style="background:var(--cyan-bg);border:1px solid var(--cyan-border);border-radius:4px;padding:6px 8px;cursor:pointer"' : 'style="cursor:pointer;opacity:0.6"';
+
+  summary.innerHTML =
+    `<button class="btmm123-summary-tile" data-btmm123-filter="ab" ${tileAB} style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</button>` +
+    `<button class="btmm123-summary-tile" data-btmm123-filter="ab" ${tileAB} style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</button>` +
+    `<button class="btmm123-summary-tile" data-btmm123-filter="a" ${tileA} style="color:var(--green)">⭐ <b>${data.grade_a || 0}</b> grade A</button>` +
+    `<button class="btmm123-summary-tile" data-btmm123-filter="b" ${tileB} style="color:var(--cyan)"><b>${data.grade_b || 0}</b> grade B</button>` +
+    (resets ? ` · <span style="color:var(--yellow);font-weight:600">${resets} Re-set</span>` : '') +
+    `<button class="btmm123-summary-tile" data-btmm123-filter="all" ${tileAll} style="color:var(--text-muted)">show all (incl. C/NO-TRADE)</button>` +
+    stale;
+
+  // Wire up filter buttons
+  summary.querySelectorAll('[data-btmm123-filter]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      btmm123Filter = btn.dataset.btmm123Filter;
+      renderBtmm123Table(btmm123Data);
+    });
+  });
 }
 
 async function openBtmm123Chart(symbol, timeframe) {
