@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
+import sys
 import time
 from pathlib import Path
 from urllib.parse import unquote
@@ -618,7 +620,43 @@ def refresh():
     return jsonify({"refreshed": len(results), "results": results})
 
 
+def _ensure_exclusive_port(host: str, port: int) -> None:
+    """Fail fast and loudly if another process already owns this port.
+
+    Werkzeug's dev server (what flask-socketio's threading async_mode runs on)
+    sets SO_REUSEADDR on its listening socket, and Windows' SO_REUSEADDR
+    semantics are looser than POSIX's -- a second, unrelated process can
+    successfully bind the same port instead of getting a clean "address
+    already in use" error. That's exactly how this service ended up running
+    as two silent, independent copies before (each with its own APScheduler,
+    so every scheduled job and every Discord alert fired twice, and the
+    guardian scripts' own comments already documented this failure mode).
+
+    This probe uses SO_EXCLUSIVEADDRUSE (Windows) to make a genuine conflict
+    raise immediately and audibly, rather than letting a duplicate process
+    start up and quietly coexist. Bound and released immediately so it
+    doesn't hold the port itself -- flask-socketio's own bind follows right
+    after this call, in main(), before cache.init_db()/scheduler.start() so a
+    duplicate never gets far enough to double up scheduled jobs either.
+    """
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if sys.platform == "win32":
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    try:
+        probe.bind((host, port))
+    except OSError as e:
+        log.error(
+            "port %d is already in use by another process -- refusing to start "
+            "a duplicate app.py instance (this is what previously caused doubled "
+            "scheduled jobs and doubled Discord alerts): %s", port, e,
+        )
+        raise SystemExit(1)
+    finally:
+        probe.close()
+
+
 def main():
+    _ensure_exclusive_port(SERVICE_HOST, SERVICE_PORT)
     cache.init_db()
     log.info("DB initialised at %s", cache.DB_PATH if False else "candles.db")
     try:

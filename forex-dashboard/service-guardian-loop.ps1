@@ -2,8 +2,9 @@
 # Keeps the forex signal service (app.py, port 3002) alive WITHOUT admin rights.
 # Launched hidden at logon by the Startup-folder shortcut, and also started
 # immediately when first installed. Loops every 3 minutes: if port 3002 is not
-# listening, it relaunches app.py DETACHED via WMI (Win32_Process.Create) so the
-# service is owned by the WMI host and survives this loop, the logon session, etc.
+# listening on TWO checks 5 seconds apart (debounced -- see below), it relaunches
+# app.py DETACHED via WMI (Win32_Process.Create) so the service is owned by the
+# WMI host and survives this loop, the logon session, etc.
 #
 # Single-instance: a global mutex guarantees only ONE loop ever runs, even if the
 # Startup launcher fires while a copy is already active.
@@ -26,6 +27,17 @@ Write-Log "guardian loop started (pid $PID)"
 while ($true) {
     try {
         $up = Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue
+        if (-not $up) {
+            # Debounce: a single "not listening" snapshot can just be the brief
+            # gap of a manual restart already in progress (kill old -> relaunch
+            # new). Re-check after a few seconds before acting -- a genuinely
+            # dead service is still down on the second check too. Without this,
+            # the guardian could win a race against a manual restart and launch
+            # its own second copy on top of it (same duplicate-process failure
+            # mode as the zombie-kill case below, just from the other side).
+            Start-Sleep -Seconds 5
+            $up = Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue
+        }
         if (-not $up) {
             # Clear any zombie app.py, then verify each one is actually gone before relaunching.
             # A silently-failed kill here previously left the old process alive alongside a
