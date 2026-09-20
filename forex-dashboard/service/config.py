@@ -31,6 +31,8 @@ PRIORITY_PAIRS = [
     "XAU/USD", "XAG/USD",  # Gold, Silver — MT5 maps to XAUUSDm / XAGUSDm
     "DE30", "US30", "USTEC",  # DAX 40, Dow 30, Nasdaq 100 — MT5 maps to DE30m / US30m / USTECm
     "DXY",  # US Dollar Index — MT5 maps to DXYm on Exness
+    "BTC/USD",  # Bitcoin — MT5 maps to BTCUSDm on Exness; spec in instruments.py
+    "ETH/USD",  # Ethereum — MT5 maps to ETHUSDm on Exness; spec in instruments.py
 ]
 
 INTERVAL_SECS = {

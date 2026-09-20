@@ -1009,13 +1009,15 @@ const FOREX_PAIRS = [
   { symbol:'DE30',    base:25000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
   { symbol:'US30',    base:44000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
   { symbol:'USTEC',   base:20000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
-  { symbol:'DXY',     base:100.0,  type:'index', pip:0.01, decimals:3, pipValue:1 }
+  { symbol:'DXY',     base:100.0,  type:'index', pip:0.01, decimals:3, pipValue:1 },
+  { symbol:'BTC/USD', base:65000,  type:'crypto', pip:1.0, decimals:1, pipValue:1 },
+  { symbol:'ETH/USD', base:3200,   type:'crypto', pip:0.1, decimals:2, pipValue:1 }
 ];
 
 const PRIORITY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
   'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD',
-  'XAU/USD', 'XAG/USD', 'DE30', 'US30', 'USTEC', 'DXY'
+  'XAU/USD', 'XAG/USD', 'DE30', 'US30', 'USTEC', 'DXY', 'BTC/USD', 'ETH/USD'
 ];
 
 // Per-asset base stop distance in PRICE terms (mirrors backend
@@ -1441,6 +1443,34 @@ function detectSharkFin(closes, tdi) {
   }
 
   return { active: false };
+}
+
+// Plain RSI(fast)/Signal(slow) line cross — no Bollinger-Band extreme
+// precondition. Distinct from detectTDILeg/detectSharkFin, which both
+// require the fast line to have first spiked outside the bands (Shark Fin
+// doctrine, correct for setups that actually call for it). Some setups'
+// own reference rules explicitly do NOT want a band/MBL extreme requirement
+// — just the fast-crosses-slow event itself (e.g. the ID50 / 50-50 Bounce
+// checklist: "TDI confirmation - RSI/Signal line cross," explicitly not
+// gated on RSI being above/below the MBL like other setups are).
+function detectRsiSignalCross(tdi, lookback = 5) {
+  const fastArr = tdi && tdi.fastArr, slowArr = tdi && tdi.slowArr;
+  if (!fastArr || !slowArr || fastArr.length < 2 || slowArr.length < 2) {
+    return { crossed: false, direction: null };
+  }
+  // fastArr/slowArr can differ in length (see detectSharkFin's own note) —
+  // align both to the same latest bar before comparing.
+  const off = fastArr.length - slowArr.length;
+  const slowAt = (i) => { const j = i - off; return (j >= 0 && j < slowArr.length) ? slowArr[j] : undefined; };
+  const last = fastArr.length - 1;
+  const start = Math.max(1, last - lookback + 1);
+  for (let i = start; i <= last; i++) {
+    const s0 = slowAt(i - 1), s1 = slowAt(i);
+    if (s0 === undefined || s1 === undefined) continue;
+    if (fastArr[i-1] <= s0 && fastArr[i] > s1) return { crossed: true, direction: 'bullish' };
+    if (fastArr[i-1] >= s0 && fastArr[i] < s1) return { crossed: true, direction: 'bearish' };
+  }
+  return { crossed: false, direction: null };
 }
 
 // 200 EMA Bounce Detection - BTMM High-Probability Setup
@@ -2392,9 +2422,17 @@ function detect22Trade(pair, ctx) {
 
 // 50/50 Bounce — mid-day reversal off the 50 EMA in the lull between London close and NY open.
 function detectFiftyFiftyBounce(pair, ctx) {
+  // == ID 50 ==. TDI confirmation is a plain RSI/Signal-line cross
+  // (detectRsiSignalCross), NOT a Bollinger-Band-extreme requirement. Per
+  // the trader's own reference checklist for this exact setup: "TDI
+  // confirmation - RSI/Signal line cross" — explicitly NOT gated on RSI
+  // being above/below the MBL/band the way other BTMM setups are.
+  // Previously gated on btmmTDILeg.leg===1 (detectTDILeg), which requires
+  // the fast line to be CURRENTLY OUTSIDE the band — the opposite of what
+  // this setup's own rules ask for.
   const pip = (pair && pair.pip) ? pair.pip : 0.0001;
   const { btmmLevelCount, btmmTDILeg, btmmH1MTF, currentPrice, e50, nearEMA50Setup,
-          mainCandles } = ctx;
+          mainCandles, tdi } = ctx;
 
   // Direction: H1 MTF if valid, else TDI 1st leg direction
   let direction = 'neutral';
@@ -2404,8 +2442,8 @@ function detectFiftyFiftyBounce(pair, ctx) {
   const dist50Pips = e50 ? Math.abs(currentPrice - e50) / pip : 999;
   const closeTo50 = dist50Pips <= 8;
   const freshCross = !!(btmmLevelCount && btmmLevelCount.level === 'I');
-  const tdiFirstLeg = !!(btmmTDILeg && btmmTDILeg.leg === 1 && btmmTDILeg.confidence !== 'low'
-                         && btmmTDILeg.direction === direction);
+  const rsiSigCross = detectRsiSignalCross(tdi);
+  const tdiConfirmed = !!(rsiSigCross.crossed && rsiSigCross.direction === direction);
   const h1Aligned = !!(btmmH1MTF && btmmH1MTF.valid && btmmH1MTF.trend === direction);
 
   // Lull window: London close (16:00 GMT) to NY open (12:00 GMT next day) — broadly the slow zone
@@ -2416,11 +2454,11 @@ function detectFiftyFiftyBounce(pair, ctx) {
   const inLull = (gmtHour >= 11 && gmtHour < 14) || (gmtHour >= 16 && gmtHour < 22);
 
   const gates = [
-    { name: 'Price ≤ 8 pips from EMA(50)', pass: closeTo50 },
-    { name: '13/50 Cross Level I (fresh)', pass: freshCross },
-    { name: 'TDI 1st Leg Building',        pass: tdiFirstLeg },
-    { name: 'H1 MTF Aligned',              pass: h1Aligned },
-    { name: 'Mid-Day Lull Window',         pass: inLull }
+    { name: 'Price ≤ 8 pips from EMA(50)',        pass: closeTo50 },
+    { name: '13/50 Cross Level I (fresh)',        pass: freshCross },
+    { name: 'RSI/Signal Line Cross (no MBL req)', pass: tdiConfirmed },
+    { name: 'H1 MTF Aligned',                     pass: h1Aligned },
+    { name: 'Mid-Day Lull Window',                pass: inLull }
   ];
 
   let entry = 0, sl = 0, tp1 = 0, tp2 = 0;
@@ -4679,6 +4717,7 @@ function _jIsLong(dir) { return /buy|bull|long/i.test(dir || ''); }
 // Classify an instrument the same way the backtest did.
 function _jClass(pair) {
   if (pair === 'XAU/USD' || pair === 'XAG/USD') return 'metal';
+  if (pair === 'BTC/USD' || pair === 'ETH/USD') return 'crypto';
   if (['DE30','US30','USTEC','NAS100','GER40','DXY'].includes(pair)) return 'index';
   if (['EUR/USD','GBP/USD','USD/JPY','USD/CHF','USD/CAD','AUD/USD','NZD/USD'].includes(pair)) return 'fx-major';
   return 'fx-cross';
@@ -4981,6 +5020,7 @@ document.getElementById('tdi123RefreshBtn')?.addEventListener('click', loadTdi12
 function _tdi123FmtPrice(p, sym) {
   if (p === undefined || p === null) return '—';
   if (!sym) return Number(p).toFixed(5);
+  if (sym === 'ETH/USD') return Number(p).toFixed(2);  // explicit: price range overlaps the >5000 bucket
   if (p > 5000) return Number(p).toFixed(1);
   if (sym === 'XAU/USD') return Number(p).toFixed(2);
   if (sym === 'XAG/USD') return Number(p).toFixed(3);
@@ -5564,7 +5604,8 @@ if (vwapMrBtn) vwapMrBtn.addEventListener('click', loadVwapMr);
 function _crtFmtPrice(p, sym) {
   if (p === undefined || p === null) return '—';
   if (!sym) return p.toFixed(5);
-  if (p > 5000) return p.toFixed(1);            // indices: DE30, US30, USTEC
+  if (sym === 'ETH/USD') return p.toFixed(2);  // explicit: price range overlaps the >5000 bucket
+  if (p > 5000) return p.toFixed(1);            // indices: DE30, US30, USTEC, BTC/USD
   if (sym === 'XAU/USD') return p.toFixed(2);  // gold ~2050.00
   if (sym === 'XAG/USD') return p.toFixed(3);  // silver ~24.500
   if (sym === 'DXY') return p.toFixed(3);       // US Dollar Index ~100.000

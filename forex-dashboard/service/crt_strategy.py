@@ -50,6 +50,7 @@ CRT_UNIVERSE = [
     "XAU/USD", "XAG/USD",
     "DE30", "US30", "USTEC",
     "DXY",  # US Dollar Index (broker: DXYm on Exness)
+    "BTC/USD",  # broker: BTCUSDm on Exness
 ]
 
 NY_HOUR_CBDR = 17

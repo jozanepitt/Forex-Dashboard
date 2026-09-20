@@ -76,7 +76,7 @@ SYMBOL_SPECS: dict[str, dict] = {
     # handles this, no override needed. Price ~100, 3-digit, so pip=0.01 and
     # min_sl_pips=15 ≈ 0.15% of price.
     "DXY":     dict(pip=0.01,   digits=3, cls="index", min_sl_pips=15),
-    # ── Crypto (reference; not currently in the universe) ──
+    # ── Crypto ──
     "BTC/USD": dict(pip=1.0,    digits=1, cls="crypto", min_sl_pips=150),
     "ETH/USD": dict(pip=0.1,    digits=2, cls="crypto", min_sl_pips=50),
 }
