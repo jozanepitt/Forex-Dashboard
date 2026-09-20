@@ -58,17 +58,24 @@ NY_HOUR_ASIA = 21
 NY_HOUR_1AM = 1
 NY_HOUR_5AM = 5
 
-# Key time windows for 1AM CRT (offsets from 1AM anchor in hours)
+# Key time windows for 1AM CRT (offsets from 1AM anchor in hours).
+# NY hours are authoritative here. SAST equivalents are NOT a fixed offset:
+# NY observes DST (UTC-4 EDT / UTC-5 EST) while SAST doesn't (fixed UTC+2),
+# so the NY->SAST gap is 6h in EDT and 7h in EST. Don't hardcode a single
+# SAST value in comments — it silently goes wrong twice a year. The live,
+# DST-aware conversion is what's actually shown on the dashboard/Discord
+# (see crt_utils.ny_dt / key_time_status_split).
 KEY_TIME_WINDOWS_1AM = [
-    {"name": "London Open",    "start_h": 1, "end_h": 2},   # 2-3 AM NY  = 4-5 AM SAST
-    {"name": "Silver Bullet",  "start_h": 2, "end_h": 3},   # 3-4 AM NY  = 5-6 AM SAST
+    {"name": "London Open",    "start_h": 1, "end_h": 2},   # 2-3 AM NY (~08:00-10:00 SAST depending on US DST)
+    {"name": "Silver Bullet",  "start_h": 2, "end_h": 3},   # 3-4 AM NY (~09:00-11:00 SAST depending on US DST)
 ]
 
 # Key time windows for 5AM CRT (offsets from 5AM NY anchor in hours)
 # Source: MADO / @Im-speculator — "How to Trade the 5AM CRT"
+# (Same NY/SAST-authoritativeness note as KEY_TIME_WINDOWS_1AM above.)
 KEY_TIME_WINDOWS_5AM = [
-    {"name": "London Lunch",   "start_h": 1,   "end_h": 2},   # 6-7 AM NY  =  8-9 AM SAST
-    {"name": "NY Open",        "start_h": 2,   "end_h": 3.5}, # 7-8:30 AM NY = 9-10:30 AM SAST
+    {"name": "London Lunch",   "start_h": 1,   "end_h": 2},   # 6-7 AM NY (~12:00-14:00 SAST depending on US DST)
+    {"name": "NY Open",        "start_h": 2,   "end_h": 3.5}, # 7-8:30 AM NY (~13:00-15:30 SAST depending on US DST)
 ]
 
 M15_PER_H4 = 16
@@ -444,8 +451,11 @@ def analyze_pair_5am(
 ) -> dict:
     """Run the 5AM CRT pipeline for one pair.
 
-    The 5AM H4 candle (NY 05:00–09:00 / SAST 07:00–11:00) is the setup candle.
-    Key entry window is the NY Open kill zone (09:00–11:00 NY / 11:00–13:00 SAST).
+    The 5AM H4 candle (NY 05:00-09:00) is the setup candle. Key entry window is
+    06:00-08:30 NY (KEY_TIME_WINDOWS_5AM: "London Lunch" + "NY Open" sub-windows
+    — not the 09:00-11:00 this docstring used to (wrongly) claim). SAST
+    equivalents shift with US DST (NY UTC-4 EDT / UTC-5 EST vs SAST's fixed
+    UTC+2) — the dashboard/Discord alerts show the live, DST-aware conversion.
     SMT comparison is on the 5AM candle of EUR/USD ↔ GBP/USD.
     """
     if now_ny is None:
@@ -467,18 +477,26 @@ def analyze_pair_5am(
     b_5am  = buckets.get(anchor_5am)
 
     # CRT range — 5AM strategy uses THREE CRT candles: 5PM, 9PM AND 1AM
-    # (per MADO/@Im-speculator "5AM CRT" PDF, page 4)
+    # (per MADO/@Im-speculator "5AM CRT" PDF, page 4's DOL/narrative-building
+    # step). NOTE: this is deliberately NOT named crt_high/crt_low — the PDF's
+    # own "CRH"/"CRL" diagrams (pp.6, 8, 10) label a different thing entirely:
+    # the 5AM candle's OWN high/low, used purely as a downstream narrative
+    # marker for classifying NY-session behavior, never as something the same
+    # candle sweeps. This variable is the pre-5AM reference range that
+    # _crt_setup_from_sweep() below actually checks for a sweep-and-reclaim —
+    # naming it "crt_high"/"crt_low" would collide with the PDF's own CRH/CRL
+    # term for an unrelated concept.
     crt_buckets = [b for b in (b_cbdr, b_asia, b_1am) if b]
     if crt_buckets:
-        crt_high = max(b["high"] for b in crt_buckets)
-        crt_low  = min(b["low"]  for b in crt_buckets)
+        crt_range_high = max(b["high"] for b in crt_buckets)
+        crt_range_low  = min(b["low"]  for b in crt_buckets)
     else:
-        crt_high = crt_low = None
+        crt_range_high = crt_range_low = None
 
     # DOL from 5AM anchor
     current_price = b_5am["close"] if b_5am else (m15_candles[-1]["close"] if m15_candles else 0)
     dol = detect_dol(buckets, anchor_5am, current_price,
-                     session_high=crt_high, session_low=crt_low)
+                     session_high=crt_range_high, session_low=crt_range_low)
     dol_bias = dol["bias"]
 
     # ATR
@@ -521,7 +539,7 @@ def analyze_pair_5am(
         }
         ohlc = ohlc_pattern(b_5am)   # kept for display only
         # Setup REQUIRES a real range sweep + close back inside (see 1AM path).
-        setup = _crt_setup_from_sweep(b_5am, crt_high, crt_low)
+        setup = _crt_setup_from_sweep(b_5am, crt_range_high, crt_range_low)
         if setup == "BUY":
             entry_zone = {"side": "below_open", "level": c["open"]}
         elif setup == "SELL":
@@ -550,7 +568,7 @@ def analyze_pair_5am(
     active_kt_window     = kt["active_window"]
 
     # Intraday profile — 5AM strategy: London Lunch Low / NY Continuation / NY Reversal
-    intraday = detect_intraday_profile_5am(buckets, anchor_5am, crt_high, crt_low)
+    intraday = detect_intraday_profile_5am(buckets, anchor_5am, crt_range_high, crt_range_low)
 
     # Order blocks (M15 within 5AM bucket)
     ob_candles   = b_5am["m15s"] if b_5am else m15_candles[-32:]
@@ -565,7 +583,7 @@ def analyze_pair_5am(
                 entry_ob = ob
                 break
 
-    # Confluence scoring (max ~12)
+    # Confluence scoring (max ~14)
     score = 0
     notes = []
     if profile_type == "TYPE_1_CONT":
@@ -574,18 +592,22 @@ def analyze_pair_5am(
     elif profile_type == "5AM_EXPANSION":
         score += 2
         notes.append(f"5AM expansion (1AM {am1_type})")
+    # DOL is the PDF's own step 1, explicitly "the most important aspect...
+    # first priority" (p.2) — weighted as the single largest confluence
+    # factor (was 2, tied with SMT) to reflect that, short of making it a
+    # hard gate on the BUY/SELL decision itself.
     if setup == "BUY"  and dol_bias == "BULLISH":
-        score += 2
+        score += 4
         notes.append("DOL bullish aligns BUY")
     if setup == "SELL" and dol_bias == "BEARISH":
-        score += 2
+        score += 4
         notes.append("DOL bearish aligns SELL")
-    if setup == "BUY"  and crt_low  is not None and b_5am and b_5am["low"]  < crt_low:
+    if setup == "BUY"  and crt_range_low  is not None and b_5am and b_5am["low"]  < crt_range_low:
         score += 1
-        notes.append("5AM swept CRT low")
-    if setup == "SELL" and crt_high is not None and b_5am and b_5am["high"] > crt_high:
+        notes.append("5AM swept CRT range low")
+    if setup == "SELL" and crt_range_high is not None and b_5am and b_5am["high"] > crt_range_high:
         score += 1
-        notes.append("5AM swept CRT high")
+        notes.append("5AM swept CRT range high")
     smt_pts = _smt_confluence_score(setup, smt)
     if smt_pts:
         score += smt_pts
@@ -621,8 +643,8 @@ def analyze_pair_5am(
         "dol_bias":                 dol_bias,
         "dol_target":               dol.get("target"),
         "dol_type":                 dol.get("dol_type"),
-        "crt_high":                 crt_high,
-        "crt_low":                  crt_low,
+        "crt_range_high":           crt_range_high,
+        "crt_range_low":            crt_range_low,
         "candle_5pm":               bucket_brief(b_cbdr, cbdr_type),
         "candle_9pm":               bucket_brief(b_asia, asia_type),
         "candle_1am":               bucket_brief(b_1am,  am1_type),

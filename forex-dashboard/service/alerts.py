@@ -395,13 +395,22 @@ def alert_513_cross(pair: str, direction: str, price: float):
 
 
 def _build_crt_trade_plan(pair: str, row: dict, setup: str, candle_key: str) -> Optional[dict]:
-    """Build entry/SL/TP1/TP2 for a CRT setup per MADO PDF spec.
+    """Build entry/SL/TP1/TP2 for a CRT setup.
 
     Strategy spec:
       Entry = M15 OB mid (if available) else 1AM/5AM candle open ("buy below open / sell above").
       SL    = beyond the OB extreme (or candle extreme as fallback), padded by 0.25× ATR-like buffer.
-      TP1   = entry ± risk × 2.0   (1:2 RR — strategy minimum, PDF pages 22 & 27)
-      TP2   = entry ± risk × 3.0   (1:3 RR — strategy preferred target)
+      TP1   = entry ± risk × 2.0   (1:2 RR)
+      TP2   = entry ± risk × 3.0   (1:3 RR)
+
+    NOTE: neither the 18-page 5AM CRT PDF nor the 116-page foundational CRT PDF
+    contains any SL/TP/R:R doctrine at all (confirmed by full-document review,
+    see BTMM_CRT_STRATEGY_AUDIT.md Part 5). This 1:2/1:3 convention was
+    previously mis-cited here as "PDF pages 22 & 27" — the 5AM PDF is only 18
+    pages, those don't exist in it. Pages 22/27 are real, but belong to the
+    SEPARATE 1AM CRT PDF's worked examples, not this 5AM code path. It's a
+    reasonable, conventional R:R choice; just not something the 5AM source
+    material itself specifies.
 
     Returns None if we lack the data to build a sane plan.
     """
@@ -456,7 +465,9 @@ def alert_crt_5am_setup(pair: str, row: dict):
 
     `row` is one element from crt_strategy.analyze_universe_5am()['pairs'].
     Grade A only by default (CRT_5AM_GRADE_A_ONLY=true). Throttled per session.
-    Key window: 09:00–11:00 NY / 11:00–13:00 SAST.
+    Key window: 06:00-08:30 NY (not 09:00-11:00, which this docstring used to
+    wrongly claim). SAST shifts with US DST — row['key_time_window_sast'] is
+    the live, DST-aware conversion actually shown in the Discord alert.
     """
     setup   = row.get("setup")
     grade   = row.get("grade")
@@ -491,7 +502,7 @@ def alert_crt_5am_setup(pair: str, row: dict):
     )
 
     c5      = row.get("candle_5am") or {}
-    crt_hi, crt_lo = row.get("crt_high"), row.get("crt_low")
+    crt_hi, crt_lo = row.get("crt_range_high"), row.get("crt_range_low")
     crt_str = f"`{_fmt_price(crt_hi)}` / `{_fmt_price(crt_lo)}`" if (crt_hi and crt_lo) else "—"
     c5_open, c5_close = c5.get("open"), c5.get("close")
     c5_str  = (
@@ -508,7 +519,8 @@ def alert_crt_5am_setup(pair: str, row: dict):
         "NONE":                       "—",
     }.get(smt_raw, smt_raw)
 
-    # Build trade plan (entry/SL/TP1@1:2/TP2@1:3 per MADO 5AM CRT PDF page 18)
+    # Build trade plan (entry/SL/TP1@1:2/TP2@1:3 — a conventional R:R choice,
+    # not from the 5AM PDF; see _build_crt_trade_plan's docstring)
     plan = _build_crt_trade_plan(pair, row, setup, candle_key="candle_5am")
     if plan:
         plan_str = (
@@ -535,7 +547,7 @@ def alert_crt_5am_setup(pair: str, row: dict):
         {"name": "Entry Source", "value": plan_source,                                                  "inline": True},
         {"name": "Entry Zone",   "value": entry_str,                                                    "inline": True},
         {"name": "5AM Candle",   "value": c5_str,                                                      "inline": True},
-        {"name": "CRT H/L",      "value": crt_str,                                                     "inline": True},
+        {"name": "CRT Range H/L","value": crt_str,                                                     "inline": True},
         {"name": "Market Profile","value": f"{row.get('profile_type', '?')} — {row.get('profile_label', '')}", "inline": False},
         {"name": "Intraday",     "value": intra_str,                                                    "inline": True},
         {"name": "DOL Bias",     "value": row.get("dol_bias", "?") or "—",                             "inline": True},

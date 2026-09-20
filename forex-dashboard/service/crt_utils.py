@@ -469,8 +469,8 @@ def detect_intraday_profile_1am(
 def detect_intraday_profile_5am(
     buckets: dict[datetime, dict],
     anchor_5am: datetime,
-    crt_high: Optional[float],
-    crt_low: Optional[float],
+    crt_range_high: Optional[float],
+    crt_range_low: Optional[float],
 ) -> dict:
     """5AM CRT intraday profile detection (per MADO 5AM CRT PDF pages 5–11).
 
