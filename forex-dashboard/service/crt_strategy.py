@@ -525,6 +525,7 @@ def analyze_pair_5am(
     ohlc       = "unknown"
     setup      = "NO-TRADE"
     entry_zone = None
+    notes      = []
     m15_count  = len(b_5am["m15s"]) if b_5am else 0
     provisional = anchors["is_live"] and b_5am is not None and m15_count < M15_PER_H4
 
@@ -537,9 +538,23 @@ def analyze_pair_5am(
             "close":     c["close"],
             "direction": "bullish" if c["close"] > c["open"] else "bearish" if c["close"] < c["open"] else "doji",
         }
-        ohlc = ohlc_pattern(b_5am)   # kept for display only
+        ohlc = ohlc_pattern(b_5am)
         # Setup REQUIRES a real range sweep + close back inside (see 1AM path).
         setup = _crt_setup_from_sweep(b_5am, crt_range_high, crt_range_low)
+
+        # PDF's actual stated entry model (pp.12-13, 18): the OHLC/OLHC open-
+        # relative bias must agree with the sweep direction, confirmed by a
+        # matching M15 order block within the setup window (see the gate
+        # below). Both signals were already computed here but previously
+        # unused (ohlc) or only a minor scoring bonus (order block) --
+        # promoted to hard gates so a signal can't fire on the range-sweep
+        # alone without the PDF's own confirming structure.
+        if setup in ("BUY", "SELL"):
+            ohlc_agrees = (ohlc == "OLHC" and setup == "BUY") or (ohlc == "OHLC" and setup == "SELL")
+            if not ohlc_agrees:
+                notes.append(f"no-trade: OHLC/OLHC bias ({ohlc}) disagrees with sweep direction ({setup})")
+                setup = "NO-TRADE"
+
         if setup == "BUY":
             entry_zone = {"side": "below_open", "level": c["open"]}
         elif setup == "SELL":
@@ -583,9 +598,15 @@ def analyze_pair_5am(
                 entry_ob = ob
                 break
 
-    # Confluence scoring (max ~14)
+    # PDF's p.18 entry model requires an actual M15 order block -- without
+    # one, there's no valid entry trigger even if direction/bias agree.
+    if setup in ("BUY", "SELL") and entry_ob is None:
+        notes.append(f"no-trade: no matching M15 order block found for {setup}")
+        setup = "NO-TRADE"
+        entry_zone = None
+
+    # Confluence scoring (max ~13)
     score = 0
-    notes = []
     if profile_type == "TYPE_1_CONT":
         score += 3
         notes.append("TYPE_1_CONT: 1AM expansion → 5AM continuation")
@@ -618,9 +639,9 @@ def analyze_pair_5am(
     elif key_time_status == "WAITING":
         score += 1
         notes.append("Approaching NY Open key-time")
-    if entry_ob:
-        score += 1
-        notes.append(f"M15 OB ({entry_ob['type']})")
+    # (M15 OB presence is no longer a scoring bonus -- it's now a
+    # precondition for any BUY/SELL surviving at all, so it wouldn't
+    # differentiate among the rows that reach this point.)
     if intraday["profile"] in ("london_lunch_low", "london_lunch_high",
                                 "ny_continuation", "ny_reversal"):
         score += 1
@@ -635,6 +656,13 @@ def analyze_pair_5am(
     elif score >= 3:
         grade = "C"
     else:
+        grade = "NO-TRADE"
+
+    # A NO-TRADE setup must never display a real-looking grade -- Market
+    # Profile/key-time/intraday score contributions are direction-
+    # independent and can still add up even when setup was downgraded
+    # (range-sweep found nothing, or one of the two gates above rejected it).
+    if setup == "NO-TRADE":
         grade = "NO-TRADE"
 
     sast = ZoneInfo("Africa/Johannesburg")
