@@ -768,7 +768,7 @@ td.mono{font-family:var(--font-mono)}
     </div>
     <div class="trend-controls">
       <button class="trend-refresh-btn" id="vwap9emaRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta">VWAP+9EMA vp-climax · full pair universe (same as TDI123/BTMM123) · London+NY session only</div>
+      <div class="trend-meta">VWAP+9EMA cross · full pair universe incl. BTC/USD, ETH/USD (same as TDI123/BTMM123) · London+NY session only</div>
     </div>
     <div class="trend-summary" id="vwap9emaSummary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table">
@@ -785,18 +785,15 @@ td.mono{font-family:var(--font-mono)}
       <tbody id="vwap9emaTableBody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>VWAP+9EMA (vp-climax variant, ema=9, rr=2.0):</b> pullback to the 9 EMA that rejects
-      in the VWAP trend direction, filtered by session volume profile (value area / POC proximity)
-      plus a volume-climax confirmation on the entry bar. London+NY session (UTC 09:00–23:00) only —
-      widened from London-only at the user's explicit request; the NY leg (17:00–23:00 UTC) was
-      never separately backtested as part of that combined window (only "London" and "NY" were
-      tested as SEPARATE windows in the 48-combo sweep, never their union).
-      Entry shown is the raw mid-price — the backtest paid half the entry bar's spread and this
-      live scanner does not, so real fills will be slightly worse than the numbers shown.
-      <br><b>⚠ Only USTEC and AUD/USD were ever backtested</b> (0/48 combinations passed, and even
-      those two failed on profit factor, London session only). Every other pair on this scan runs
-      the identical UNVALIDATED rule with <b>zero backtesting at all</b> — expanded to the full
-      universe at the user's explicit request, not because any additional evidence supports it.
+      <b>VWAP+9EMA (cross-only, ema=9, rr=2.0):</b> fires purely on the 9 EMA crossing the
+      session VWAP on the M5 chart — no pullback pattern, no volume-profile filter, no
+      volume-climax filter. Deliberately simplified per explicit user request; check volume/
+      context yourself before trading. London+NY session (UTC 09:00–23:00) only.
+      Entry shown is the raw mid-price at the next bar's open; real fills will differ slightly.
+      <br><b>⚠ This exact rule has never been backtested</b> — it replaces the earlier
+      "vp-climax" variant (which failed its own honest backtest, 0/48) with a completely
+      different, simpler rule, not a re-tuned version of it. Zero historical validation on
+      any pair, including BTC/USD and ETH/USD.
     </div>
   </div>
 

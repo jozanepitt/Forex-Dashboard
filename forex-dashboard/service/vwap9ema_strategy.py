@@ -1,19 +1,20 @@
-"""Live VWAP+9EMA scanner — the vp-climax variant that came closest to
-passing its own honest backtest (0/48, see
-docs/superpowers/specs/2026-09-13-vwap9ema-mt5-validation-design.md),
-at ema=9, rr=2.0, stop_buffer=0.10, volume_climax_mult=1.3 -- the exact
-configuration behind the near-miss numbers, not re-tuned.
+"""Live VWAP+9EMA scanner — deliberately simplified per explicit user
+request (2026-09-20) to just: the 9 EMA crosses the VWAP on the M5 chart,
+nothing else. The user judges volume/context manually before trading.
 
-Built anyway per explicit user decision (see
-docs/superpowers/specs/2026-09-14-vwap9ema-live-replaces-1am-crt-design.md):
-manual trading with the user's own judgment, not an automated trusted
-signal. There are deliberately NO grade tiers -- every row is either a
-real signal or NO-TRADE, and `grade` is always the literal string
+This REPLACES the earlier "vp-climax" variant (trend-alignment + EMA-
+pullback-reject + volume-profile filter + volume-climax filter), which
+failed its own honest backtest (0/48, see
+docs/superpowers/specs/2026-09-13-vwap9ema-mt5-validation-design.md) even
+with all those extra filters. This simpler cross-only rule has not been
+backtested at all — it is not a re-tuned or lighter version of the old
+rule, it's a different rule entirely.
+
+Built for manual trading with the user's own judgment, not an automated
+trusted signal. There are deliberately NO grade tiers -- every row is
+either a real signal or NO-TRADE, and `grade` is always the literal string
 "UNVALIDATED" so the dashboard/alert layers can never accidentally render
 this as if it were a proven Grade-A signal like the other strategies.
-
-Reuses the already-tested math from the backtest tooling rather than
-reimplementing it -- see the sys.path insert below.
 """
 from __future__ import annotations
 
@@ -22,20 +23,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "vwap9ema_backtest"))
-from volume_profile import compute_session_volume_profile, price_passes_vp_filter  # noqa: E402
 from backtest_mt5 import ema  # noqa: E402
 
 from config import PRIORITY_PAIRS  # noqa: E402
 
 # Full PRIORITY_PAIRS universe per explicit user request (same pairs TDI123/
-# BTMM123 scan). Only USTEC/AUD-USD were ever backtested (0/48, see module
-# docstring); every other pair here runs the identical UNVALIDATED rule with
-# ZERO backtesting at all, not just a failed one.
+# BTMM123 scan, including BTC/USD and ETH/USD). This simplified cross-only
+# rule has zero backtesting for every pair, not just a failed one.
 VWAP9EMA_UNIVERSE = list(PRIORITY_PAIRS)
 EMA_LEN = 9
 RR = 2.0
 STOP_BUFFER = 0.10
-VOLUME_CLIMAX_MULT = 1.3
 # London+NY session in UTC, per explicit user request ("between London and NY
 # session only those 2"). Exness MT5 stamps bar times in UTC directly (offset
 # = 0s, confirmed live -- see providers/exness_mt5.py's module docstring and
@@ -67,10 +65,8 @@ def _in_session(ts_utc: int) -> bool:
 
 
 def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
-    """Filter to the most recent calendar day's London-session bars only,
-    matching backtest_mt5.backtest()'s exact day+session grouping (a fresh
-    VWAP/EMA/volume-profile computation per session-day, not a running
-    multi-day series)."""
+    """Filter to the most recent calendar day's session bars only -- a fresh
+    VWAP/EMA computation per session-day, not a running multi-day series."""
     session_bars = [c for c in m5_candles if _in_session(c["ts_utc"])]
     if not session_bars:
         return []
@@ -80,11 +76,9 @@ def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
 
 
 def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
-    """Most-recent-bar VWAP+9EMA signal, vp-climax variant. Mirrors
-    backtest_mt5.run_day()'s exact conditions, adapted from "simulate a
-    whole historical day" to "is there a signal as of the most recent
-    closed bar" -- the same adaptation every other live scanner on this
-    dashboard makes relative to its own backtest logic."""
+    """Most-recent-bar VWAP+9EMA signal: the 9 EMA crossing the session VWAP
+    on the M5 chart, nothing else. Bullish cross (9EMA moves from at-or-below
+    VWAP to above it) -> BUY; bearish cross -> SELL."""
     out: dict = {"symbol": symbol, "setup": "NO-TRADE", "grade": "UNVALIDATED"}
 
     if not m5_candles or not _in_session(m5_candles[-1]["ts_utc"]):
@@ -121,29 +115,19 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
         out["notes"] = "Insufficient bars into today's session for a signal check."
         return out
 
-    up = closes[i] > vwap[i] and e9[i] > vwap[i]
-    dn = closes[i] < vwap[i] and e9[i] < vwap[i]
+    # The cross, and nothing else: 9EMA moving from at-or-below VWAP to above
+    # it (or the mirror image) between the previous bar and this one.
     sig = 0
-    if up and (lows[i] <= e9[i] or lows[i - 1] <= e9[i - 1]) and closes[i] > e9[i] and closes[i] > opens[i]:
+    if e9[i - 1] <= vwap[i - 1] and e9[i] > vwap[i]:
         sig = 1
-    elif dn and (highs[i] >= e9[i] or highs[i - 1] >= e9[i - 1]) and closes[i] < e9[i] and closes[i] < opens[i]:
+    elif e9[i - 1] >= vwap[i - 1] and e9[i] < vwap[i]:
         sig = -1
     if sig == 0:
-        out["notes"] = "No 9EMA+VWAP pullback/reject signal on the most recent bar."
+        out["notes"] = "No 9EMA/VWAP cross on the most recent bar."
         return out
 
     j = i + 1
-    profile = compute_session_volume_profile(highs, lows, closes, volumes)
     entry = opens[j]
-    if not price_passes_vp_filter(entry, profile):
-        out["notes"] = "Signal found but entry price fails the volume-profile filter."
-        return out
-
-    window_start = max(0, j - 20)
-    avg_vol = sum(volumes[window_start:j]) / max(1, j - window_start)
-    if volumes[j] < VOLUME_CLIMAX_MULT * avg_vol:
-        out["notes"] = "Signal + volume-profile filter pass, but no volume climax on the entry bar."
-        return out
 
     if sig == 1:
         sw = min(lows[i], lows[i - 1])
@@ -166,10 +150,9 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
     out.update({
         "setup": "BUY" if sig == 1 else "SELL",
         "entry": entry, "sl": stop, "tp1": target,
-        "notes": (f"VWAP+9EMA vp-climax signal: pullback to 9EMA rejected "
-                  f"{'up' if sig == 1 else 'down'}, volume-profile filter and "
-                  f"volume climax both confirmed. UNVALIDATED strategy (failed "
-                  f"backtest 0/48) -- trade at your own judgment."),
+        "notes": (f"9EMA crossed {'above' if sig == 1 else 'below'} VWAP. "
+                  f"UNVALIDATED strategy (no backtest at all) -- check volume "
+                  f"yourself before trading."),
     })
     return out
 

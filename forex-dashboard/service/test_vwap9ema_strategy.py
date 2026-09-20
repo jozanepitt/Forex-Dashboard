@@ -1,40 +1,31 @@
-"""Tests for the live VWAP+9EMA scanner (vp-climax variant, ema=9, rr=2.0).
+"""Tests for the live VWAP+9EMA scanner — deliberately simplified per
+explicit user request (2026-09-20) to just: the 9 EMA crosses the session
+VWAP on the M5 chart, nothing else (no pullback-reject pattern, no
+volume-profile filter, no volume-climax filter — all removed). The user
+judges volume/context manually before trading.
 
-This strategy failed its own honest backtest (0/48, see
-docs/superpowers/specs/2026-09-13-vwap9ema-mt5-validation-design.md) —
-it is built anyway per explicit user decision (see
-docs/superpowers/specs/2026-09-14-vwap9ema-live-replaces-1am-crt-design.md),
-labeled unvalidated everywhere, and (per later explicit user requests)
-scanning the same full pair universe as TDI123/BTMM123, across the
-combined London+NY session window rather than London alone. These tests
-check the LIVE ADAPTATION logic (most-recent-bar signal detection,
-day/session filtering, entry/stop/target wiring) — the underlying
-VWAP/EMA/volume-profile math is already hand-verified in
-service/test_vwap9ema_volume_profile.py and
-service/test_vwap9ema_backtest_math.py and is not re-derived here,
-matching the convention every other live strategy's test file already
-follows.
+This is a different rule than the earlier "vp-climax" variant tested by
+the previous version of this file (which failed its own honest backtest,
+0/48) — not a lighter/re-tuned version of it. It has zero backtesting.
+Consequently the old parity test against backtest_mt5.run_day() is gone
+too: live and backtest are now intentionally decoupled, since the backtest
+tooling still implements the old vp-climax variant and this simplification
+was explicitly scoped to the live dashboard only.
 
 Session window is UTC 09:00-23:00 (Exness MT5 stamps bars in raw UTC,
-offset=0s, confirmed live -- see vwap9ema_strategy.py's module docstring).
-This is backtest_mt5.py's SESSIONS["Both"], the union of "London" (9-17)
-and "NY" (15-23) -- NOT itself a validated combination (only "London" and
-"NY" were run separately in the 48-combo sweep); see vwap9ema_strategy.py's
-module comment for the exact near-miss numbers this widening moves away
-from.
-MIN_BARS=12 matches backtest_mt5.run_day()'s own floor (n<12 -> no trades).
+offset=0s — see vwap9ema_strategy.py's module docstring), kept unchanged
+from before. MIN_BARS=12 also kept unchanged.
 
-The 12-bar BUY-signal fixture below is a 4-bar flat consolidation prefix
-(pads bar count past MIN_BARS without altering the signal) followed by the
-original 8-bar pattern from the first version of this test. It was
-independently re-derived from scratch (VWAP, EMA(9), entry, stop, target,
-volume-profile filter) via a standalone script that reimplements the same
-formulas without importing vwap9ema_strategy, cross-checked against the
-real compute_session_volume_profile/price_passes_vp_filter functions:
-  entry=101.05, stop=100.775, target=101.6 (same numeric values as before,
-  because the 4-bar flat prefix happens to average out to the same typical
-  price as the original series' first bar -- confirmed by recomputing VWAP
-  and EMA(9) across all 12 bars, not assumed from the old 8-bar fixture).
+Fixtures below are hand-constructed decline-then-rally (BUY) / rally-then-
+decline (SELL) M5 series, engineered so the 9EMA/VWAP cross lands exactly
+on the signal bar (index n-2), then verified by running the real
+vwap9ema_strategy.analyze_pair() and hardcoding the observed output —
+not independently re-derived by hand, since the formula itself (EMA(9) vs
+session VWAP, sign change between consecutive bars) is simple enough that
+mirroring the implementation in the fixture-construction script and then
+asserting on its output is the accurate check here; the entry/stop/target
+arithmetic (swing + buffer, RR multiple) is unchanged from before and was
+already covered by this file's assertions.
 """
 from __future__ import annotations
 import datetime as dt
@@ -55,85 +46,92 @@ def _ts(day_hour_min):
     return int(dt.datetime(2026, 1, day, hour, minute, tzinfo=UTC).timestamp())
 
 
-def _buy_signal_series():
-    """12 M5 bars, 10:00-10:55 UTC on 2026-01-05 (inside the 09:00-23:00
-    London+NY window): 4 flat consolidation bars (typ=100.8 each, padding bar
-    count past MIN_BARS=12 without affecting the signal window), then the
-    original 8-bar pattern -- a shallow dip that pierces the 9-EMA and
-    rejects up, with the entry bar (last bar) landing back inside the
-    value area and carrying a volume spike. Re-verified in full (VWAP,
-    EMA, entry/stop/target, vp-filter) against the real imported functions
-    via a standalone script before being encoded here -- see module
-    docstring."""
-    opens  = [100.80,100.80,100.80,100.80, 100.8, 100.9, 101.0, 101.1, 101.05, 100.95, 100.95, 101.05]
-    highs  = [100.85,100.85,100.85,100.85, 101.0, 101.1, 101.2, 101.2, 101.1, 101.0, 101.1, 101.2]
-    lows   = [100.75,100.75,100.75,100.75, 100.7, 100.8, 100.9, 100.95, 100.85, 100.8, 100.85, 100.95]
-    closes = [100.80,100.80,100.80,100.80, 100.9, 101.0, 101.1, 101.05, 100.95, 101.15, 101.05, 101.15]
-    vols   = [400,400,400,400, 500,500,500,500,500,500,500,900]
+def _ts_offset(base_minute_offset):
+    """Bar timestamp for the Nth M5 bar starting at 10:00 UTC on 2026-01-05,
+    handling hour rollover past minute 59 (fixture spans >60 minutes)."""
+    return int(dt.datetime(2026, 1, 5, 10, 0, tzinfo=UTC).timestamp()) + base_minute_offset * 60
+
+
+def _buy_cross_series():
+    """22 M5 bars, 10:00-11:45 UTC on 2026-01-05: a decline (9EMA settles
+    below VWAP) followed by a sharp rally that crosses the 9EMA back above
+    VWAP exactly on the signal bar (index 20, i.e. n-2 for n=22)."""
     candles = []
-    for k in range(12):
-        minute = 5 * k
-        candles.append(_bar(_ts((5, 10, minute)), opens[k], highs[k], lows[k], closes[k], vols[k]))
+    price = 1.1000
+    for i in range(15):
+        price -= 0.0003
+        candles.append(_bar(_ts_offset(5 * i), round(price + 0.0003, 6), round(price + 0.0004, 6),
+                             round(price - 0.0001, 6), round(price, 6), 100))
+    for i in range(15, 22):
+        price += 0.0006
+        candles.append(_bar(_ts_offset(5 * i), round(price - 0.0006, 6), round(price + 0.0002, 6),
+                             round(price - 0.0007, 6), round(price, 6), 150))
     return candles
 
 
-def test_buy_signal_full_happy_path():
-    row = m.analyze_pair("USTECm", _buy_signal_series())
+def _sell_cross_series():
+    """Mirror of _buy_cross_series(): a rally followed by a sharp decline
+    that crosses the 9EMA back below VWAP on the signal bar."""
+    candles = []
+    price = 1.1000
+    for i in range(15):
+        price += 0.0003
+        candles.append(_bar(_ts_offset(5 * i), round(price - 0.0003, 6), round(price + 0.0001, 6),
+                             round(price - 0.0004, 6), round(price, 6), 100))
+    for i in range(15, 22):
+        price -= 0.0006
+        candles.append(_bar(_ts_offset(5 * i), round(price + 0.0006, 6), round(price + 0.0007, 6),
+                             round(price - 0.0002, 6), round(price, 6), 150))
+    return candles
+
+
+def test_buy_signal_on_cross_above():
+    row = m.analyze_pair("EURUSDm", _buy_cross_series())
     assert row["setup"] == "BUY", row.get("notes")
-    assert abs(row["entry"] - 101.05) < 1e-9
-    assert abs(row["sl"] - 100.775) < 1e-9
-    assert abs(row["tp1"] - 101.6) < 1e-9
+    assert abs(row["entry"] - 1.0991) < 1e-6
+    assert abs(row["sl"] - 1.09767) < 1e-5
+    assert abs(row["tp1"] - 1.10196) < 1e-5
     assert row["grade"] == "UNVALIDATED"
+    assert "crossed above" in row["notes"].lower()
 
 
-def test_fails_volume_climax_when_no_spike():
-    """Boost the pre-entry window's volume so the entry bar's own 900
-    volume no longer clears the 1.3x-average climax threshold. Boosting the
-    ENTRY bar's own volume down instead (as the pre-12-bar-fixture version
-    of this test did) also shifts the volume profile's value area and fails
-    the earlier vp-filter check instead of climax -- confirmed via a
-    standalone script, hence boosting the window bars here rather than the
-    entry bar. Also confirmed the signal itself still fires with these
-    boosted volumes (VWAP shifts but not past the divergence needed).
-    Hand-verified: avg_vol(idx 0..10) = (400*4 + 900*7)/11 = 718.18...,
-    1.3*718.18 = 933.6 > vols[11]=900 -> climax check fails."""
-    candles = _buy_signal_series()
-    for c in candles[4:11]:
-        c["volume"] = 900
-    row = m.analyze_pair("USTECm", candles)
-    assert row["setup"] == "NO-TRADE"
-    assert "climax" in row["notes"].lower()
+def test_sell_signal_on_cross_below():
+    row = m.analyze_pair("EURUSDm", _sell_cross_series())
+    assert row["setup"] == "SELL", row.get("notes")
+    assert abs(row["entry"] - 1.1009) < 1e-6
+    assert abs(row["sl"] - 1.10233) < 1e-5
+    assert abs(row["tp1"] - 1.09804) < 1e-5
+    assert row["grade"] == "UNVALIDATED"
+    assert "crossed below" in row["notes"].lower()
 
 
 def test_no_signal_on_flat_series():
-    # No trend, no VWAP/EMA divergence -- up/dn both False by construction.
+    # No movement -- 9EMA and VWAP both sit flat, no cross ever occurs.
     candles = [_bar(_ts((5, 10, 5 * k)), 100.0, 100.1, 99.9, 100.0, 500) for k in range(12)]
     row = m.analyze_pair("AUDUSDm", candles)
     assert row["setup"] == "NO-TRADE"
-    assert "pullback" in row["notes"].lower() or "signal" in row["notes"].lower()
+    assert "cross" in row["notes"].lower()
 
 
 def test_outside_london_ny_session_is_no_trade():
-    """+12h (10:00 -> 22:00 UTC) is no longer outside session now that the
-    window is 09:00-23:00 (London+NY) -- +16h (10:00 -> 02:00 UTC next day)
-    is genuinely outside it."""
-    candles = _buy_signal_series()
+    """+16h (10:00 -> 02:00 UTC next day) is outside the 09:00-23:00 window."""
+    candles = _buy_cross_series()
     for c in candles:
-        c["ts_utc"] += int(dt.timedelta(hours=16).total_seconds())  # 10:00-10:55 -> 02:00-02:55 UTC
-    row = m.analyze_pair("USTECm", candles)
+        c["ts_utc"] += int(dt.timedelta(hours=16).total_seconds())
+    row = m.analyze_pair("EURUSDm", candles)
     assert row["setup"] == "NO-TRADE"
     assert row["in_active_session"] is False
 
 
 def test_insufficient_data_is_no_trade():
-    row = m.analyze_pair("USTECm", _buy_signal_series()[:5])
+    row = m.analyze_pair("EURUSDm", _buy_cross_series()[:5])
     assert row["setup"] == "NO-TRADE"
     assert "insufficient" in row["notes"].lower()
 
 
 def test_analyze_universe_shape():
     result = m.analyze_universe({
-        "USTECm": {"m5": _buy_signal_series()},
+        "EURUSDm": {"m5": _buy_cross_series()},
         "AUDUSDm": {"m5": []},
     })
     assert result["buys"] == 1
@@ -142,83 +140,22 @@ def test_analyze_universe_shape():
 
 
 def test_universe_constant():
-    """Full PRIORITY_PAIRS universe (same pairs TDI123/BTMM123 scan) per
-    explicit user request, not just the 2 backtested symbols. Comparing
+    """Full PRIORITY_PAIRS universe (same pairs TDI123/BTMM123 scan,
+    including BTC/USD and ETH/USD) per explicit user request. Comparing
     against a freshly-imported PRIORITY_PAIRS (not a hardcoded copy) checks
     the wiring stays live -- if config.py's list ever changes, this constant
     must track it, not silently diverge."""
     assert m.VWAP9EMA_UNIVERSE == list(PRIORITY_PAIRS)
-    assert "USTEC" in m.VWAP9EMA_UNIVERSE
-    assert "AUD/USD" in m.VWAP9EMA_UNIVERSE
+    assert "EUR/USD" in m.VWAP9EMA_UNIVERSE
+    assert "BTC/USD" in m.VWAP9EMA_UNIVERSE
+    assert "ETH/USD" in m.VWAP9EMA_UNIVERSE
 
 
 def test_entry_gap_past_swing_extreme_is_no_trade():
-    """Entry bar gaps below swing low (BUY case), inverting the risk setup.
-
-    Constructed from the happy-path fixture by setting the entry bar's open
-    to 100.75 (below sw=100.8). Signal is still detected on the prior bar,
-    but entry gaps down, creating stop >= entry (100.805 >= 100.75) --
-    caught by the defensive guard and skipped as NO-TRADE.
-
-    Hand-verified (re-derived for the 12-bar fixture, same swing bars as
-    before since they're unaffected by the 4-bar flat prefix):
-      - sw = min(lows[10], lows[9]) = min(100.85, 100.8) = 100.8
-      - entry = opens[11] = 100.75 (gap below sw)
-      - stop = sw - 0.10*(entry-sw) = 100.8 - 0.10*(-0.05) = 100.805
-      - Guard check: BUY needs stop < entry: 100.805 < 100.75? NO -> skip
-    """
-    candles = _buy_signal_series()
-    candles[-1]["open"] = 100.75  # gap down entry (was 101.05)
-    row = m.analyze_pair("USTECm", candles)
+    """Entry bar gaps below the swing low (BUY case), inverting the risk
+    setup -- caught by the defensive guard and skipped as NO-TRADE."""
+    candles = _buy_cross_series()
+    candles[-1]["open"] = candles[-2]["low"] - 0.001  # force a gap well below the swing
+    row = m.analyze_pair("EURUSDm", candles)
     assert row["setup"] == "NO-TRADE"
     assert "wrong side" in row["notes"].lower()
-
-
-def test_run_day_parity_zero_spread():
-    """Spec requirement (docs/superpowers/specs/2026-09-14-vwap9ema-live-
-    replaces-1am-crt-design.md line 65): a live candle sequence must produce
-    the same entry/direction that backtest_mt5.run_day() would produce for
-    the identical OHLCV series, allowing for the documented half-spread
-    difference (run_day pays half the entry bar's spread; live doesn't --
-    see Fix #5's disclosure). With spread_points=0 for every bar that
-    difference vanishes, so entry/direction must match EXACTLY -- this is
-    the actual imported run_day(), not a reimplementation, so it also
-    exercises the exact production backtest code path against the live one."""
-    import pandas as pd
-    import backtest_mt5 as bt
-
-    candles = _buy_signal_series()
-    df = pd.DataFrame({
-        "time": pd.to_datetime([c["ts_utc"] for c in candles], unit="s", utc=True),
-        "open": [c["open"] for c in candles],
-        "high": [c["high"] for c in candles],
-        "low": [c["low"] for c in candles],
-        "close": [c["close"] for c in candles],
-        "tick_volume": [c["volume"] for c in candles],
-        "spread_points": [0.0] * len(candles),
-        "point": [1.0] * len(candles),
-    })
-
-    trades = bt.run_day(df, RR=2.0, buf=0.10, emaLen=9, variant="vp-climax")
-    assert len(trades) == 1, f"expected exactly 1 trade, got {trades}"
-    bt_trade = trades[0]
-
-    live_row = m.analyze_pair("USTECm", candles)
-    assert live_row["setup"] == "BUY"
-
-    assert bt_trade["dir"] == 1, "run_day disagrees on direction (expected BUY/+1)"
-    assert abs(bt_trade["entry"] - live_row["entry"]) < 1e-9, (
-        f"entry mismatch: run_day={bt_trade['entry']} live={live_row['entry']}"
-    )
-
-    # run_day doesn't expose stop/target directly; reconstruct risk from the
-    # returned r-multiple (r = dir*(exit-entry)/risk) and cross-check against
-    # live's sl/tp1, which were already independently hand-verified above.
-    exitpx = bt_trade["exit"]
-    r = bt_trade["r"]
-    assert r != 0, "degenerate r-multiple, can't cross-check risk"
-    implied_risk = abs((exitpx - bt_trade["entry"]) / r)
-    live_risk = abs(live_row["entry"] - live_row["sl"])
-    assert abs(implied_risk - live_risk) < 1e-6, (
-        f"risk mismatch: run_day-implied={implied_risk} live={live_risk}"
-    )
