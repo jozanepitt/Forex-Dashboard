@@ -452,6 +452,52 @@ def detect_mw_pattern(bars: list[dict], lookback: int = 40) -> dict:
     return {"detected": pattern is not None, "pattern": pattern, "quality": quality}
 
 
+# ── Nameable candle ────────────────────────────────────────────────────────────
+
+def detect_nameable_candle(bars: list[dict]) -> dict:
+    """Port of the frontend's detectNameableCandle: classifies the last candle
+    against the previous one as Doji / Hammer / Shooting Star / (Bullish or
+    Bearish) Engulfing / RRT (Railroad Track) / COW (Candle On Wick)."""
+    if len(bars) < 2:
+        return {"found": False, "name": "None", "direction": "neutral"}
+    curr, prev = bars[-1], bars[-2]
+    curr_body  = abs(curr["close"] - curr["open"])
+    curr_range = curr["high"] - curr["low"]
+    prev_body  = abs(prev["close"] - prev["open"])
+    prev_range = prev["high"] - prev["low"]
+    if curr_range == 0 or prev_range == 0:
+        return {"found": False, "name": "None", "direction": "neutral"}
+
+    curr_bullish = curr["close"] > curr["open"]
+    prev_bullish = prev["close"] > prev["open"]
+    curr_upper_wick = curr["high"] - max(curr["open"], curr["close"])
+    curr_lower_wick = min(curr["open"], curr["close"]) - curr["low"]
+
+    if curr_body / curr_range < 0.15:
+        return {"found": True, "name": "Doji", "direction": "neutral"}
+    if curr_lower_wick >= 2 * curr_body and curr_upper_wick < curr_body:
+        return {"found": True, "name": "Hammer", "direction": "bullish"}
+    if curr_upper_wick >= 2 * curr_body and curr_lower_wick < curr_body:
+        return {"found": True, "name": "Shooting Star", "direction": "bearish"}
+    if (curr_bullish != prev_bullish and curr_body > prev_body * 1.1 and
+            min(curr["open"], curr["close"]) <= min(prev["open"], prev["close"]) and
+            max(curr["open"], curr["close"]) >= max(prev["open"], prev["close"])):
+        name = "Bullish Engulfing" if curr_bullish else "Bearish Engulfing"
+        return {"found": True, "name": name, "direction": "bullish" if curr_bullish else "bearish"}
+    if curr_bullish != prev_bullish and prev_body * 0.7 <= curr_body <= prev_body * 1.3:
+        return {"found": True, "name": "RRT", "direction": "bullish" if curr_bullish else "bearish"}
+
+    prev_body_hi, prev_body_lo = max(prev["open"], prev["close"]), min(prev["open"], prev["close"])
+    curr_body_hi, curr_body_lo = max(curr["open"], curr["close"]), min(curr["open"], curr["close"])
+    if curr_body_hi <= prev_body_lo or curr_body_lo >= prev_body_hi:
+        in_upper_wick = curr_body_lo >= prev_body_hi and curr_body_hi <= prev["high"]
+        in_lower_wick = curr_body_hi <= prev_body_lo and curr_body_lo >= prev["low"]
+        if in_upper_wick or in_lower_wick:
+            return {"found": True, "name": "COW", "direction": "bullish" if in_lower_wick else "bearish"}
+
+    return {"found": False, "name": "None", "direction": "neutral"}
+
+
 # ── Shark Fin ─────────────────────────────────────────────────────────────────
 
 def detect_shark_fin(tdi: dict) -> dict:
@@ -791,6 +837,84 @@ def _gate_result(gates: list[dict], direction: str,
         "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
         "confidence": confidence,
     }
+
+
+def detect_safety_trade(bars: list[dict], stack: dict, asian: dict, tdi_leg: dict,
+                         level: dict, mw: dict, nameable: dict, h1mtf: dict,
+                         kz: Optional[str], symbol: Optional[str] = None) -> dict:
+    """
+    Safety Trade — the canonical BTMM setup (dashboard's default for alerting
+    and backtesting). Real port of the frontend's detectSafetyTrade, replacing
+    the legacy "safety" proxy that derived direction from EMA800 bias alone
+    and had no candlestick, Level, or M/W confirmation of any kind.
+    """
+    current_price = bars[-1]["close"]
+    pip = instruments.pip_size(symbol, current_price)
+
+    # Direction: TDI 2nd leg drives bias; nameable candle must agree.
+    direction = "neutral"
+    if tdi_leg.get("leg") == 2:
+        direction = tdi_leg["direction"]
+
+    asian_valid = bool(asian.get("valid"))
+    in_kz = kz in ("London", "NY", "Overlap")   # excludes Asian, matching the frontend
+    pierced_asian = asian_valid and (
+        current_price <= asian["low"] + 5 * pip or current_price >= asian["high"] - 5 * pip
+    )
+    tdi_2nd = tdi_leg.get("leg") == 2 and tdi_leg.get("confidence") != "low"
+
+    dist50_pips = abs(current_price - stack["e50"]) / pip if stack.get("e50") else 999
+    dist200_pips = abs(current_price - stack["e200"]) / pip if stack.get("e200") else 999
+    ema_bounce = (6 <= dist50_pips <= 8) or dist200_pips < 25
+
+    candle_agrees = (nameable.get("found") and nameable.get("name") in ("RRT", "Hammer", "Doji")
+                      and nameable.get("direction") == direction)
+
+    # Checklist wants Level 1 specifically (the early, freshest level), not a
+    # matured II/III cascade, and — same as btmm_123's _level_score — the
+    # cascade's own direction must match this setup's direction.
+    fresh_level = level.get("level") == 1 and level.get("direction") == direction
+
+    # Checklist rule 4's trailing "...forming M or W" clause; the Shark-Fin/
+    # band half is covered by tdi_2nd above.
+    mw_confirms = mw.get("detected") and (
+        (mw.get("pattern") == "W" and direction == "bullish") or
+        (mw.get("pattern") == "M" and direction == "bearish")
+    )
+
+    # PDF pairs "pullback to 50 EMA" with "and the 50% level of the Asian
+    # range" as a joint confluence (pp.227-231).
+    near_50_level = asian_valid and abs(current_price - asian["mid"]) / pip <= 10
+
+    h1_aligned = (not h1mtf.get("valid") or h1mtf.get("trend") == direction
+                  or h1mtf.get("trend") == "neutral")
+
+    gates = [
+        {"name": "Kill Zone Active",       "pass": in_kz},
+        {"name": "Asian Range Valid",      "pass": asian_valid},
+        {"name": "Asian Box Pierce/Touch", "pass": pierced_asian},
+        {"name": "TDI 2nd Leg Confirmed",  "pass": tdi_2nd},
+        {"name": "50/200 EMA Bounce Zone", "pass": ema_bounce},
+        {"name": "Nameable Candle Agrees", "pass": candle_agrees},
+        {"name": "Level 1 (Fresh)",        "pass": fresh_level},
+        {"name": "M/W Pattern Confirms",   "pass": mw_confirms},
+        {"name": "Near Asian 50% Level",   "pass": near_50_level},
+        {"name": "H1 MTF Aligned",         "pass": h1_aligned},
+    ]
+
+    entry = sl = tp1 = tp2 = 0.0
+    if direction != "neutral" and asian_valid:
+        entry = current_price
+        if direction == "bullish":
+            sl  = asian["low"] - 5 * pip
+            tp1 = asian["high"]
+            tp2 = asian["high"] + (asian["high"] - asian["low"])
+        else:
+            sl  = asian["high"] + 5 * pip
+            tp1 = asian["low"]
+            tp2 = asian["low"] - (asian["high"] - asian["low"])
+
+    return _gate_result(gates, direction, entry, sl, tp1, tp2)
 
 
 def detect_22_trade(bars: list[dict], asian: dict, hunt: dict, hod_lod: dict,
@@ -1137,33 +1261,11 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     else:
         candidates = []
 
-        # Safety Trade proxy (legacy — score ≥ 40 region with 5/7 gates)
-        near_e50     = abs(closes[-1] - stack["e50"]) / closes[-1] < 0.0008
-        safety_gates = sum([
-            bool(kz),
-            asian["valid"],
-            hunt["active"],
-            tdi_leg["leg"] == 2 and tdi_leg["confidence"] != "low",
-            abs(closes[-1] - stack["e200"]) / closes[-1] < 0.001,
-            near_e50,
-            checklist_score >= 7,
-        ])
-        if safety_gates >= 5 and kz:
-            candidates.append({
-                "key":         "safety",
-                "direction":   direction,
-                "gatesPassed": safety_gates,
-                "gatesTotal":  7,
-                "entry":       entry,
-                "sl":          sl,
-                "tp1":         tp1,
-                "tp2":         tp2,
-                "confidence":  "high" if safety_gates >= 7 else "medium",
-            })
-
-        # 22 Trade / 50-50 Bounce / Three-Drive — real detector ports (see above).
+        # Safety Trade / 22 Trade / 50-50 Bounce / Three-Drive — real detector ports (see above).
         h1mtf = resample_to_h1(bars)
+        nameable = detect_nameable_candle(bars)
         for setup_key, res in (
+            ("safety",     detect_safety_trade(bars, stack, asian, tdi_leg, level, mw, nameable, h1mtf, kz, symbol)),
             ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol)),
             ("bounce5050", detect_fifty_fifty_bounce(bars, stack, level, tdi_leg, h1mtf, tdi, symbol)),
             ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol)),

@@ -2338,7 +2338,7 @@ function _gateResult(gates, direction, currentPrice, entry, sl, tp1, tp2) {
 function detectSafetyTrade(pair, ctx) {
   const pip = (pair && pair.pip) ? pair.pip : 0.0001;
   const { activeZone, btmmAsianRange, btmmTDILeg, btmmEMA200Bounce,
-          btmmNameableCandle, btmmLevelCount, currentPrice, e50, e200,
+          btmmNameableCandle, btmmLevelCount, btmmMWPattern, currentPrice, e50, e200,
           nearEMA50Setup, btmmH1MTF } = ctx;
 
   // Direction: TDI 2nd leg drives bias; nameable candle must agree
@@ -2350,8 +2350,19 @@ function detectSafetyTrade(pair, ctx) {
   const piercedAsian = !!(btmmAsianRange && (currentPrice <= btmmAsianRange.low + 5 * pip || currentPrice >= btmmAsianRange.high - 5 * pip));
   const tdi2nd = !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence !== 'low');
   const emaBounce = !!(btmmEMA200Bounce && btmmEMA200Bounce.active) || !!nearEMA50Setup;
-  const candleAgrees = !!(btmmNameableCandle && btmmNameableCandle.found && btmmNameableCandle.direction === direction);
-  const levelMatured = !!(btmmLevelCount && btmmLevelCount.level >= 2);
+  const candleAgrees = !!(btmmNameableCandle && ['RRT', 'Hammer', 'Doji'].includes(btmmNameableCandle.name) && btmmNameableCandle.direction === direction);
+  // Checklist rule 2 wants Level 1 specifically ("the early, freshest level"),
+  // not a matured II/III cascade — the setup fires on fresh structure. Also
+  // now requires the level's own direction to match, same as btmm_123's
+  // _level_score: a Level cascade pointing the opposite way doesn't confirm.
+  const freshLevel = !!(btmmLevelCount && btmmLevelCount.level === 1 && btmmLevelCount.direction === direction);
+  // Checklist rule 4's trailing clause ("...forming M or W") — the Shark-Fin/
+  // band half is covered by tdi2nd above; this covers the M/W half, which was
+  // computed (btmmMWPattern) but never read here.
+  const mwConfirms = !!(btmmMWPattern && btmmMWPattern.formed && btmmMWPattern.direction === direction);
+  // PDF pairs "pullback to 50 EMA" with "and the 50% level of the Asian range"
+  // as a joint confluence (pp.227-231) — only the EMA half existed before.
+  const near50Level = !!(btmmAsianRange && Math.abs(currentPrice - (btmmAsianRange.high + btmmAsianRange.low) / 2) / pip <= 10);
   const h1Aligned = !btmmH1MTF || !btmmH1MTF.valid || btmmH1MTF.trend === direction || btmmH1MTF.trend === 'neutral';
 
   const gates = [
@@ -2361,7 +2372,9 @@ function detectSafetyTrade(pair, ctx) {
     { name: 'TDI 2nd Leg Confirmed',     pass: tdi2nd },
     { name: '50/200 EMA Bounce Zone',    pass: emaBounce },
     { name: 'Nameable Candle Agrees',    pass: candleAgrees },
-    { name: '13/50 Cross Level II/III',  pass: levelMatured },
+    { name: 'Level 1 (Fresh)',           pass: freshLevel },
+    { name: 'M/W Pattern Confirms',      pass: mwConfirms },
+    { name: 'Near Asian 50% Level',      pass: near50Level },
     { name: 'H1 MTF Aligned',            pass: h1Aligned }
   ];
 
