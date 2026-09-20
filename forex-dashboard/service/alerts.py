@@ -1149,7 +1149,9 @@ def alert_btmm123_setup(pair: str, row: dict):
         {"name": "Risk:Reward",  "value": f"**1 : {rr1:.1f}**",                            "inline": True},
         pattern_field,
         {"name": "EMA Level",
-         "value": f"{'Level II' if level.get('level_ii') else 'Level I' if level.get('level_i') else 'none'} ({level.get('count', 0)}/5 aligned)",
+         "value": (f"Level {level.get('level', 0)}"
+                   + (f" ({level['days_since_level1']:.1f}d)" if level.get('days_since_level1') is not None else "")
+                   if level.get('level') else "none"),
          "inline": True},
         {"name": "Stop Hunt",
          "value": "✅ confirmed" if hunt.get("active") else "—",

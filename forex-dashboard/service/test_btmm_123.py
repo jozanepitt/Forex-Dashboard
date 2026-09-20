@@ -342,12 +342,17 @@ def test_200ema_false_breakout_fires_bearish_reset():
     assert row["pattern"] == {}
     assert row["reset"]["extreme"] > row["current_price"]
     assert row["trade_plan"]["sl"] > row["trade_plan"]["entry"]
-    # 9 points (3 base + 4 Level II + 2 Asian; final-bar hunt points the
-    # other way) = B on points, but the synthetic weekly pivots leave price
-    # on the wrong side, so the location cap correctly drops it to C.
-    assert row["score"] == 9
+    # 5 points (3 base + 2 Asian). This fixture is a flat/directionless
+    # series before the failed breakout, so detect_level_count() correctly
+    # finds no real 13/50-EMA-cross structure in the SELL direction — 0
+    # Level points (previously this fixture scored 4 Level-II points, but
+    # that relied on the pre-fix bug where a flat series' snapshot EMA
+    # alignment was misread as "institutional-grade structure" with no
+    # actual crossover). Stop-hunt is also 0 since the final-bar hunt points
+    # the other way. Raw score (5) already lands on C without needing the
+    # pivot-location cap, so the cap note doesn't fire for this fixture.
+    assert row["score"] == 5
     assert row["grade"] == "C"
-    assert "grade capped: poor pivot location" in row["notes"]
 
 
 def test_reset_detector_quiet_without_break():

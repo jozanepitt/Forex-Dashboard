@@ -340,23 +340,72 @@ def detect_513_cross(closes: list[float]) -> dict:
 
 # ── Level count ───────────────────────────────────────────────────────────────
 
-def detect_level_count(stack: dict) -> dict:
+def _last_ema_cross(fast: list[float], slow: list[float], start: int = 0) -> Optional[tuple[int, str]]:
+    """Most recent bar index >= start+1 where `fast` crosses `slow`, plus
+    direction. None if no cross occurs in the scanned range."""
+    result = None
+    for i in range(max(1, start + 1), min(len(fast), len(slow))):
+        prev_diff = fast[i - 1] - slow[i - 1]
+        diff = fast[i] - slow[i]
+        if prev_diff <= 0 < diff:
+            result = (i, "bullish")
+        elif prev_diff >= 0 > diff:
+            result = (i, "bearish")
+    return result
+
+
+def detect_level_count(bars: list[dict], closes: list[float]) -> dict:
     """
-    Count how many of the 5 EMAs price is on the correct side of.
-    Level I  = 1–3 aligned (weak-to-moderate directional structure)
-    Level II = 4–5 aligned (strong institutional-grade structure — A+ requirement)
+    BTMM 'Levels' doctrine: the Market Maker Cycle traced as a sequence of EMA
+    crossovers unfolding over multiple days —
+      Level 1 = 13/50 EMA cross
+      Level 2 = 50/200 EMA cross, same direction, after Level 1
+      Level 3 = 50/800 or 200/800 EMA cross (same direction, after Level 2),
+                or the EMA stack already fully fanned out in that direction
+
+    Replaces a prior implementation that counted how many of 5 EMAs price was
+    CURRENTLY on the correct side of on a single bar — that measured
+    instantaneous alignment strength, not the actual multi-day crossover
+    sequence the doctrine describes, and could report "Level II"
+    (institutional-grade) with no crossover ever having occurred.
     """
-    price  = stack["price"]
-    levels = [stack["e5"], stack["e13"], stack["e50"], stack["e200"], stack["e800"]]
-    above  = sum(1 for e in levels if price > e)
-    below  = sum(1 for e in levels if price < e)
-    direction = "bullish" if above >= below else "bearish"
-    count     = above if direction == "bullish" else below
+    if len(closes) < 60:
+        return {"level": 0, "direction": None, "level_i": False, "level_ii": False,
+                "days_since_level1": None, "typical_window": False}
+
+    e13 = calc_ema(closes, 13)
+    e50 = calc_ema(closes, 50)
+    e200 = calc_ema(closes, 200)
+    e800 = calc_ema(closes, 800)
+
+    l1 = _last_ema_cross(e13, e50)
+    if not l1:
+        return {"level": 0, "direction": None, "level_i": False, "level_ii": False,
+                "days_since_level1": None, "typical_window": False}
+    l1_idx, direction = l1
+
+    level = 1
+    l2 = _last_ema_cross(e50, e200, start=l1_idx)
+    if l2 and l2[1] == direction:
+        level = 2
+        l3a = _last_ema_cross(e50, e800, start=l2[0])
+        l3b = _last_ema_cross(e200, e800, start=l2[0])
+        l3_candidates = [c for c in (l3a, l3b) if c and c[1] == direction]
+        if l3_candidates:
+            level = 3
+        elif direction == "bullish" and closes[-1] > e13[-1] > e50[-1] > e200[-1] > e800[-1]:
+            level = 3
+        elif direction == "bearish" and closes[-1] < e13[-1] < e50[-1] < e200[-1] < e800[-1]:
+            level = 3
+
+    days_since = (bars[-1]["ts_utc"] - bars[l1_idx]["ts_utc"]) / 86400
     return {
-        "count":     count,
-        "level_ii":  count >= 4,
-        "level_i":   1 <= count <= 3,
+        "level": level,
         "direction": direction,
+        "level_i": level >= 1,
+        "level_ii": level >= 2,
+        "days_since_level1": round(days_since, 1),
+        "typical_window": 2.0 <= days_since <= 6.0,
     }
 
 
@@ -932,7 +981,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     tdi_leg = detect_tdi_leg(tdi)
 
     # New detectors
-    level     = detect_level_count(stack)
+    level     = detect_level_count(bars, closes)
     mw        = detect_mw_pattern(bars)
     shark     = detect_shark_fin(tdi)
     straight  = detect_straightaway(bars)

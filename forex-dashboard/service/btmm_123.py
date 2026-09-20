@@ -146,7 +146,7 @@ def _analyze_btmm_timeframe(
         setup_type = "reset"
 
     stack = ema_stack(closes)
-    level = detect_level_count(stack)
+    level = detect_level_count(entry_candles, closes)
     hunt = detect_stop_hunt(entry_candles)
     asian = detect_asian_range(entry_candles, symbol)
 
