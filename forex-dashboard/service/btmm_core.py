@@ -115,6 +115,7 @@ def calc_tdi(closes: list[float]) -> dict:
         "fast":     fast_arr[-1],
         "slow":     slow_arr[-1],
         "fast_arr": fast_arr,       # full array — used by detect_tdi_leg
+        "slow_arr": slow_arr,       # full array — used by detect_rsi_signal_cross
         "bb_upper": bb_upper,
         "bb_lower": bb_lower,
         "bb_mid":   bb_mid,
@@ -432,6 +433,35 @@ def detect_shark_fin(tdi: dict) -> dict:
         "spike_depth": round(spike_depth, 1),
         "entry_ready": leg["leg"] == 2 and leg["confidence"] in ("high", "medium"),
     }
+
+
+def detect_rsi_signal_cross(tdi: dict, lookback: int = 5) -> dict:
+    """
+    Plain RSI(fast)/Signal(slow) line cross — no Bollinger-Band extreme
+    precondition. Distinct from detect_tdi_leg/detect_shark_fin, which both
+    require the fast line to have first spiked outside the bands (Shark Fin
+    doctrine, used by setups that actually call for that).
+
+    Some setups' own reference rules explicitly do NOT want a band/MBL
+    extreme requirement — just the fast-crosses-slow event itself (e.g. the
+    ID50 / 50-50 Bounce checklist: "TDI confirmation - RSI/Signal line
+    cross," explicitly not gated on RSI being above/below the MBL like other
+    setups are). Using detect_tdi_leg's leg==1 (currently outside the band)
+    for those setups was requiring the *opposite* of the wrong thing.
+    """
+    fast_arr = tdi.get("fast_arr", [])
+    slow_arr = tdi.get("slow_arr", [])
+    n = min(len(fast_arr), len(slow_arr))
+    if n < 2:
+        return {"crossed": False, "direction": None}
+    fast_arr, slow_arr = fast_arr[-n:], slow_arr[-n:]
+    start = max(1, n - lookback)
+    for i in range(start, n):
+        if fast_arr[i - 1] <= slow_arr[i - 1] and fast_arr[i] > slow_arr[i]:
+            return {"crossed": True, "direction": "bullish"}
+        if fast_arr[i - 1] >= slow_arr[i - 1] and fast_arr[i] < slow_arr[i]:
+            return {"crossed": True, "direction": "bearish"}
+    return {"crossed": False, "direction": None}
 
 
 # ── Straightaway ──────────────────────────────────────────────────────────────
@@ -775,10 +805,18 @@ def detect_22_trade(bars: list[dict], asian: dict, hunt: dict, hod_lod: dict,
 
 
 def detect_fifty_fifty_bounce(bars: list[dict], stack: dict, level: dict, tdi_leg: dict,
-                               h1mtf: dict, symbol: Optional[str] = None) -> dict:
+                               h1mtf: dict, tdi: dict, symbol: Optional[str] = None) -> dict:
     """
-    50/50 Bounce — mid-day reversal off the 50 EMA in the lull between London
-    close and NY open.
+    50/50 Bounce (== ID 50) — mid-day reversal off the 50 EMA in the lull
+    between London close and NY open.
+
+    TDI confirmation is a plain RSI/Signal-line cross (detect_rsi_signal_cross),
+    NOT a Bollinger-Band-extreme requirement. Per the trader's own reference
+    checklist for this exact setup: "TDI confirmation - RSI/Signal line cross"
+    — explicitly NOT gated on RSI being above/below the MBL/band the way other
+    BTMM setups are. Previously gated on tdi_leg.leg==1 (detect_tdi_leg), which
+    requires the fast line to be CURRENTLY OUTSIDE the band — the opposite of
+    what this setup's own rules ask for.
     """
     from datetime import datetime, timezone
     current_price = bars[-1]["close"]
@@ -791,22 +829,22 @@ def detect_fifty_fifty_bounce(bars: list[dict], stack: dict, level: dict, tdi_le
     elif tdi_leg.get("leg") == 1:
         direction = tdi_leg["direction"]
 
-    dist50_pips   = abs(current_price - e50) / pip if e50 else 999
-    close_to_50   = dist50_pips <= 8
-    fresh_cross   = bool(level.get("level_i"))
-    tdi_first_leg = (tdi_leg.get("leg") == 1 and tdi_leg.get("confidence") != "low"
-                      and tdi_leg.get("direction") == direction)
+    dist50_pips  = abs(current_price - e50) / pip if e50 else 999
+    close_to_50  = dist50_pips <= 8
+    fresh_cross  = bool(level.get("level_i"))
+    rsi_sig_cross = detect_rsi_signal_cross(tdi)
+    tdi_confirmed = rsi_sig_cross["crossed"] and rsi_sig_cross["direction"] == direction
     h1_aligned    = bool(h1mtf.get("valid")) and h1mtf.get("trend") == direction
 
     gmt_hour = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc).hour
     in_lull  = (11 <= gmt_hour < 14) or (16 <= gmt_hour < 22)
 
     gates = [
-        {"name": "Price <= 8 pips from EMA(50)", "pass": close_to_50},
-        {"name": "13/50 Cross Level I (fresh)",  "pass": fresh_cross},
-        {"name": "TDI 1st Leg Building",         "pass": tdi_first_leg},
-        {"name": "H1 MTF Aligned",               "pass": h1_aligned},
-        {"name": "Mid-Day Lull Window",          "pass": in_lull},
+        {"name": "Price <= 8 pips from EMA(50)",       "pass": close_to_50},
+        {"name": "13/50 Cross Level I (fresh)",        "pass": fresh_cross},
+        {"name": "RSI/Signal Line Cross (no MBL req)", "pass": tdi_confirmed},
+        {"name": "H1 MTF Aligned",                     "pass": h1_aligned},
+        {"name": "Mid-Day Lull Window",                "pass": in_lull},
     ]
 
     entry = sl = tp1 = tp2 = 0.0
@@ -1078,7 +1116,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         h1mtf = resample_to_h1(bars)
         for setup_key, res in (
             ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol)),
-            ("bounce5050", detect_fifty_fifty_bounce(bars, stack, level, tdi_leg, h1mtf, symbol)),
+            ("bounce5050", detect_fifty_fifty_bounce(bars, stack, level, tdi_leg, h1mtf, tdi, symbol)),
             ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol)),
         ):
             if res["active"]:
