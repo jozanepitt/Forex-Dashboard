@@ -1335,47 +1335,70 @@ function detectMWPattern(candles, lookback = 50) {
 }
 
 // Level Counting - BTMM 3-Level Cycle Detection
-function detectLevelCount(candles, ema13, ema50, ema200) {
-  if (!candles || candles.length < 50 || !ema50 || !ema200) return { level: 'unknown' };
+function _lastEmaCross(fast, slow, start) {
+  // Most recent index > start where `fast` crosses `slow`, plus direction.
+  // null if no cross occurs in the scanned range.
+  start = start || 0;
+  const n = Math.min(fast.length, slow.length);
+  let result = null;
+  for (let i = Math.max(1, start + 1); i < n; i++) {
+    const prevDiff = fast[i - 1] - slow[i - 1];
+    const diff = fast[i] - slow[i];
+    if (prevDiff <= 0 && diff > 0) result = { idx: i, direction: 'bullish' };
+    else if (prevDiff >= 0 && diff < 0) result = { idx: i, direction: 'bearish' };
+  }
+  return result;
+}
 
-  const len = 50;
-  const e13  = (ema13  || []).slice(-len);
-  const e50  = ema50.slice(-len);
-  const e200 = ema200.slice(-len);
+function detectLevelCount(candles, ema13, ema50, ema200, ema800) {
+  // BTMM 'Levels' doctrine: the Market Maker Cycle traced as a sequence of EMA
+  // crossovers unfolding over multiple days —
+  //   Level 1 = 13/50 EMA cross
+  //   Level 2 = 50/200 EMA cross, same direction, after Level 1
+  //   Level 3 = 50/800 or 200/800 EMA cross (same direction, after Level 2),
+  //             or the EMA stack already fully fanned out in that direction
+  //
+  // Replaces a prior implementation that measured what fraction of the last
+  // 50 bars had EMA13 above/below EMA50 (and EMA50 vs EMA200) — a windowed
+  // "how one-sided has it been" ratio, not the actual multi-day crossover
+  // sequence the doctrine describes, and it never looked at EMA800 at all.
+  // Mirrors service/btmm_core.py's detect_level_count(), already shipped.
+  if (!candles || candles.length < 60 || !ema13 || !ema50 || !ema200 || !ema800) {
+    return { level: 0, direction: null, daysSinceLevel1: null };
+  }
 
-  // Level I: EMA13 crossed EMA50 — measure how consistently 13 is above/below 50
-  let score13_50 = 0;
-  for (let i = 0; i < e50.length; i++) {
-    if (e13[i] !== undefined) {
-      if (e13[i] > e50[i]) score13_50++;
-      else score13_50--;
+  const l1 = _lastEmaCross(ema13, ema50);
+  if (!l1) return { level: 0, direction: null, daysSinceLevel1: null };
+  const direction = l1.direction;
+
+  let level = 1;
+  const l2 = _lastEmaCross(ema50, ema200, l1.idx);
+  if (l2 && l2.direction === direction) {
+    level = 2;
+    const l3a = _lastEmaCross(ema50, ema800, l2.idx);
+    const l3b = _lastEmaCross(ema200, ema800, l2.idx);
+    const l3 = [l3a, l3b].filter(c => c && c.direction === direction);
+    if (l3.length) {
+      level = 3;
+    } else {
+      const p = candles[candles.length - 1].close;
+      const e13v = ema13[ema13.length - 1], e50v = ema50[ema50.length - 1];
+      const e200v = ema200[ema200.length - 1], e800v = ema800[ema800.length - 1];
+      if (direction === 'bullish' && p > e13v && e13v > e50v && e50v > e200v && e200v > e800v) level = 3;
+      if (direction === 'bearish' && p < e13v && e13v < e50v && e50v < e200v && e200v < e800v) level = 3;
     }
   }
 
-  // Level II: EMA50 vs EMA200 — how consistently 50 is above/below 200
-  let score50_200 = 0;
-  for (let i = 0; i < e50.length; i++) {
-    if (e50[i] > e200[i]) score50_200++;
-    else score50_200--;
+  let daysSinceLevel1 = null;
+  const l1Dt = candles[l1.idx] && candles[l1.idx].datetime;
+  const lastDt = candles[candles.length - 1].datetime;
+  if (l1Dt && lastDt) {
+    const t1 = Date.parse(l1Dt.replace(' ', 'T') + 'Z');
+    const t2 = Date.parse(lastDt.replace(' ', 'T') + 'Z');
+    if (!isNaN(t1) && !isNaN(t2)) daysSinceLevel1 = Math.round((t2 - t1) / 86400000 * 10) / 10;
   }
 
-  const r13  = score13_50  / e50.length;  // +1 = all bullish, -1 = all bearish
-  const r200 = score50_200 / e50.length;
-
-  // BTMM Level rules:
-  // Level I:   EMA13 has crossed EMA50 (strong momentum, early trend)
-  // Level II:  EMA50 crosses EMA200 (confirmed trend continuation)
-  // Level III: Choppy / extended — EMA stack not aligned
-  if (Math.abs(r13) > 0.6 && Math.abs(r200) < 0.4) {
-    return { level: 'I',   trend: r13 > 0 ? 'bullish' : 'bearish', consolidation: false };
-  }
-  if (Math.abs(r200) > 0.6) {
-    return { level: 'II',  trend: r200 > 0 ? 'bullish' : 'bearish', consolidation: false };
-  }
-  if (Math.abs(r13) > 0.2 || Math.abs(r200) > 0.2) {
-    return { level: 'II',  trend: 'transition', consolidation: false };
-  }
-  return { level: 'III', trend: 'choppy', consolidation: true };
+  return { level, direction, daysSinceLevel1 };
 }
 
 // Shark Fin Detection - BTMM TDI Entry Signal
@@ -1735,11 +1758,11 @@ function detectNYCReversal(candles, btmmLevelCount) {
 
   if (!first3Hours) return { active: false };
 
-  if (btmmLevelCount && btmmLevelCount.level === 'III') {
+  if (btmmLevelCount && btmmLevelCount.level === 3) {
     return { active: true, type: 'NYC Reversal', direction: 'reversal', confidence: 85 };
   }
 
-  if (btmmLevelCount && btmmLevelCount.level === 'II') {
+  if (btmmLevelCount && btmmLevelCount.level === 2) {
     return { active: true, type: 'NYC Reversal (Developing)', direction: 'potential', confidence: 60 };
   }
 
@@ -1821,7 +1844,7 @@ function detectHalfBatman(candles, btmmLevelCount) {
   if (!candles || candles.length < 30) return { active: false };
 
   // Half Batman occurs at Level I - EMA stack tightening
-  if (!btmmLevelCount || btmmLevelCount.level !== 'I') return { active: false };
+  if (!btmmLevelCount || btmmLevelCount.level !== 1) return { active: false };
 
   const recent = candles.slice(-20);
   const highs = recent.map(c => c.high);
@@ -2328,7 +2351,7 @@ function detectSafetyTrade(pair, ctx) {
   const tdi2nd = !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence !== 'low');
   const emaBounce = !!(btmmEMA200Bounce && btmmEMA200Bounce.active) || !!nearEMA50Setup;
   const candleAgrees = !!(btmmNameableCandle && btmmNameableCandle.found && btmmNameableCandle.direction === direction);
-  const levelMatured = !!(btmmLevelCount && (btmmLevelCount.level === 'II' || btmmLevelCount.level === 'III'));
+  const levelMatured = !!(btmmLevelCount && btmmLevelCount.level >= 2);
   const h1Aligned = !btmmH1MTF || !btmmH1MTF.valid || btmmH1MTF.trend === direction || btmmH1MTF.trend === 'neutral';
 
   const gates = [
@@ -2441,7 +2464,7 @@ function detectFiftyFiftyBounce(pair, ctx) {
 
   const dist50Pips = e50 ? Math.abs(currentPrice - e50) / pip : 999;
   const closeTo50 = dist50Pips <= 8;
-  const freshCross = !!(btmmLevelCount && btmmLevelCount.level === 'I');
+  const freshCross = !!(btmmLevelCount && btmmLevelCount.level === 1);
   const rsiSigCross = detectRsiSignalCross(tdi);
   const tdiConfirmed = !!(rsiSigCross.crossed && rsiSigCross.direction === direction);
   const h1Aligned = !!(btmmH1MTF && btmmH1MTF.valid && btmmH1MTF.trend === direction);
@@ -3369,7 +3392,7 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   const btmmAsianRange = detectAsianRange(mainCandles, pair);
   const btmmStopHunt = detectStopHunt(mainCandles, btmmAsianRange, pair);
   const btmmMWPattern = detectMWPattern(mainCandles);
-  const btmmLevelCount = detectLevelCount(mainCandles, ema13, ema50, ema200);
+  const btmmLevelCount = detectLevelCount(mainCandles, ema13, ema50, ema200, ema800);
   const btmmSharkFin = detectSharkFin(closes, tdi);
   const btmmEMA200Bounce = detectEMA200Bounce(mainCandles, ema200, ema50, pair);
   const btmmWeeklyCycle = detectWeeklyCycle(mainCandles);
@@ -3515,7 +3538,7 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   if (btmmAsianRange && btmmAsianRange.valid) patternBonus += 1; // Valid Asian range < 50 pips
   if (btmmStopHunt && btmmStopHunt.active) patternBonus += 2; // Stop hunt detected
   if (btmmMWPattern && btmmMWPattern.formed) patternBonus += 2; // M/W pattern forming
-  if (btmmLevelCount && btmmLevelCount.level === 'III') patternBonus += 1; // Level III - reversal imminent
+  if (btmmLevelCount && btmmLevelCount.level === 3) patternBonus += 1; // Level 3 - reversal imminent
   if (btmmSharkFin && btmmSharkFin.active) patternBonus += 3; // Shark Fin - high probability entry
   if (btmmEMA200Bounce && btmmEMA200Bounce.active) patternBonus += 3; // 200 EMA Bounce - very high probability
   // Setup confirmations (2 points each)
@@ -4069,7 +4092,7 @@ function openModal(symbol) {
         <div class="detail-row"><span class="detail-label">Asian Range</span><span class="detail-value mono" style="color:${pair.btmmAsianRange && pair.btmmAsianRange.valid ? 'var(--green)' : 'var(--orange)'}">${pair.btmmAsianRange ? (pair.btmmAsianRange.valid ? 'Valid (<50pips)' : 'Invalid (>50pips)') : 'N/A'}</span></div>
         <div class="detail-row"><span class="detail-label">Stop Hunt</span><span class="detail-value mono" style="color:${pair.btmmStopHunt && pair.btmmStopHunt.active ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmStopHunt ? (pair.btmmStopHunt.active ? 'Active (' + pair.btmmStopHunt.pushes + ' pushes)' : 'Inactive') : 'N/A'}</span></div>
         <div class="detail-row"><span class="detail-label">M/W Pattern</span><span class="detail-value mono" style="color:${pair.btmmMWPattern && pair.btmmMWPattern.formed ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmMWPattern ? (pair.btmmMWPattern.formed ? pair.btmmMWPattern.type + ' Formed' : 'None') : 'N/A'}</span></div>
-        <div class="detail-row"><span class="detail-label">Cycle Level</span><span class="detail-value mono" style="color:${pair.btmmLevelCount ? (pair.btmmLevelCount.level === 'III' ? 'var(--red)' : pair.btmmLevelCount.level === 'I' ? 'var(--green)' : 'var(--yellow)') : 'var(--text-muted)'}">${pair.btmmLevelCount ? 'Level ' + pair.btmmLevelCount.level : 'N/A'}</span></div>
+        <div class="detail-row"><span class="detail-label">Cycle Level</span><span class="detail-value mono" style="color:${pair.btmmLevelCount && pair.btmmLevelCount.level === 3 ? 'var(--red)' : pair.btmmLevelCount && pair.btmmLevelCount.level === 1 ? 'var(--green)' : pair.btmmLevelCount && pair.btmmLevelCount.level === 2 ? 'var(--yellow)' : 'var(--text-muted)'}">${pair.btmmLevelCount && pair.btmmLevelCount.level ? 'Level ' + pair.btmmLevelCount.level + (pair.btmmLevelCount.daysSinceLevel1 != null ? ' (' + pair.btmmLevelCount.daysSinceLevel1 + 'd)' : '') : '—'}</span></div>
         <div class="detail-row"><span class="detail-label">Shark Fin</span><span class="detail-value mono" style="color:${pair.btmmSharkFin && pair.btmmSharkFin.active ? 'var(--cyan)' : 'var(--text-muted)'}">${pair.btmmSharkFin && pair.btmmSharkFin.active ? pair.btmmSharkFin.type + ' (' + pair.btmmSharkFin.confidence + '%)' : 'None'}</span></div>
         <div class="detail-row"><span class="detail-label">200 EMA Bounce</span><span class="detail-value mono" style="color:${pair.btmmEMA200Bounce && pair.btmmEMA200Bounce.active ? 'var(--green)' : 'var(--text-muted)'}">${pair.btmmEMA200Bounce && pair.btmmEMA200Bounce.active ? pair.btmmEMA200Bounce.type + ' (' + pair.btmmEMA200Bounce.confidence + '%)' : 'None'}</span></div>
         <div class="detail-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px"><span class="detail-label" style="color:var(--yellow)">Multi-Timeframe (H1/H4 Derived)</span></div>
