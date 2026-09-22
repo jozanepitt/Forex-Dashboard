@@ -19,7 +19,7 @@ this as if it were a proven Grade-A signal like the other strategies.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "vwap9ema_backtest"))
@@ -64,15 +64,31 @@ def _in_session(ts_utc: int) -> bool:
     return SESSION_START_UTC <= hour < SESSION_END_UTC
 
 
+def _forex_day_start_utc(ts_utc: int) -> int:
+    """Most recent 22:00 UTC boundary at or before ts_utc -- the standard
+    forex trading-day rollover (17:00 ET / 00:00 SAST). This is the VWAP
+    accumulation anchor, confirmed 2026-09-22 against a live TradingView
+    "VWAP Stdev Bands" chart (reset line sits at midnight SAST = 22:00 UTC,
+    not midnight UTC and not 09:00 UTC). Deliberately independent of
+    SESSION_START_UTC/SESSION_END_UTC below, which gate when signals are
+    allowed to FIRE, not when the VWAP clock itself starts."""
+    dt = datetime.fromtimestamp(ts_utc, tz=timezone.utc)
+    boundary = dt.replace(hour=22, minute=0, second=0, microsecond=0)
+    if dt.hour < 22:
+        boundary -= timedelta(days=1)
+    return int(boundary.timestamp())
+
+
 def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
-    """Filter to the most recent calendar day's session bars only -- a fresh
-    VWAP/EMA computation per session-day, not a running multi-day series."""
-    session_bars = [c for c in m5_candles if _in_session(c["ts_utc"])]
-    if not session_bars:
+    """All bars since the most recent forex-day boundary (22:00 UTC) -- the
+    VWAP/EMA accumulation window. Includes the overnight Asian-session bars
+    even though those fall outside SESSION_START_UTC/SESSION_END_UTC's
+    alert-firing window, matching how a real VWAP indicator behaves on a
+    chart that's open continuously, not just during London+NY."""
+    if not m5_candles:
         return []
-    last_day = datetime.fromtimestamp(session_bars[-1]["ts_utc"], tz=timezone.utc).date()
-    return [c for c in session_bars
-            if datetime.fromtimestamp(c["ts_utc"], tz=timezone.utc).date() == last_day]
+    day_start = _forex_day_start_utc(m5_candles[-1]["ts_utc"])
+    return [c for c in m5_candles if c["ts_utc"] >= day_start]
 
 
 def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:

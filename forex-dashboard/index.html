@@ -808,7 +808,7 @@ td.mono{font-family:var(--font-mono)}
     <div class="trend-controls">
       <div class="trend-control-group" style="min-width:260px">
         <label>📐 VWAP Mean Reversion — M15</label>
-        <div id="vwapMrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Session VWAP (00:00 GMT reset) · sigma bands · efficiency-ratio regime filter · stall confirmation</div>
+        <div id="vwapMrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Session VWAP (22:00 UTC / 00:00 SAST reset — the standard forex trading-day boundary) · sigma bands · efficiency-ratio regime filter · stall confirmation</div>
       </div>
       <button class="trend-refresh-btn" id="vwapMrRefreshBtn">Refresh Scanner</button>
       <div class="trend-meta" id="vwapMrMeta">Majors + USTEC · adapted from a US-equity research spec, unvalidated for forex</div>
@@ -835,7 +835,8 @@ td.mono{font-family:var(--font-mono)}
       <tbody id="vwapMrTableBody"><tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>VWAP Mean Reversion (M15):</b> fades extensions from a rising/falling session VWAP (resets each 00:00 GMT)
+      <b>VWAP Mean Reversion (M15):</b> fades extensions from a rising/falling session VWAP (resets each 22:00 UTC
+      / 00:00 SAST — the standard forex trading-day boundary)
       using sigma bands, gated by an efficiency-ratio regime filter (range-bound conditions only — trending markets
       are excluded). Entry requires a stall/reversal confirmation (rejection wick, close back inside the band, or a
       two-bar reversal pattern) after price extends beyond the sigma threshold. SL sits beyond the extension; TP1

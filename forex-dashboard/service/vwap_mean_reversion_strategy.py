@@ -14,8 +14,11 @@ for the full rationale and every deviation from the source document's
 literal (US-market) wording.
 
 Pipeline per pair:
-    1. VWAP: cumulative typical-price VWAP, reset at 00:00 UTC calendar day
-       (deviation: doc anchors to 09:30 ET; forex has no single open).
+    1. VWAP: cumulative typical-price VWAP, reset at 22:00 UTC (00:00 SAST,
+       the standard forex trading-day rollover -- deviation: doc anchors to
+       09:30 ET; forex has no single open). Corrected 2026-09-22 from an
+       earlier 00:00 UTC approximation after comparing live output against
+       a TradingView VWAP indicator's own reset boundary.
     2. Sigma: cumulative volume-weighted stdev of (TP - VWAP_now), definition
        (a) from the doc, using forex tick-volume as the weight (deviation:
        no consolidated forex volume exists).
@@ -33,7 +36,7 @@ Pipeline per pair:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import instruments
@@ -59,17 +62,33 @@ T2_Z_OVERSHOOT = 0.75
 MIN_CANDLES_REQUIRED = 40
 
 
+def _forex_day_of(ts_utc: int) -> int:
+    """Forex trading-day key: the most recent 22:00 UTC boundary at or
+    before ts_utc (17:00 ET / 00:00 SAST) -- the standard forex
+    trading-day rollover. Deviation from doc §2.1 (09:30 ET anchor): forex
+    has no single market open. Previously approximated as 00:00 UTC
+    calendar-day; corrected 2026-09-22 after comparing live VWAP output
+    against a TradingView "VWAP Stdev Bands" chart -- its session-reset
+    line sits at midnight SAST (=22:00 UTC), not midnight UTC. Used
+    consistently here and in _bars_into_session() below, so the "bars
+    into session" gate lines up with the same boundary the VWAP itself
+    resets on."""
+    dt = datetime.fromtimestamp(ts_utc, tz=timezone.utc)
+    boundary = dt.replace(hour=22, minute=0, second=0, microsecond=0)
+    if dt.hour < 22:
+        boundary -= timedelta(days=1)
+    return int(boundary.timestamp())
+
+
 def _vwap_series(candles: list[dict]) -> list[float]:
-    """Cumulative typical-price VWAP, reset at each UTC calendar-day
-    boundary. Deviation from doc §2.1 (09:30 ET anchor): forex has no
-    single market open, so 00:00 UTC is used, matching the retired
-    VWAP+9EMA scanner's convention."""
+    """Cumulative typical-price VWAP, reset at each forex trading-day
+    boundary (22:00 UTC / midnight SAST -- see _forex_day_of)."""
     out: list[float] = []
     cum_pv = 0.0
     cum_vol = 0.0
     cur_day = None
     for c in candles:
-        day = datetime.fromtimestamp(c["ts_utc"], tz=timezone.utc).date()
+        day = _forex_day_of(c["ts_utc"])
         if day != cur_day:
             cur_day = day
             cum_pv = 0.0
@@ -97,7 +116,7 @@ def _sigma_series(candles: list[dict], vwap: list[float]) -> list[float]:
     tps: list[float] = []
     vols: list[float] = []
     for i, c in enumerate(candles):
-        day = datetime.fromtimestamp(c["ts_utc"], tz=timezone.utc).date()
+        day = _forex_day_of(c["ts_utc"])
         if day != cur_day:
             cur_day = day
             day_start_idx = i
@@ -185,13 +204,14 @@ def _efficiency_ratio(closes: list[float], i: int, n: int = ER_LOOKBACK) -> Opti
 
 def _bars_into_session(candles: list[dict], i: int) -> int:
     """1-based count of how many bars (including bar i) fall on the same
-    UTC calendar day as bar i, counting backwards. Used to enforce
-    "no signal before bar 15 of the session" (doc §2.4) against the actual
-    daily VWAP-reset boundary, not just the raw array index."""
-    day = datetime.fromtimestamp(candles[i]["ts_utc"], tz=timezone.utc).date()
+    forex trading day as bar i (see _forex_day_of), counting backwards.
+    Used to enforce "no signal before bar 15 of the session" (doc §2.4)
+    against the actual daily VWAP-reset boundary, not just the raw array
+    index."""
+    day = _forex_day_of(candles[i]["ts_utc"])
     count = 0
     for k in range(i, -1, -1):
-        if datetime.fromtimestamp(candles[k]["ts_utc"], tz=timezone.utc).date() != day:
+        if _forex_day_of(candles[k]["ts_utc"]) != day:
             break
         count += 1
     return count
