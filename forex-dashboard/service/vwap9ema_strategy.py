@@ -101,14 +101,32 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
 
     cum_pv = 0.0
     cum_v = 0.0
+    cum_pv2 = 0.0  # sum(vol * typ^2) -- for the volume-weighted variance behind the SD bands
     vwap: list[float] = []
+    stdev: list[float] = []
     for k in range(n):
         typ = (highs[k] + lows[k] + closes[k]) / 3.0
         vol = volumes[k] if volumes[k] > 0 else 1.0
         cum_pv += typ * vol
         cum_v += vol
-        vwap.append(cum_pv / cum_v)
+        cum_pv2 += vol * typ * typ
+        v = cum_pv / cum_v
+        vwap.append(v)
+        variance = max(0.0, cum_pv2 / cum_v - v * v)  # Var = E[X^2] - E[X]^2, volume-weighted
+        stdev.append(variance ** 0.5)
     e9 = ema(closes, EMA_LEN)
+
+    # SD bands, visual reference only -- not part of the signal logic (still
+    # purely the 9EMA/VWAP cross below). Standard VWAP-band setup: session
+    # anchor, (H+L+C)/3 source, +-1sigma/+-2sigma. Exposed whenever there's
+    # enough session data, regardless of whether a cross signal fires.
+    out.update({
+        "vwap":         round(vwap[-1], 6),
+        "vwap_upper_1": round(vwap[-1] + stdev[-1], 6),
+        "vwap_lower_1": round(vwap[-1] - stdev[-1], 6),
+        "vwap_upper_2": round(vwap[-1] + 2 * stdev[-1], 6),
+        "vwap_lower_2": round(vwap[-1] - 2 * stdev[-1], 6),
+    })
 
     i = n - 2  # most recently closed signal/confirmation bar; i+1 is the entry bar
     if i < 3:

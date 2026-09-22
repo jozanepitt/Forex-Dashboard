@@ -779,10 +779,13 @@ td.mono{font-family:var(--font-mono)}
           <th>Entry</th>
           <th>Stop</th>
           <th>Target</th>
+          <th>VWAP</th>
+          <th>±1σ Band</th>
+          <th>±2σ Band</th>
           <th>Session</th>
         </tr>
       </thead>
-      <tbody id="vwap9emaTableBody"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="vwap9emaTableBody"><tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>VWAP+9EMA (cross-only, ema=9, rr=2.0):</b> fires purely on the 9 EMA crossing the
@@ -790,6 +793,9 @@ td.mono{font-family:var(--font-mono)}
       volume-climax filter. Deliberately simplified per explicit user request; check volume/
       context yourself before trading. London+NY session (UTC 09:00–23:00) only.
       Entry shown is the raw mid-price at the next bar's open; real fills will differ slightly.
+      The VWAP and ±1σ/±2σ standard-deviation band columns are shown for your own reference
+      only — session-anchored, (H+L+C)/3 source, same as the VWAP line itself — and play no
+      part in the BUY/SELL signal.
       <br><b>⚠ This exact rule has never been backtested</b> — it replaces the earlier
       "vp-climax" variant (which failed its own honest backtest, 0/48) with a completely
       different, simpler rule, not a re-tuned version of it. Zero historical validation on
@@ -5694,16 +5700,25 @@ function renderVwap9emaTable(data) {
     const sessionCell = p.in_active_session
       ? '<span style="color:var(--green)">London — active</span>'
       : '<span style="color:var(--text-muted)">Outside session</span>';
+    // VWAP +-1sigma/+-2sigma bands -- visual reference only, no bearing on the
+    // BUY/SELL signal (still purely the 9EMA/VWAP cross).
+    const band1 = (p.vwap_lower_1 != null && p.vwap_upper_1 != null)
+      ? `${_crtFmtPrice(p.vwap_lower_1, p.symbol)} / ${_crtFmtPrice(p.vwap_upper_1, p.symbol)}` : '—';
+    const band2 = (p.vwap_lower_2 != null && p.vwap_upper_2 != null)
+      ? `${_crtFmtPrice(p.vwap_lower_2, p.symbol)} / ${_crtFmtPrice(p.vwap_upper_2, p.symbol)}` : '—';
     return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
       <td><b>${p.symbol}</b></td>
       <td>${_crtSetupCell(p)}</td>
       <td>${p.entry != null ? _crtFmtPrice(p.entry, p.symbol) : '—'}</td>
       <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
       <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
+      <td>${p.vwap != null ? _crtFmtPrice(p.vwap, p.symbol) : '—'}</td>
+      <td style="color:var(--text-muted)">${band1}</td>
+      <td style="color:var(--text-muted)">${band2}</td>
       <td>${sessionCell}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:24px">No data.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center;padding:24px">No data.</td></tr>';
 
   const stale = (data.stale_pairs && data.stale_pairs.length)
     ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';

@@ -1523,26 +1523,24 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     arrow = "📈" if setup == "BUY" else "📉"
     colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
 
-    backtested_note = (
-        "" if pair in ("USTEC", "AUD/USD") else
-        "\n⚠ This pair was **never backtested at all** (only USTEC/AUD-USD were) — "
-        "this signal runs the identical unvalidated rule with zero historical evidence."
+    vwap_u1, vwap_l1 = row.get("vwap_upper_1"), row.get("vwap_lower_1")
+    vwap_u2, vwap_l2 = row.get("vwap_upper_2"), row.get("vwap_lower_2")
+    bands_str = (
+        f"±1σ `{_fmt_price(vwap_l1, pair)}` / `{_fmt_price(vwap_u1, pair)}`\n"
+        f"±2σ `{_fmt_price(vwap_l2, pair)}` / `{_fmt_price(vwap_u2, pair)}`"
+        if vwap_u1 is not None and vwap_u2 is not None else "—"
     )
 
     embed = {
         "title": f"{arrow} {pair} — VWAP+9EMA {setup}",
-        "description": (
-            "⚠ **UNVALIDATED strategy — failed backtest (0/48).** "
-            "Not a Grade-A signal like your other alerts. Trade at your own judgment."
-            + backtested_note + "\n\n"
-            + (row.get("notes") or "")
-        ),
+        "description": row.get("notes") or "",
         "color": colour,
         "fields": [
             {"name": "Setup", "value": f"**{setup}**", "inline": True},
             {"name": "Entry", "value": f"`{_fmt_price(entry, pair)}`" if entry is not None else "—", "inline": True},
             {"name": "Stop Loss", "value": f"`{_fmt_price(sl, pair)}`" if sl is not None else "—", "inline": True},
             {"name": "Target", "value": f"`{_fmt_price(tp1, pair)}`" if tp1 is not None else "—", "inline": True},
+            {"name": "VWAP Bands", "value": bands_str, "inline": True},
         ],
         "footer": {"text": f"VWAP+9EMA (unvalidated) · entry is raw mid-price, no spread adjustment · {_now_utc_str()} ({_now_sast_str()} SAST)"},
     }

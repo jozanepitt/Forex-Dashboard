@@ -35,7 +35,22 @@ def _incomplete_row():
     return row
 
 
+def _row_with_bands():
+    row = _good_row()
+    row.update({
+        "vwap": 100.5,
+        "vwap_upper_1": 100.8, "vwap_lower_1": 100.2,
+        "vwap_upper_2": 101.1, "vwap_lower_2": 99.9,
+    })
+    return row
+
+
 def test_alert_vwap9ema_setup_posts_for_a_good_row(monkeypatch):
+    """Per explicit user request (2026-09-22), the verbose UNVALIDATED/
+    failed-backtest banner no longer appears in the description -- just the
+    signal-specific note. The compact '(unvalidated)' tag stays in the
+    footer, and a VWAP Bands field is always present (falling back to '--'
+    when the row carries no band data, as here)."""
     posted = []
     monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
     monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
@@ -43,8 +58,24 @@ def test_alert_vwap9ema_setup_posts_for_a_good_row(monkeypatch):
     alerts.alert_vwap9ema_setup("USTEC", _good_row())
     assert len(posted) == 1
     assert "VWAP+9EMA" in posted[0]["title"]
-    assert "UNVALIDATED strategy" in posted[0]["description"]
-    assert "failed backtest (0/48)" in posted[0]["description"]
+    assert posted[0]["description"] == "test row"
+    assert "UNVALIDATED strategy" not in posted[0]["description"]
+    assert "failed backtest (0/48)" not in posted[0]["description"]
+    assert "(unvalidated)" in posted[0]["footer"]["text"]
+    bands_field = next(f for f in posted[0]["fields"] if f["name"] == "VWAP Bands")
+    assert bands_field["value"] == "—"
+
+
+def test_alert_vwap9ema_setup_shows_bands_when_present(monkeypatch):
+    posted = []
+    monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
+    monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
+    monkeypatch.setattr(alerts, "VWAP9EMA_ALERTS_ENABLED", True)
+    alerts.alert_vwap9ema_setup("USTEC", _row_with_bands())
+    assert len(posted) == 1
+    bands_field = next(f for f in posted[0]["fields"] if f["name"] == "VWAP Bands")
+    assert "100.2" in bands_field["value"] and "100.8" in bands_field["value"]
+    assert "99.9" in bands_field["value"] and "101.1" in bands_field["value"]
 
 
 def test_alert_vwap9ema_setup_rejects_bad_rr(monkeypatch):
