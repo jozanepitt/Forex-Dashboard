@@ -30,6 +30,8 @@ already covered by this file's assertions.
 from __future__ import annotations
 import datetime as dt
 
+import pytest
+
 import vwap9ema_strategy as m
 from config import PRIORITY_PAIRS
 
@@ -149,6 +151,105 @@ def test_universe_constant():
     assert "EUR/USD" in m.VWAP9EMA_UNIVERSE
     assert "BTC/USD" in m.VWAP9EMA_UNIVERSE
     assert "ETH/USD" in m.VWAP9EMA_UNIVERSE
+
+
+def test_m5_fetch_window_covers_full_forex_day():
+    """Regression guard for the 2026-09-25 accuracy fix. The live VWAP is
+    anchored at the 00:00 UTC day boundary (_forex_day_start_utc; was 22:00
+    UTC until 2026-10-06) and must include that day's very first M5 bar, or the VWAP silently
+    re-anchors mid-day and stops matching a real chart. A full forex
+    trading day is 24h x 12 = 288 M5 bars, so the fetch window used by
+    app.py and scheduler.py must always be >= 288 bars (plus slack for the
+    currently-forming bar). app.py:156 and scheduler.py:112 previously
+    fetched limit=100 (only 8h20m -> mis-anchored VWAP for ~16h/day)."""
+    assert m.M5_FETCH_LIMIT >= 288            # one full UTC day (00:00->00:00)
+    assert m.M5_FETCH_LIMIT <= 2 * 288        # sanity: no point fetching more than ~2 days
+    assert m.M5_FETCH_LIMIT % 12 == 0         # whole hours of M5 bars
+
+
+def test_9ema_uses_full_history_not_daily_reset():
+    """Regression test for the day-anchored 9EMA bug (2026-09-25). The live
+    9EMA was computed only over today's session bars, so it re-seeded at the
+    day boundary each day and could contradict the M5 chart's true
+    (full-history) 9EMA -- 'fake' EMA data, most obvious near the day open.
+    It must now run over the ENTIRE fetched M5 history.
+
+    Proof: prepend one full forex day (288 bars) at a level far ABOVE the
+    fixture's range, ending just before the fixture's day boundary
+    (2026-01-05 00:00 UTC). The current-day session bars are unchanged, so a
+    session-only EMA would still emit the old BUY (_buy_cross_series is
+    proven to BUY on its own -- see test_buy_signal_on_cross_above). A true
+    full-history EMA carries that plateau into the signal area, stays above
+    VWAP throughout and fires no cross. The fix is correct iff the outcome
+    is NO-TRADE."""
+    boundary = int(dt.datetime(2026, 1, 5, 0, 0, tzinfo=UTC).timestamp())
+    pre = []
+    ts = boundary - (288 * 300) - 300  # one full forex day, shifted back a bar so it ends strictly before the boundary
+    for _ in range(288):
+        ts += 300
+        pre.append(_bar(ts, 1.5000, 1.5001, 1.4999, 1.5000, 100))
+    assert pre[-1]["ts_utc"] < boundary  # history strictly ends before the day boundary
+    candles = pre + _buy_cross_series()
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["setup"] == "NO-TRADE", row
+
+
+# The tests below pin WHERE the VWAP day boundary is. Anchor = 00:00 UTC =
+# MT5 server midnight on Exness (broker_offset_secs == 0, ts_utc is already
+# true UTC), switched from 22:00 UTC (SAST midnight / TradingView's reset)
+# on 2026-10-06 at the user's request. None of the fixtures above can tell
+# the two apart: their bars all start at 10:00 UTC, after both boundaries.
+
+def _utc(year, month, day, hour, minute=0):
+    return int(dt.datetime(year, month, day, hour, minute, tzinfo=UTC).timestamp())
+
+
+def test_forex_day_start_is_midnight_utc():
+    midnight = _utc(2026, 1, 5, 0, 0)
+    for ts in (_utc(2026, 1, 5, 0, 0), _utc(2026, 1, 5, 12, 30), _utc(2026, 1, 5, 21, 55),
+               _utc(2026, 1, 5, 22, 0), _utc(2026, 1, 5, 23, 55)):
+        assert m._forex_day_start_utc(ts) == midnight, ts
+    assert m._forex_day_start_utc(_utc(2026, 1, 4, 23, 55)) == _utc(2026, 1, 4, 0, 0)
+
+
+def test_session_bars_start_at_midnight_not_2200():
+    start = _utc(2026, 1, 4, 20, 0)
+    candles = [_bar(start + 300 * k, 1.1, 1.1, 1.1, 1.1, 100) for k in range(16 * 12 + 1)]  # 20:00 -> 12:00 next day
+    assert candles[-1]["ts_utc"] == _utc(2026, 1, 5, 12, 0)
+    session = m._session_bars_for_today(candles)
+    assert session[0]["ts_utc"] == _utc(2026, 1, 5, 0, 0)   # not 2026-01-04 22:00
+    assert len(session) == 12 * 12 + 1
+
+
+def test_reported_vwap_is_the_volume_weighted_hlc3_since_midnight_utc():
+    """End-to-end: the same quantity verify_vwap.py checks. Bars before
+    midnight sit at a loud 2.0000; if the VWAP were still anchored at 22:00
+    UTC it would swallow the 22:00-23:55 bars and land nowhere near 1.1."""
+    start = _utc(2026, 1, 4, 20, 0)
+    midnight = _utc(2026, 1, 5, 0, 0)
+    candles = []
+    for k in range(16 * 12 + 1):                      # 2026-01-04 20:00 -> 2026-01-05 12:00
+        ts = start + 300 * k
+        p = 2.0000 if ts < midnight else round(1.1000 + 0.0001 * (k % 7), 6)
+        candles.append(_bar(ts, p, p + 0.0002, p - 0.0002, p, 50 + k % 13))
+    expected_num = expected_den = 0.0
+    for c in candles:
+        if c["ts_utc"] >= midnight:
+            tp = (c["high"] + c["low"] + c["close"]) / 3.0
+            expected_num += tp * c["volume"]
+            expected_den += c["volume"]
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["vwap"] == pytest.approx(expected_num / expected_den, abs=1e-6), row
+
+
+def test_both_vwap_scanners_share_the_same_anchor():
+    """The M5 and M15 scanners keep separate copies of the day-boundary
+    function. A drift between them would make the dashboard's two VWAP tabs
+    disagree about when the day starts."""
+    import vwap_mean_reversion_strategy as mr
+    for ts in (_utc(2026, 1, 5, 0, 0), _utc(2026, 1, 5, 9, 30), _utc(2026, 1, 5, 21, 55),
+               _utc(2026, 1, 5, 22, 0), _utc(2026, 1, 5, 23, 55), _utc(2026, 1, 6, 0, 0)):
+        assert m._forex_day_start_utc(ts) == mr._forex_day_of(ts), ts
 
 
 def test_entry_gap_past_swing_extreme_is_no_trade():

@@ -109,7 +109,7 @@ def refresh_all():
         if i > 0:
             time.sleep(FANOUT_DELAY_SECS)
         try:
-            _fetch_guarded(sym, "5min", limit=100)
+            _fetch_guarded(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT)
         except Exception as e:
             log.warning("VWAP9EMA M5 fetch failed for %s: %s", sym, e)
 
@@ -256,7 +256,7 @@ def _run_vwap9ema_alerts():
     candles_by_pair: dict[str, dict] = {}
     for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
         candles_by_pair[sym] = {
-            "m5": cache.read_candles(sym, "5min", limit=100),
+            "m5": cache.read_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT),
         }
     result = vwap9ema_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):

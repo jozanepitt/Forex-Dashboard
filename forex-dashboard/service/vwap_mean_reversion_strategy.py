@@ -14,11 +14,11 @@ for the full rationale and every deviation from the source document's
 literal (US-market) wording.
 
 Pipeline per pair:
-    1. VWAP: cumulative typical-price VWAP, reset at 22:00 UTC (00:00 SAST,
-       the standard forex trading-day rollover -- deviation: doc anchors to
-       09:30 ET; forex has no single open). Corrected 2026-09-22 from an
-       earlier 00:00 UTC approximation after comparing live output against
-       a TradingView VWAP indicator's own reset boundary.
+    1. VWAP: cumulative typical-price VWAP, reset at 00:00 UTC (MT5 server
+       midnight on Exness -- deviation: doc anchors to 09:30 ET; forex has
+       no single open). Was 22:00 UTC (SAST midnight, matched to TradingView)
+       from 2026-09-22 until 2026-10-06, when it was moved to match the MT5
+       chart at the user's request. See _forex_day_of.
     2. Sigma: cumulative volume-weighted stdev of (TP - VWAP_now), definition
        (a) from the doc, using forex tick-volume as the weight (deviation:
        no consolidated forex volume exists).
@@ -36,7 +36,7 @@ Pipeline per pair:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 import instruments
@@ -63,26 +63,24 @@ MIN_CANDLES_REQUIRED = 40
 
 
 def _forex_day_of(ts_utc: int) -> int:
-    """Forex trading-day key: the most recent 22:00 UTC boundary at or
-    before ts_utc (17:00 ET / 00:00 SAST) -- the standard forex
-    trading-day rollover. Deviation from doc §2.1 (09:30 ET anchor): forex
-    has no single market open. Previously approximated as 00:00 UTC
-    calendar-day; corrected 2026-09-22 after comparing live VWAP output
-    against a TradingView "VWAP Stdev Bands" chart -- its session-reset
-    line sits at midnight SAST (=22:00 UTC), not midnight UTC. Used
-    consistently here and in _bars_into_session() below, so the "bars
-    into session" gate lines up with the same boundary the VWAP itself
-    resets on."""
-    dt = datetime.fromtimestamp(ts_utc, tz=timezone.utc)
-    boundary = dt.replace(hour=22, minute=0, second=0, microsecond=0)
-    if dt.hour < 22:
-        boundary -= timedelta(days=1)
-    return int(boundary.timestamp())
+    """Forex trading-day key: the most recent 00:00 UTC at or before
+    ts_utc. 00:00 UTC is MT5 server midnight on Exness (broker_offset_secs
+    == 0, and candles' ts_utc is already true UTC), so the VWAP resets
+    where the MT5 chart's own session VWAP does. Deviation from doc §2.1
+    (09:30 ET anchor): forex has no single market open. History: 00:00 UTC
+    originally; moved to 22:00 UTC (SAST midnight) on 2026-09-22 to match
+    a TradingView "VWAP Stdev Bands" chart; moved back to 00:00 UTC on
+    2026-10-06 at the user's request to match the MT5 chart instead
+    (TradingView resets 2h earlier). If the broker's server clock ever
+    stops being UTC this must become offset-aware. Used consistently here
+    and in _bars_into_session() below, so the "bars into session" gate
+    lines up with the same boundary the VWAP itself resets on."""
+    return ts_utc - ts_utc % 86400
 
 
 def _vwap_series(candles: list[dict]) -> list[float]:
     """Cumulative typical-price VWAP, reset at each forex trading-day
-    boundary (22:00 UTC / midnight SAST -- see _forex_day_of)."""
+    boundary (00:00 UTC / MT5 server midnight -- see _forex_day_of)."""
     out: list[float] = []
     cum_pv = 0.0
     cum_vol = 0.0

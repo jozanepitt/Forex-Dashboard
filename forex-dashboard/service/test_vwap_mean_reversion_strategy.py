@@ -6,6 +6,8 @@ and echoed as comments in vwap_mean_reversion_strategy.py at each point they app
 """
 from __future__ import annotations
 
+import datetime as dt
+
 import pytest
 
 import vwap_mean_reversion_strategy as m
@@ -16,6 +18,11 @@ def _bar(ts, hi, lo, cl, open_=None, vol=0):
         "ts_utc": ts, "open": open_ if open_ is not None else cl,
         "high": hi, "low": lo, "close": cl, "volume": vol,
     }
+
+
+def _utc(day, hour, minute=0):
+    """Epoch seconds for 2026-01-<day> <hour>:<minute> UTC."""
+    return int(dt.datetime(2026, 1, day, hour, minute, tzinfo=dt.timezone.utc).timestamp())
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -163,6 +170,46 @@ def test_bars_into_session_crosses_calendar_day_boundary():
 
     # Verify that a bar in day 1 returns only day 1 count
     assert m._bars_into_session(candles, 3) == 4  # bars 0-3 inclusive = 4 bars on day 1
+
+
+# The three tests below pin WHERE the day boundary actually is. The two
+# epoch-0 tests above can't: epoch 0 is 00:00 UTC, so they pass under both a
+# 00:00 UTC and a 22:00 UTC anchor. Anchor = 00:00 UTC = MT5 server midnight
+# on Exness (broker_offset_secs == 0), switched from 22:00 UTC (SAST
+# midnight / TradingView's reset) on 2026-10-06 at the user's request.
+
+def test_forex_day_boundary_is_midnight_utc():
+    midnight = _utc(5, 0)
+    for ts in (_utc(5, 0), _utc(5, 9, 30), _utc(5, 21, 55), _utc(5, 22, 0), _utc(5, 23, 45)):
+        assert m._forex_day_of(ts) == midnight, ts
+    assert m._forex_day_of(_utc(6, 0)) == _utc(6, 0)
+    assert m._forex_day_of(_utc(4, 23, 55)) == _utc(4, 0)
+
+
+def test_vwap_and_sigma_do_not_reset_at_2200_utc_but_do_at_midnight():
+    candles = [
+        _bar(_utc(5, 21, 45), 1.10, 1.10, 1.10, vol=1),
+        _bar(_utc(5, 22, 0), 1.20, 1.20, 1.20, vol=1),   # a 22:00 anchor would reset here
+        _bar(_utc(6, 0, 0), 1.30, 1.30, 1.30, vol=1),    # a 00:00 anchor resets here
+    ]
+    vwap = m._vwap_series(candles)
+    sigma = m._sigma_series(candles, vwap)
+    assert vwap[1] == pytest.approx(1.15)   # blended with the 21:45 bar, not reset
+    assert sigma[1] == pytest.approx(0.05)  # two bars at 1.10/1.20 around 1.15
+    assert vwap[2] == pytest.approx(1.30)   # fresh day, not blended
+    assert sigma[2] == pytest.approx(0.0)
+
+
+def test_bars_into_session_counts_from_midnight_utc():
+    candles = [
+        _bar(_utc(5, 21, 45), 1.1000, 1.0990, 1.0995, vol=10),
+        _bar(_utc(5, 22, 0), 1.1000, 1.0990, 1.0995, vol=10),
+        _bar(_utc(5, 23, 45), 1.1000, 1.0990, 1.0995, vol=10),
+        _bar(_utc(6, 0, 0), 1.1000, 1.0990, 1.0995, vol=10),
+        _bar(_utc(6, 0, 15), 1.1000, 1.0990, 1.0995, vol=10),
+    ]
+    assert m._bars_into_session(candles, 2) == 3   # 21:45, 22:00, 23:45 -- 22:00 no longer splits the day
+    assert m._bars_into_session(candles, 4) == 2   # 00:00, 00:15 -- the day starts at midnight
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -127,7 +127,7 @@ def main() -> int:
                (btmm_123.analyze_universe, alerts.alert_btmm123_setup))
 
         _drive(vwap9ema_strategy.VWAP9EMA_UNIVERSE,
-               {"m5": ("5min", 100)},
+               {"m5": ("5min", vwap9ema_strategy.M5_FETCH_LIMIT)},
                (vwap9ema_strategy.analyze_universe, alerts.alert_vwap9ema_setup))
 
         _drive(tdi_cycle_123.TDI123_UNIVERSE,
