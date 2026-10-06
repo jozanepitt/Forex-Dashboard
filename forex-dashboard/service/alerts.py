@@ -18,6 +18,8 @@ from config import (
     TDI123_WATCH_ALERTS_ENABLED,
     BTMM123_ALERTS_ENABLED, BTMM123_SESSION_FILTER, BTMM123_NEWS_FILTER,
     BTMM123_GRADE_A_ONLY, BTMM123_WATCH_ALERTS_ENABLED,
+    BTMM_ID50_ALERTS_ENABLED, BTMM_ID50_SESSION_FILTER, BTMM_ID50_NEWS_FILTER,
+    BTMM_ID50_GRADE_A_ONLY, BTMM_ID50_WATCH_ALERTS_ENABLED,
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
     VWAP9EMA_ALERTS_ENABLED,
@@ -1276,6 +1278,217 @@ def alert_btmm123_watch(pair: str, row: dict):
     if _post_discord(embed):
         _mark_sent(pair, rule)
         log.info("BTMM123 watch alert sent: %s %s grade=%s", pair, setup, grade)
+
+
+# ── BTMM ID50 (M15 50-EMA-bounce retest) ─────────────────────────────────────
+# M15-only scanner. Shares BTMM 123's default-off discipline: dashboard-visible
+# /Discord-silent until the walk-forward backtest shows an edge.
+
+def _should_alert_id50(row: dict) -> bool:
+    """Grade A (A+ and A) always; Grade B unless BTMM_ID50_GRADE_A_ONLY is
+    set (same A+B convention as CRT/TDI123/BTMM123); Grade C / NO-TRADE
+    never. Session gate mirrors the others: block outside the active window,
+    but a missing/unknown session flag (None) never hard-fails."""
+    if row.get("grade") not in ("A+", "A", "B"):
+        return False
+    if BTMM_ID50_GRADE_A_ONLY and row.get("grade") == "B":
+        return False
+    if BTMM_ID50_SESSION_FILTER and row.get("in_active_session") is False:
+        return False
+    return True
+
+
+def alert_id50_setup(pair: str, row: dict):
+    """Fire when the BTMM ID50 scanner signals a tradeable setup.
+
+    Gates:
+      - Alerts globally enabled (BTMM_ID50_ALERTS_ENABLED)
+      - Grade A always, Grade B unless BTMM_ID50_GRADE_A_ONLY=true (same
+        A+B convention as BTMM123); Grade C / NO-TRADE never
+      - R:R sanity on trade plan (min 1:0.8 on TP1)
+    """
+    if not BTMM_ID50_ALERTS_ENABLED:
+        return
+
+    setup = row.get("setup")
+    grade = row.get("grade")
+    if setup not in ("BUY", "SELL"):
+        return
+    if not _should_alert_id50(row):
+        log.debug("BTMM_ID50 FILTERED %s: grade %s / session does not meet threshold", pair, grade)
+        return
+
+    plan = row.get("trade_plan") or {}
+    entry, sl, tp1 = plan.get("entry"), plan.get("sl"), plan.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("BTMM_ID50 SUPPRESSED %s: incomplete trade plan", pair)
+        return
+
+    sl_dist = abs(entry - sl)
+    if sl_dist < 1e-9:
+        log.warning("BTMM_ID50 alert BLOCKED for %s: SL too tight (0 distance)", pair)
+        return
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.warning("BTMM_ID50 alert BLOCKED for %s: bad R:R", pair)
+        return
+
+    if BTMM_ID50_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("BTMM_ID50 news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            hit = _pair_currencies(pair) & blocked
+            log.info("BTMM_ID50 SUPPRESSED %s: high-impact news within 60m (%s)",
+                     pair, ",".join(sorted(hit)))
+            return
+
+    timeframe = row.get("timeframe") or "M15"
+    rule = f"id50_{timeframe.lower()}_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    cross = row.get("cross") or {}
+    move_away = row.get("move_away") or {}
+    trap = row.get("trap") or {}
+    tdi = row.get("tdi") or {}
+    hunt = row.get("stop_hunt") or {}
+    location = row.get("location") or {}
+    sl_pips = plan.get("sl_pips") or 0
+    rr1 = plan.get("rr1") or 0
+
+    cross_age = cross.get("bars_ago")
+    cross_dir = cross.get("direction") or "?"
+    cross_field = f"{cross_age} bars ({'▲' if cross_dir == 'bullish' else '▼'})" if cross_age is not None else "n/a"
+
+    ema_line = f"`{_fmt_price(row.get('e50'), pair)}` / `{_fmt_price(row.get('e200'), pair)}`"
+
+    retest = row.get("retest") or {}
+    retest_field = ("✅ first retest" if retest.get("ok") is True
+                    else "—" if retest.get("ok") is None else "retest info")
+
+    fields = [
+        {"name": "Direction", "value": f"**{'📈 BUY' if setup == 'BUY' else '📉 SELL'}**", "inline": True},
+        {"name": "Grade",     "value": f"⭐ **{grade} ({row.get('score', 0)}/26)**",       "inline": True},
+        {"name": "Setup",     "value": "**ID50**",                                        "inline": True},
+        {"name": "🎯 Entry",     "value": f"`{_fmt_price(entry, pair)}`",                  "inline": True},
+        {"name": "🛑 Stop Loss", "value": f"`{_fmt_price(sl, pair)}`  (−{sl_pips} pips)",  "inline": True},
+        {"name": "Risk:Reward",  "value": f"**1 : {rr1:.1f}**",                            "inline": True},
+        {"name": "EMA 50 / 200", "value": ema_line,                                       "inline": True},
+        {"name": "Cross Age",    "value": cross_field,                                    "inline": True},
+        {"name": "Anchor (Swing)", "value": f"`{_fmt_price(row.get('anchor'), pair)}`",  "inline": True},
+        {"name": "Move-away",    "value": (f"{move_away.get('magnitude_atr', 0):.2f}x ATR"
+                                           if move_away.get("magnitude_atr") is not None else "—"),
+         "inline": True},
+        {"name": "First Retest", "value": retest_field,                                   "inline": True},
+        {"name": "50-EMA Trap",  "value": "✅ rejected" if trap.get("rejection") else "—",
+         "inline": True},
+        {"name": "Entry Candle", "value": row.get("entry_candle", {}).get("reason") or "—",
+         "inline": True},
+        {"name": "TDI",          "value": "✅ RSI signal cross" if tdi.get("ok") else "—",
+         "inline": True},
+        {"name": "H1 Bias",      "value": f"{row.get('h1_bias') or '—'}{' (aligned)' if row.get('h1_aligned') else ''}",
+         "inline": True},
+        {"name": "Stop Hunt",    "value": "✅ confirmed" if hunt.get("active") else "—",
+         "inline": True},
+        {"name": "Location",     "value": f"{location.get('zone') or '—'} ({location.get('quality') or '?'})",
+         "inline": True},
+        {"name": "Session",      "value": f"{row.get('session') or '?'}{' · active' if row.get('in_active_session') else ' · inactive'}",
+         "inline": True},
+    ]
+
+    embed = {
+        "title":       f"{arrow} ⭐ {pair} — ID50 {setup}",
+        "description": row.get("notes") or "ID50 — 50-EMA first-retest bounce, M15.",
+        "color":       0x34D399,
+        "fields":      fields,
+        "footer":      {"text": f"BTMM ID50 M15 · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("BTMM_ID50 alert sent: %s %s grade=%s score=%d", pair, setup, grade, row.get("score", 0))
+
+
+def _id50_watch_reasons(pair: str, row: dict) -> list[tuple[str, bool, str]]:
+    """Checklist mirroring alert_id50_setup's gates, in the same order."""
+    grade = row.get("grade")
+    checks: list[tuple[str, bool, str]] = []
+
+    if grade == "A":
+        checks.append(("Grade", True, "A"))
+    else:
+        checks.append(("Grade B allowed", not BTMM_ID50_GRADE_A_ONLY,
+                       "allowed" if not BTMM_ID50_GRADE_A_ONLY else "BTMM_ID50_GRADE_A_ONLY is on"))
+
+    if BTMM_ID50_SESSION_FILTER:
+        checks.append(("Active session", row.get("in_active_session") is not False,
+                       row.get("session", "?")))
+
+    plan = row.get("trade_plan") or {}
+    entry, sl, tp1 = plan.get("entry"), plan.get("sl"), plan.get("tp1")
+    plan_complete = bool(entry and sl and tp1)
+    checks.append(("Trade plan complete", plan_complete, "ok" if plan_complete else "incomplete"))
+
+    if plan_complete:
+        setup = row.get("setup")
+        rr_ok = _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair)
+        checks.append(("R:R ≥ 0.8", rr_ok, "ok" if rr_ok else "below minimum"))
+
+    if BTMM_ID50_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception:  # noqa: BLE001
+            blocked = set()
+        news_clear = not _news_blocks_pair(pair, blocked)
+        checks.append(("No high-impact news window", news_clear,
+                       "clear" if news_clear else "blocked within 60m"))
+
+    return checks
+
+
+def alert_id50_watch(pair: str, row: dict):
+    """Post a 'still forming' embed for Grade A/B ID50 setups that don't yet
+    clear every gate in alert_id50_setup. Independent of BTMM_ID50_ALERTS_
+    ENABLED by design. M15-only, so no timeframe nesting needed."""
+    if not BTMM_ID50_WATCH_ALERTS_ENABLED:
+        return
+
+    grade = row.get("grade")
+    setup = row.get("setup")
+    if grade not in ("A", "B") or setup not in ("BUY", "SELL"):
+        return
+
+    try:
+        checks = _id50_watch_reasons(pair, row)
+    except Exception as e:  # noqa: BLE001
+        log.warning("BTMM_ID50 watch checklist crashed for %s: %s", pair, e)
+        return
+
+    if BTMM_ID50_ALERTS_ENABLED and all(passed for _, passed, _ in checks):
+        return
+
+    timeframe = row.get("timeframe") or "M15"
+    rule = f"id50watch_{timeframe.lower()}_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    lines = [f"{'✅' if ok else '❌'} {label} — {detail}" for label, ok, detail in checks]
+
+    embed = {
+        "title":       f"👀 {arrow} {pair} — ID50 {setup} watching (Grade {grade})",
+        "description": "Still forming — not a trade signal yet.\n" + "\n".join(lines),
+        "color":       _COLOURS["watch"],
+        "fields":      [
+            {"name": "Grade", "value": f"**{grade} ({row.get('score', 0)}/26)**", "inline": True},
+        ],
+        "footer":      {"text": f"BTMM ID50 M15 · Monitoring only · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("BTMM_ID50 watch alert sent: %s %s grade=%s", pair, setup, grade)
 
 
 # ── VWAP Mean Reversion (M15) ────────────────────────────────────────────────

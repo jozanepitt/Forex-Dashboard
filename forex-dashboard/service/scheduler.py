@@ -150,6 +150,14 @@ def refresh_all():
     except Exception as e:
         log.warning("BTMM123 alerts failed: %s", e)
 
+    # Run BTMM ID50 (M15 50-EMA-bounce retest) scanner — dashboard-visible;
+    # Discord stays silent until BTMM_ID50_ALERTS_ENABLED is turned on
+    # post-backtest (same default-off discipline as BTMM123).
+    try:
+        _run_id50_alerts()
+    except Exception as e:
+        log.warning("BTMM_ID50 alerts failed: %s", e)
+
     # Run VWAP Mean Reversion (M15) scanner + Discord alerts (real + watch)
     try:
         _run_vwap_mr_alerts()
@@ -323,6 +331,32 @@ def _run_btmm123_alerts():
             alerts.alert_btmm123_watch(row["symbol"], row)
         except Exception as e:
             log.debug("BTMM123 watch eval failed for %s: %s", row.get("symbol"), e)
+
+
+def _run_id50_alerts():
+    """Run the BTMM ID50 scanner and fire Discord alerts for confirmed setups.
+
+    ID50 is M15-primary (biased by H1) — the mirror of BTMM123's structure,
+    with the grade/session/news handles already wired into alerts.py."""
+    import cache
+    import btmm_id50
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in btmm_id50.BTMM_ID50_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
+            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
+        }
+    result = btmm_id50.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        try:
+            alerts.alert_id50_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("BTMM_ID50 alert eval failed for %s: %s", row.get("symbol"), e)
+        try:
+            alerts.alert_id50_watch(row["symbol"], row)
+        except Exception as e:
+            log.debug("BTMM_ID50 watch eval failed for %s: %s", row.get("symbol"), e)
 
 
 _stall_warned = False
