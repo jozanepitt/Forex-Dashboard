@@ -30,6 +30,8 @@ already covered by this file's assertions.
 from __future__ import annotations
 import datetime as dt
 
+import pytest
+
 import vwap9ema_strategy as m
 from config import PRIORITY_PAIRS
 
@@ -149,6 +151,64 @@ def test_universe_constant():
     assert "EUR/USD" in m.VWAP9EMA_UNIVERSE
     assert "BTC/USD" in m.VWAP9EMA_UNIVERSE
     assert "ETH/USD" in m.VWAP9EMA_UNIVERSE
+
+
+# The tests below pin WHERE the VWAP day boundary is. Anchor = 00:00 UTC =
+# MT5 server midnight on Exness (broker_offset_secs == 0, ts_utc is already
+# true UTC), switched from 22:00 UTC (SAST midnight / TradingView's reset)
+# on 2026-10-06 at the user's request. None of the fixtures above can tell
+# the two apart: their bars all start at 10:00 UTC, after both boundaries.
+
+def _utc(year, month, day, hour, minute=0):
+    return int(dt.datetime(year, month, day, hour, minute, tzinfo=UTC).timestamp())
+
+
+def test_forex_day_start_is_midnight_utc():
+    midnight = _utc(2026, 1, 5, 0, 0)
+    for ts in (_utc(2026, 1, 5, 0, 0), _utc(2026, 1, 5, 12, 30), _utc(2026, 1, 5, 21, 55),
+               _utc(2026, 1, 5, 22, 0), _utc(2026, 1, 5, 23, 55)):
+        assert m._forex_day_start_utc(ts) == midnight, ts
+    assert m._forex_day_start_utc(_utc(2026, 1, 4, 23, 55)) == _utc(2026, 1, 4, 0, 0)
+
+
+def test_session_bars_start_at_midnight_not_2200():
+    start = _utc(2026, 1, 4, 20, 0)
+    candles = [_bar(start + 300 * k, 1.1, 1.1, 1.1, 1.1, 100) for k in range(16 * 12 + 1)]  # 20:00 -> 12:00 next day
+    assert candles[-1]["ts_utc"] == _utc(2026, 1, 5, 12, 0)
+    session = m._session_bars_for_today(candles)
+    assert session[0]["ts_utc"] == _utc(2026, 1, 5, 0, 0)   # not 2026-01-04 22:00
+    assert len(session) == 12 * 12 + 1
+
+
+def test_reported_vwap_is_the_volume_weighted_hlc3_since_midnight_utc():
+    """End-to-end: the same quantity verify_vwap.py checks. Bars before
+    midnight sit at a loud 2.0000; if the VWAP were still anchored at 22:00
+    UTC it would swallow the 22:00-23:55 bars and land nowhere near 1.1."""
+    start = _utc(2026, 1, 4, 20, 0)
+    midnight = _utc(2026, 1, 5, 0, 0)
+    candles = []
+    for k in range(16 * 12 + 1):                      # 2026-01-04 20:00 -> 2026-01-05 12:00
+        ts = start + 300 * k
+        p = 2.0000 if ts < midnight else round(1.1000 + 0.0001 * (k % 7), 6)
+        candles.append(_bar(ts, p, p + 0.0002, p - 0.0002, p, 50 + k % 13))
+    expected_num = expected_den = 0.0
+    for c in candles:
+        if c["ts_utc"] >= midnight:
+            tp = (c["high"] + c["low"] + c["close"]) / 3.0
+            expected_num += tp * c["volume"]
+            expected_den += c["volume"]
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["vwap"] == pytest.approx(expected_num / expected_den, abs=1e-6), row
+
+
+def test_both_vwap_scanners_share_the_same_anchor():
+    """The M5 and M15 scanners keep separate copies of the day-boundary
+    function. A drift between them would make the dashboard's two VWAP tabs
+    disagree about when the day starts."""
+    import vwap_mean_reversion_strategy as mr
+    for ts in (_utc(2026, 1, 5, 0, 0), _utc(2026, 1, 5, 9, 30), _utc(2026, 1, 5, 21, 55),
+               _utc(2026, 1, 5, 22, 0), _utc(2026, 1, 5, 23, 55), _utc(2026, 1, 6, 0, 0)):
+        assert m._forex_day_start_utc(ts) == mr._forex_day_of(ts), ts
 
 
 def test_entry_gap_past_swing_extreme_is_no_trade():

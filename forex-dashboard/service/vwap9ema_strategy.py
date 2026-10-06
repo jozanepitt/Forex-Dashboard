@@ -19,7 +19,7 @@ this as if it were a proven Grade-A signal like the other strategies.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "vwap9ema_backtest"))
@@ -65,22 +65,21 @@ def _in_session(ts_utc: int) -> bool:
 
 
 def _forex_day_start_utc(ts_utc: int) -> int:
-    """Most recent 22:00 UTC boundary at or before ts_utc -- the standard
-    forex trading-day rollover (17:00 ET / 00:00 SAST). This is the VWAP
-    accumulation anchor, confirmed 2026-09-22 against a live TradingView
-    "VWAP Stdev Bands" chart (reset line sits at midnight SAST = 22:00 UTC,
-    not midnight UTC and not 09:00 UTC). Deliberately independent of
+    """Most recent 00:00 UTC at or before ts_utc -- the VWAP accumulation
+    anchor. 00:00 UTC is MT5 server midnight on Exness (broker_offset_secs
+    == 0, and candles' ts_utc is already true UTC), so this VWAP resets
+    where the MT5 chart's own session VWAP does. Switched 2026-10-06 at the
+    user's request from 22:00 UTC (SAST midnight), which had been matched
+    on 2026-09-22 to a TradingView "VWAP Stdev Bands" chart; TradingView
+    resets 2h earlier than MT5. If the broker's server clock ever stops
+    being UTC this must become offset-aware. Deliberately independent of
     SESSION_START_UTC/SESSION_END_UTC below, which gate when signals are
     allowed to FIRE, not when the VWAP clock itself starts."""
-    dt = datetime.fromtimestamp(ts_utc, tz=timezone.utc)
-    boundary = dt.replace(hour=22, minute=0, second=0, microsecond=0)
-    if dt.hour < 22:
-        boundary -= timedelta(days=1)
-    return int(boundary.timestamp())
+    return ts_utc - ts_utc % 86400
 
 
 def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
-    """All bars since the most recent forex-day boundary (22:00 UTC) -- the
+    """All bars since the most recent forex-day boundary (00:00 UTC) -- the
     VWAP/EMA accumulation window. Includes the overnight Asian-session bars
     even though those fall outside SESSION_START_UTC/SESSION_END_UTC's
     alert-firing window, matching how a real VWAP indicator behaves on a
