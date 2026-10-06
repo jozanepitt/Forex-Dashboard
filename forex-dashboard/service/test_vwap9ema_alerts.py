@@ -12,6 +12,8 @@ tests exist so it can't silently regress a second time.
 """
 from __future__ import annotations
 
+import pytest
+
 import alerts
 
 
@@ -110,3 +112,41 @@ def test_alert_vwap9ema_setup_noop_for_no_trade(monkeypatch):
     monkeypatch.setattr(alerts, "VWAP9EMA_ALERTS_ENABLED", True)
     alerts.alert_vwap9ema_setup("USTEC", {"symbol": "USTEC", "setup": "NO-TRADE"})
     assert len(posted) == 0
+
+
+def test_alert_path_vwap_is_anchored_at_midnight_not_the_last_100_bars(monkeypatch):
+    """Regression: scheduler._run_vwap9ema_alerts read only the newest 100 M5
+    bars (8h20m) from the cache, so the VWAP that Discord alerts were
+    evaluated against was a rolling ~8h one instead of anchored at the
+    00:00 UTC day boundary -- it disagreed with the dashboard, whose
+    /vwap9ema route reads vwap9ema_strategy.M5_FETCH_LIMIT bars.
+
+    A steadily rising series makes the two anchors differ by ~2 pips, so a
+    short read can't pass by coincidence. The cache stand-in keeps
+    cache.read_candles' contract: the newest `limit` bars, ascending."""
+    import datetime as dt
+    import cache
+    import scheduler
+
+    midnight = int(dt.datetime(2026, 1, 5, 0, 0, tzinfo=dt.timezone.utc).timestamp())
+    series = []
+    for k in range(12 * 12 + 1):                       # 00:00 -> 12:00 UTC: 145 closed M5 bars
+        p = round(1.1000 + 0.0001 * k, 6)
+        series.append({"ts_utc": midnight + 300 * k, "open": p, "high": p + 0.0002,
+                       "low": p - 0.0002, "close": p, "volume": 100.0})
+
+    def fake_read_candles(symbol, interval, limit=800):
+        assert interval == "5min"
+        return series[-limit:]
+
+    seen = {}
+    monkeypatch.setattr(cache, "read_candles", fake_read_candles)
+    monkeypatch.setattr(alerts, "alert_vwap9ema_setup", lambda sym, row: seen.__setitem__(sym, row))
+
+    scheduler._run_vwap9ema_alerts()
+
+    num = sum(((c["high"] + c["low"] + c["close"]) / 3.0) * c["volume"] for c in series)
+    expected = num / sum(c["volume"] for c in series)   # all 145 bars: everything since midnight
+    assert seen, "alert path evaluated no pairs"
+    for sym, row in seen.items():
+        assert row["vwap"] == pytest.approx(expected, abs=1e-6), (sym, row["vwap"], expected)

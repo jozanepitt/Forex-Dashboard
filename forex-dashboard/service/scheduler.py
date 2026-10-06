@@ -256,7 +256,7 @@ def _run_vwap9ema_alerts():
     candles_by_pair: dict[str, dict] = {}
     for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
         candles_by_pair[sym] = {
-            "m5": cache.read_candles(sym, "5min", limit=100),
+            "m5": cache.read_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT),
         }
     result = vwap9ema_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
