@@ -153,6 +153,47 @@ def test_universe_constant():
     assert "ETH/USD" in m.VWAP9EMA_UNIVERSE
 
 
+def test_m5_fetch_window_covers_full_forex_day():
+    """Regression guard for the 2026-09-25 accuracy fix. The live VWAP is
+    anchored at the 00:00 UTC day boundary (_forex_day_start_utc; was 22:00
+    UTC until 2026-10-06) and must include that day's very first M5 bar, or the VWAP silently
+    re-anchors mid-day and stops matching a real chart. A full forex
+    trading day is 24h x 12 = 288 M5 bars, so the fetch window used by
+    app.py and scheduler.py must always be >= 288 bars (plus slack for the
+    currently-forming bar). app.py:156 and scheduler.py:112 previously
+    fetched limit=100 (only 8h20m -> mis-anchored VWAP for ~16h/day)."""
+    assert m.M5_FETCH_LIMIT >= 288            # one full UTC day (00:00->00:00)
+    assert m.M5_FETCH_LIMIT <= 2 * 288        # sanity: no point fetching more than ~2 days
+    assert m.M5_FETCH_LIMIT % 12 == 0         # whole hours of M5 bars
+
+
+def test_9ema_uses_full_history_not_daily_reset():
+    """Regression test for the day-anchored 9EMA bug (2026-09-25). The live
+    9EMA was computed only over today's session bars, so it re-seeded at the
+    day boundary each day and could contradict the M5 chart's true
+    (full-history) 9EMA -- 'fake' EMA data, most obvious near the day open.
+    It must now run over the ENTIRE fetched M5 history.
+
+    Proof: prepend one full forex day (288 bars) at a level far ABOVE the
+    fixture's range, ending just before the fixture's day boundary
+    (2026-01-05 00:00 UTC). The current-day session bars are unchanged, so a
+    session-only EMA would still emit the old BUY (_buy_cross_series is
+    proven to BUY on its own -- see test_buy_signal_on_cross_above). A true
+    full-history EMA carries that plateau into the signal area, stays above
+    VWAP throughout and fires no cross. The fix is correct iff the outcome
+    is NO-TRADE."""
+    boundary = int(dt.datetime(2026, 1, 5, 0, 0, tzinfo=UTC).timestamp())
+    pre = []
+    ts = boundary - (288 * 300) - 300  # one full forex day, shifted back a bar so it ends strictly before the boundary
+    for _ in range(288):
+        ts += 300
+        pre.append(_bar(ts, 1.5000, 1.5001, 1.4999, 1.5000, 100))
+    assert pre[-1]["ts_utc"] < boundary  # history strictly ends before the day boundary
+    candles = pre + _buy_cross_series()
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["setup"] == "NO-TRADE", row
+
+
 # The tests below pin WHERE the VWAP day boundary is. Anchor = 00:00 UTC =
 # MT5 server midnight on Exness (broker_offset_secs == 0, ts_utc is already
 # true UTC), switched from 22:00 UTC (SAST midnight / TradingView's reset)

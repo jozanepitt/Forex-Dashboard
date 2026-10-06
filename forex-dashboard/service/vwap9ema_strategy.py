@@ -31,6 +31,20 @@ from config import PRIORITY_PAIRS  # noqa: E402
 # BTMM123 scan, including BTC/USD and ETH/USD). This simplified cross-only
 # rule has zero backtesting for every pair, not just a failed one.
 VWAP9EMA_UNIVERSE = list(PRIORITY_PAIRS)
+# Live M5 fetch window used by app.py's /vwap9ema and scheduler.py's
+# refresh loop. Two full UTC days (2 x 24h x 12 = 576 M5 bars). Covers
+# both requirements:
+#   * VWAP accuracy: the window must contain the current day's very first
+#     bar (the 00:00 UTC anchor; the longest a day can be is 288 bars, at
+#     23:55) or the VWAP silently re-anchors mid-day.
+#   * 9EMA fidelity: the EMA runs over the whole fetched history (not a
+#     daily reset), so it needs plenty of pre-day bars to be fully seeded
+#     and match the chart's true EMA(9) -- 2 days guarantees that even
+#     right after a weekend/holiday backfill gap.
+# Previously limit=100 (8h20m); the VWAP mis-anchored for ~16h/day and the
+# 9EMA had almost no history. Single source of truth -- do NOT hardcode a
+# different number in app.py/scheduler.py.
+M5_FETCH_LIMIT = 576
 EMA_LEN = 9
 RR = 2.0
 STOP_BUFFER = 0.10
@@ -79,9 +93,11 @@ def _forex_day_start_utc(ts_utc: int) -> int:
 
 
 def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
-    """All bars since the most recent forex-day boundary (00:00 UTC) -- the
-    VWAP/EMA accumulation window. Includes the overnight Asian-session bars
-    even though those fall outside SESSION_START_UTC/SESSION_END_UTC's
+    """All bars since the most recent forex-day boundary (00:00 UTC).
+    Session-anchored accumulator for the VWAP and its SD bands (NOT the
+    9EMA -- the EMA runs over the full fetched history so it matches the
+    chart's true EMA, see analyze_pair). Includes the overnight Asian-session
+    bars even though those fall outside SESSION_START_UTC/SESSION_END_UTC's
     alert-firing window, matching how a real VWAP indicator behaves on a
     chart that's open continuously, not just during London+NY."""
     if not m5_candles:
@@ -93,7 +109,9 @@ def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
 def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
     """Most-recent-bar VWAP+9EMA signal: the 9 EMA crossing the session VWAP
     on the M5 chart, nothing else. Bullish cross (9EMA moves from at-or-below
-    VWAP to above it) -> BUY; bearish cross -> SELL."""
+    VWAP to above it) -> BUY; bearish cross -> SELL. The 9EMA runs over the
+    FULL fetched M5 history (chart-true, never day-reset); the VWAP is
+    anchored at the current forex day (00:00 UTC)."""
     out: dict = {"symbol": symbol, "setup": "NO-TRADE", "grade": "UNVALIDATED"}
 
     if not m5_candles or not _in_session(m5_candles[-1]["ts_utc"]):
@@ -129,7 +147,14 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
         vwap.append(v)
         variance = max(0.0, cum_pv2 / cum_v - v * v)  # Var = E[X^2] - E[X]^2, volume-weighted
         stdev.append(variance ** 0.5)
-    e9 = ema(closes, EMA_LEN)
+    # 9EMA runs over the FULL fetched M5 history (not re-seeded at each
+    # 00:00 UTC boundary) so it matches the chart's true EMA(9) -- a
+    # day-reset EMA was 'fake' near the day open. The session bars are a
+    # contiguous suffix of the fetched series, so the values at the session
+    # positions are e9_full[offset : offset + n].
+    e9_full = ema([c["close"] for c in m5_candles], EMA_LEN)
+    offset = len(m5_candles) - n
+    e9 = e9_full[offset:offset + n]
 
     # SD bands, visual reference only -- not part of the signal logic (still
     # purely the 9EMA/VWAP cross below). Standard VWAP-band setup: session

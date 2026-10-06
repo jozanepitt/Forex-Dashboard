@@ -152,7 +152,7 @@ def vwap9ema():
     candles_by_pair: dict[str, dict] = {}
     stale_set: set[str] = set()
     for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
-        bars, stale = fetcher.get_candles(sym, "5min", limit=100)
+        bars, stale = fetcher.get_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT)
         candles_by_pair[sym] = {"m5": bars}
         if stale:
             stale_set.add(sym)
