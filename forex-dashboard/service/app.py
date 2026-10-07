@@ -14,6 +14,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 
 import alerts
+import btmm_core
 import backtest as bt
 import vwap_mean_reversion_backtest
 import btmm_123
@@ -129,6 +130,54 @@ def candles(symbol: str):
         "count":    len(bars),
         "stale":    stale,
         "candles":  bars,
+    })
+
+
+ANALYZE_STRATEGIES = ("BTMM", "TDI123", "BTMM123")
+
+
+@app.get("/analyze")
+def analyze_on_demand():
+    """On-demand single-pair analysis for one strategy (Discord bot / ad-hoc
+    checks). Unlike the universe-scan routes above, this bypasses the
+    Discord-alert gates entirely (grade/session/news filters) -- callers want
+    the live read on the pair right now, tradeable or not.
+    """
+    symbol = request.args.get("pair", "").upper().replace("_", "/")
+    if "/" not in symbol and len(symbol) == 6:
+        symbol = f"{symbol[:3]}/{symbol[3:]}"
+    strategy = request.args.get("strategy", "").upper()
+
+    if symbol not in PRIORITY_PAIRS:
+        return jsonify({
+            "error": f"'{symbol}' is not a tracked pair",
+            "tracked_pairs": PRIORITY_PAIRS,
+        }), 400
+    if strategy not in ANALYZE_STRATEGIES:
+        return jsonify({"error": f"strategy must be one of {ANALYZE_STRATEGIES}"}), 400
+
+    if strategy == "BTMM":
+        bars, stale = fetcher.get_candles(symbol, DEFAULT_INTERVAL, DEFAULT_BACKFILL)
+        result = btmm_core.analyze(bars, symbol=symbol)
+    elif strategy == "TDI123":
+        h1, s1 = fetcher.get_candles(symbol, "1h", DEFAULT_BACKFILL)
+        h4, s2 = fetcher.get_candles(symbol, "4h", 200)
+        d1, s3 = fetcher.get_candles(symbol, "1day", 60)
+        m15, s4 = fetcher.get_candles(symbol, "15min", DEFAULT_BACKFILL)
+        stale = any((s1, s2, s3, s4))
+        result = tdi_cycle_123.analyze_pair(symbol, h1, h4_candles=h4, d1_candles=d1, m15_candles=m15)
+    else:  # BTMM123
+        h1, s1 = fetcher.get_candles(symbol, "1h", DEFAULT_BACKFILL)
+        h4, s2 = fetcher.get_candles(symbol, "4h", 200)
+        m15, s3 = fetcher.get_candles(symbol, "15min", DEFAULT_BACKFILL)
+        stale = any((s1, s2, s3))
+        result = btmm_123.analyze_pair(symbol, h1, h4_candles=h4, m15_candles=m15)
+
+    return jsonify({
+        "pair": symbol,
+        "strategy": strategy,
+        "stale": stale,
+        "result": result,
     })
 
 
