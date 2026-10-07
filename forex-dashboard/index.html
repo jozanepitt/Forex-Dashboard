@@ -331,8 +331,9 @@ td.mono{font-family:var(--font-mono)}
 .mode-tab[data-mode="tdi123"].active{background:rgba(236,72,153,.12);color:#ec4899;border:1px solid rgba(236,72,153,.3)}
 .mode-tab[data-mode="journal"].active{background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
 .mode-tab[data-mode="backtest"].active{background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
+.mode-tab[data-mode="id50"].active{background:rgba(52,211,153,.12);color:#34d399;border:1px solid rgba(52,211,153,.3)}
 /* TDI 123 detail modal chart */
-.tdi123-chart-modal .modal,.btmm123-chart-modal .modal{max-width:1100px;width:95vw}
+.tdi123-chart-modal .modal,.btmm123-chart-modal .modal,.id50-chart-modal .modal{max-width:1100px;width:95vw}
 .tdi123-chart-svg{width:100%;height:auto;display:block;background:var(--bg-card);border:1px solid var(--border);border-radius:6px}
 .tdi123-chart-legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.72rem;color:var(--text-secondary);margin:8px 0 16px;padding:8px 12px;background:var(--bg-card);border-radius:6px}
 .tdi123-chart-legend .swatch{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:4px}
@@ -346,6 +347,9 @@ td.mono{font-family:var(--font-mono)}
 .btmm123-summary-tile{display:inline-block;padding:6px 12px;margin-right:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);font-size:.72rem;transition:all .2s;cursor:pointer}
 .btmm123-summary-tile:hover{background:var(--bg-elevated)}
 .btmm123-summary-tile b{color:#ec4899}
+.id50-summary-tile{display:inline-block;padding:6px 12px;margin-right:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);font-size:.72rem;transition:all .2s;cursor:pointer}
+.id50-summary-tile:hover{background:var(--bg-elevated)}
+.id50-summary-tile b{color:#34d399}
 #backtestView{display:none;padding:0 24px 24px}
 #backtestView.active{display:block}
 .bt-header{display:flex;align-items:center;gap:12px;margin:16px 0 14px;flex-wrap:wrap}
@@ -433,6 +437,7 @@ td.mono{font-family:var(--font-mono)}
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="btmm123">🎯 BTMM 123</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
+  <button class="mode-tab" data-mode="id50">🎯 ID50 M15</button>
   <button class="mode-tab" data-mode="journal">📒 Journal</button>
   <button class="mode-tab" data-mode="backtest">📈 Backtest</button>
 </div>
@@ -884,6 +889,60 @@ td.mono{font-family:var(--font-mono)}
       <b>EMA Level</b> (Level II = 4-5 of 5 EMAs aligned, Level I = 1-3), <b>Stop Hunt</b> (pierce-and-reject of recent structure), and a tight <b>Asian Range</b> (&lt;50 pips).
       Setups fire on <b>H1</b> (biased by H4) and <b>M15</b> (trigger leg), plus the <b>200EMA Re-set</b> second setup. Wrong-side pivot location caps A/B to C.
       Grade A/B/C on the same 17-pt scale as TDI 123. Discord alerts on for A+B.
+    </div>
+  </div>
+
+  <!-- ── ID50 (M15 50-EMA bounce, H1 bias, hard rules H1–H8) ───────────────── -->
+  <div class="table-container" id="id50Container" style="display:none">
+    <div class="trend-controls">
+      <div class="trend-control-group" style="min-width:260px">
+        <label>🎯 ID50 — M15 50-EMA Bounce</label>
+        <div id="id50StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">13/50 EMA cross → move-away → pullback to 50 EMA · H1 bias · session + tight-range gates · 50-EMA trap entry</div>
+      </div>
+      <button class="trend-refresh-btn" id="id50RefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta" id="id50Meta">26-pt scale · A+ ≥ 22 / A ≥ 19 / B ≥ 15 / C ≥ 12 · hard rules H1–H8 · emerald #34d399</div>
+    </div>
+    <div class="trend-summary" id="id50Summary">Click <b>Refresh Scanner</b> to compute.</div>
+    <div style="margin:14px 0 6px;padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        <div style="font-weight:600;font-size:.9rem">👀 Pairs to Watch <span id="id50WatchCount" class="mono" style="color:var(--green)">0</span></div>
+        <div style="font-size:.72rem;color:var(--text-secondary)">fresh 13/50 cross (≤ 5h) + anchor — setup forming or recently formed (may have failed; signals table is authoritative)</div>
+      </div>
+      <table class="trend-table snr-table">
+        <thead>
+          <tr><th>Pair</th><th>Direction</th><th>Cross age</th><th>Anchor</th><th>Price</th></tr>
+        </thead>
+        <tbody id="id50WatchBody"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:14px">—</td></tr></tbody>
+      </table>
+    </div>
+    <table class="trend-table snr-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Setup</th>
+          <th>Price</th>
+          <th>Move-Away</th>
+          <th>Retest</th>
+          <th>Trap</th>
+          <th>H1 Bias</th>
+          <th>Session</th>
+          <th>Entry</th>
+          <th>SL</th>
+          <th>TP1</th>
+          <th>TP2</th>
+          <th>Score</th>
+          <th>Grade</th>
+          <th>Chart</th>
+        </tr>
+      </thead>
+      <tbody id="id50TableBody"><tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>ID50 (M15):</b> impulse leg confirmed by a fresh 13/50 EMA cross (H2), which must push price meaningfully away from the 50 EMA (H5)
+      before a pullback retests it (H6) and an engulfing/rejection trap bar (H7) confirms the bounce back into the H1 bias leg.
+      H1 bias is advisory (+2 aligned / −2 countered); captive filters are session, EMAs stacked (price → e50 → e200), pips-location,
+      and R:R room to the measured-move peak. Grades: A+ ≥ 22, A ≥ 19, B ≥ 15 on a 26-pt scale; stale cross, poor pivot location
+      and R:R &lt; 1.0 cap A/B to C. Discord alerts are behind <code>BTMM_ID50_ALERTS_ENABLED</code> (off by default).
     </div>
   </div>
 
@@ -4461,6 +4520,7 @@ function closeModal() {
   overlay.classList.remove('active');
   overlay.classList.remove('tdi123-chart-modal');
   overlay.classList.remove('btmm123-chart-modal');
+  overlay.classList.remove('id50-chart-modal');
 }
 
 function updateSBTimer() {
@@ -4979,7 +5039,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123' || mode === 'vwap9ema';
+    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123' || mode === 'vwap9ema' || mode === 'id50';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -5002,11 +5062,13 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     const vwapMrContainer  = document.getElementById('vwapMrContainer');
     const btmm123Container = document.getElementById('btmm123Container');
     const tdi123Container  = document.getElementById('tdi123Container');
+    const id50Container    = document.getElementById('id50Container');
     const vwap9emaContainer = document.getElementById('vwap9emaContainer');
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
     if (vwapMrContainer)  vwapMrContainer.style.display  = (mode === 'vwap_mr')   ? 'block' : 'none';
     if (btmm123Container) btmm123Container.style.display = (mode === 'btmm123')   ? 'block' : 'none';
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
+    if (id50Container)    id50Container.style.display    = (mode === 'id50')      ? 'block' : 'none';
     if (vwap9emaContainer) vwap9emaContainer.style.display = (mode === 'vwap9ema') ? 'block' : 'none';
 
     // Load content for the active mode
@@ -5015,6 +5077,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'vwap_mr')   loadVwapMr();
     if (mode === 'btmm123')   loadBtmm123();
     if (mode === 'tdi123')    loadTdi123();
+    if (mode === 'id50')      loadId50();
     if (mode === 'vwap9ema')  loadVwap9ema();
   });
 });
@@ -6113,6 +6176,343 @@ function renderBtmm123ChartSvg(data) {
 
 const btmm123Btn = document.getElementById('btmm123RefreshBtn');
 if (btmm123Btn) btmm123Btn.addEventListener('click', loadBtmm123);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ID50 (M15 50-EMA bounce) — loader + renderer + chart overlay
+// ═════════════════════════════════════════════════════════════════════════════
+
+let id50Filter = 'ab'; // 'all', 'ab' (A+/A/B), 'aplus', 'a', 'b' — default hides C/NO-TRADE
+let id50Data = null;
+
+function _id50GradeCell(g) {
+  const colorMap = {'A+':'#34d399', A:'var(--green)', B:'var(--cyan)', C:'var(--yellow)',
+                    'NO-TRADE':'var(--text-muted)', 'NO-DATA':'var(--text-muted)'};
+  const c = colorMap[g] || 'var(--text-muted)';
+  const weight = (g === 'A+' || g === 'A' || g === 'B') ? 700 : 500;
+  return `<span style="color:${c};font-weight:${weight}">${g}</span>`;
+}
+
+async function loadId50() {
+  const tbody   = document.getElementById('id50TableBody');
+  const summary = document.getElementById('id50Summary');
+  const btn     = document.getElementById('id50RefreshBtn');
+  const watchBody  = document.getElementById('id50WatchBody');
+  const watchCount = document.getElementById('id50WatchCount');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Fetching M15/H1 candles, running 50-EMA bounce detector…';
+  tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  if (watchCount) watchCount.textContent = '0';
+  if (watchBody) watchBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:14px">No pairs currently at the watch stage.</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const ctl = new AbortController();
+    const tmr = setTimeout(() => ctl.abort(), 120000);
+    const resp = await fetch(`${baseUrl}/id50`, { signal: ctl.signal });
+    clearTimeout(tmr);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    id50Data = data;
+    id50Filter = 'ab';
+    renderId50Table(data);
+    renderId50Watch(data);
+  } catch (err) {
+    console.error('ID50 load failed', err);
+    const msg = err.name === 'AbortError' ? 'Request timed out (120s). MT5 may be busy — try Refresh Scanner.' : err.message;
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load ID50 scanner: ${msg}</span>`;
+    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--red);padding:24px">Service unreachable or timed out. Click Refresh Scanner to retry.</td></tr>';
+    if (watchCount) watchCount.textContent = '0';
+    if (watchBody) watchBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:14px">No pairs currently at the watch stage.</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderId50Table(data) {
+  const tbody   = document.getElementById('id50TableBody');
+  const summary = document.getElementById('id50Summary');
+
+  const priceCell = (o) => (o.current_price != null ? `<span class="mono">${_crtFmtPrice(o.current_price, o.symbol)}</span>` : '<span style="color:var(--text-muted)">—</span>');
+
+  const trapCell = (o) => (o.trap && o.trap.trap
+    ? '<span style="color:var(--green);font-size:.78rem">✅ trap</span>'
+    : '<span style="color:var(--text-muted)">—</span>');
+
+  const retestCell = (o) => {
+    const r = o.retest || {};
+    return r.ok
+      ? `<span style="color:var(--green);font-size:.78rem">✓ ${(r.retrace_pct * 100).toFixed(0)}%</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+  };
+
+  const mvCell = (o) => {
+    const mv = o.move_away || {};
+    return mv.ok
+      ? `<span style="color:var(--green);font-size:.72rem">✓ ${(mv.magnitude_atr || 0).toFixed(1)}×ATR</span>`
+      : '<span style="color:var(--text-muted)">—</span>';
+  };
+
+  const htfCell = (o) => {
+    if (!o.h1_bias || o.h1_bias === 'neutral') return '<span style="color:var(--text-muted)">—</span>';
+    const dirOK = o.h1_bias === 'bullish' || o.h1_bias === 'bearish';
+    return (dirOK && o.h1_aligned)
+      ? `<span style="color:var(--green);font-weight:600">${o.h1_bias} ✓</span>`
+      : `<span style="color:var(--text-muted)">${o.h1_bias}</span>`;
+  };
+
+  const sessionCell = (o) => o.in_active_session
+    ? `<span style="color:var(--green)">${o.session || 'Active'}</span>`
+    : `<span style="color:var(--text-muted)">${o.session || 'Outside'}</span>`;
+
+  const rowHtml = (o) => {
+    const t = o.trade_plan || {};
+    const rowStyle = o.grade === 'A+' ? 'background:rgba(52,211,153,.06)'
+      : o.grade === 'A' ? 'background:rgba(34,197,94,.06)'
+      : o.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
+    return `<tr style="${rowStyle}" title="${(o.notes || o.reason || '').replace(/"/g, '&quot;')}">
+      <td><b>${o.symbol}</b></td>
+      <td>${_crtSetupCell(o)}</td>
+      <td>${priceCell(o)}</td>
+      <td>${mvCell(o)}</td>
+      <td>${retestCell(o)}</td>
+      <td>${trapCell(o)}</td>
+      <td>${htfCell(o)}</td>
+      <td>${sessionCell(o)}</td>
+      <td>${t.entry  != null ? `<span class="mono">${_crtFmtPrice(t.entry, o.symbol)}</span>` : '—'}</td>
+      <td>${t.sl     != null ? `<span class="mono">${_crtFmtPrice(t.sl, o.symbol)}</span><br><span style="font-size:.65rem;color:var(--text-muted)">${t.sl_pips || '?'} pips</span>` : '—'}</td>
+      <td>${t.tp1    != null ? `<span class="mono">${_crtFmtPrice(t.tp1, o.symbol)}</span>` : '—'}</td>
+      <td>${t.tp2    != null ? `<span class="mono">${_crtFmtPrice(t.tp2, o.symbol)}</span>` : '—'}</td>
+      <td><span class="mono">${o.score || 0}</span><span style="font-size:.65rem;color:var(--text-muted)">/26</span></td>
+      <td>${_id50GradeCell(o.grade)}</td>
+      <td><button class="tdi123-detail-btn" data-id50-sym="${o.symbol}">📈 View</button></td>
+    </tr>`;
+  };
+
+  const gradeRank = {'A+': 0, A: 1, B: 2, C: 3, 'NO-TRADE': 4, 'NO-DATA': 5};
+  const sorted = (data.pairs || []).slice().sort((a, b) => {
+    const ra = gradeRank[a.grade] ?? 6, rb = gradeRank[b.grade] ?? 6;
+    if (ra !== rb) return ra - rb;
+    return (b.score || 0) - (a.score || 0);
+  });
+
+  let filtered = sorted;
+  if (id50Filter === 'ab')    filtered = sorted.filter(p => p.grade === 'A+' || p.grade === 'A' || p.grade === 'B');
+  if (id50Filter === 'a')     filtered = sorted.filter(p => p.grade === 'A+' || p.grade === 'A');
+  if (id50Filter === 'aplus') filtered = sorted.filter(p => p.grade === 'A+');
+  if (id50Filter === 'b')     filtered = sorted.filter(p => p.grade === 'B');
+
+  tbody.innerHTML = filtered.map(rowHtml).join('') || '<tr><td colspan="15" style="text-align:center;padding:24px">No rows at this filter.</td></tr>';
+
+  tbody.querySelectorAll('button[data-id50-sym]').forEach(btn => {
+    btn.addEventListener('click', () => openId50Chart(btn.dataset.id50Sym));
+  });
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+
+  const tile = (state) => state === id50Filter
+    ? 'style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:6px 8px;cursor:pointer"'
+    : 'style="cursor:pointer;opacity:0.6"';
+
+  summary.innerHTML =
+    `<button class="id50-summary-tile" data-id50-filter="ab" ${tile('ab')} style="color:var(--green)">↑ <b>${data.buys || 0}</b> BUY</button>` +
+    `<button class="id50-summary-tile" data-id50-filter="ab" ${tile('ab')} style="color:var(--red)">↓ <b>${data.sells || 0}</b> SELL</button>` +
+    `<button class="id50-summary-tile" data-id50-filter="aplus" ${tile('aplus')} style="color:#34d399">⭐ <b>${data.grade_aplus || 0}</b> grade A+</button>` +
+    `<button class="id50-summary-tile" data-id50-filter="a" ${tile('a')} style="color:var(--green)"><b>${data.grade_a || 0}</b> grade A</button>` +
+    `<button class="id50-summary-tile" data-id50-filter="b" ${tile('b')} style="color:var(--cyan)"><b>${data.grade_b || 0}</b> grade B</button>` +
+    `<button class="id50-summary-tile" data-id50-filter="all" ${tile('all')} style="color:var(--text-muted)">show all (incl. C/NO-TRADE)</button>` +
+    stale;
+
+  summary.querySelectorAll('[data-id50-filter]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      id50Filter = btn.dataset.id50Filter;
+      renderId50Table(id50Data);
+    });
+  });
+}
+
+function renderId50Watch(data) {
+  const body  = document.getElementById('id50WatchBody');
+  const count = document.getElementById('id50WatchCount');
+  const watches = (data.watches || []).slice().sort((a, b) => a.cross_age - b.cross_age);
+  if (count) count.textContent = watches.length;
+  if (!watches.length) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:14px">No pairs currently at the watch stage.</td></tr>';
+    return;
+  }
+  const pill = (d) => {
+    if (d === 'bullish') return '<span style="color:#fff;background:var(--green);border-radius:3px;padding:1px 7px;font-size:.72rem;font-weight:600">BULLISH</span>';
+    if (d === 'bearish') return '<span style="color:#fff;background:var(--red);border-radius:3px;padding:1px 7px;font-size:.72rem;font-weight:600">BEARISH</span>';
+    return '<span style="color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:1px 7px;font-size:.72rem;font-weight:600">' + (d ?? '—') + '</span>';
+  };
+  body.innerHTML = watches.map(w => `
+    <tr title="13/50 ${w.direction} cross ${w.cross_age} bars ago with confirmed pre-impulse anchor">
+      <td><b>${w.symbol}</b></td>
+      <td>${pill(w.direction)}</td>
+      <td class="mono">${w.cross_age} bars</td>
+      <td class="mono">${_crtFmtPrice(w.anchor, w.symbol)}</td>
+      <td class="mono">${_crtFmtPrice(w.price, w.symbol)}</td>
+    </tr>`).join('');
+}
+
+async function openId50Chart(symbol) {
+  const overlay = document.getElementById('modalOverlay');
+  const title = document.getElementById('modalTitle');
+  const body = document.getElementById('modalBody');
+  if (!overlay || !title || !body) return;
+
+  overlay.classList.add('id50-chart-modal');
+  overlay.classList.add('active');
+  title.textContent = `${symbol} — ID50 M15`;
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Loading M15 candles…</div>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  const DETAIL_TIMEOUT_MS = 45000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DETAIL_TIMEOUT_MS);
+  try {
+    const encoded = encodeURIComponent(symbol);
+    const resp = await fetch(`${baseUrl}/id50/detail?symbol=${encoded}`, { signal: controller.signal });
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    title.textContent = `${data.symbol || symbol} — ID50 M15`;
+    body.innerHTML = renderId50ChartSvg(data);
+  } catch (err) {
+    const timedOut = err.name === 'AbortError';
+    const msg = timedOut
+      ? `Timed out after ${DETAIL_TIMEOUT_MS / 1000}s — the service is likely busy with other requests ` +
+        `(a scanner refresh, or another tab polling candles). Close extra tabs and try again.`
+      : err.message;
+    body.innerHTML = `<div style="padding:24px;color:var(--red)">Failed to load detail: ${msg}</div>`;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function renderId50ChartSvg(data) {
+  const candles = data.candles || [];
+  const row = data.row || {};
+  const sym = data.symbol;
+  if (!candles.length) return '<div style="padding:24px;color:var(--text-muted)">No candles available.</div>';
+
+  const W = 1000, H_price = 460, margin = {top: 12, right: 60, bottom: 22, left: 12};
+  const H = H_price + margin.top + margin.bottom + 30;
+  const chartW = W - margin.left - margin.right;
+
+  const hi = Math.max(...candles.map(c => c.high));
+  const lo = Math.min(...candles.map(c => c.low));
+  const pad = (hi - lo) * 0.05;
+  const yTop = hi + pad, yBot = lo - pad;
+  const priceY = v => margin.top + (yTop - v) / (yTop - yBot) * H_price;
+  const barW = chartW / candles.length;
+  const xAt = i => margin.left + i * barW + barW * 0.5;
+
+  const candleSvg = candles.map((c, i) => {
+    const x = xAt(i);
+    const bodyTop = priceY(Math.max(c.open, c.close));
+    const bodyBot = priceY(Math.min(c.open, c.close));
+    const wickTop = priceY(c.high);
+    const wickBot = priceY(c.low);
+    const bull = c.close >= c.open;
+    const col = bull ? '#00E676' : '#FF1744';
+    return `<line x1="${x}" x2="${x}" y1="${wickTop}" y2="${wickBot}" stroke="${col}" stroke-width="1"/>
+            <rect x="${x - barW * 0.35}" y="${bodyTop}" width="${barW * 0.7}" height="${Math.max(1, bodyBot - bodyTop)}" fill="${col}" fill-opacity="0.85"/>`;
+  }).join('');
+
+  const emaLine = (arr, colour, width) => {
+    if (!arr || !arr.length) return '';
+    const pts = arr.map((v, i) => (v === null || v === undefined) ? null : `${xAt(i).toFixed(1)},${priceY(v).toFixed(1)}`)
+                   .filter(Boolean).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${colour}" stroke-width="${width || 1.4}" stroke-opacity="0.9"/>`;
+  };
+  const emaSvg = emaLine(data.ema13, '#f59e0b', 1.1)
+               + emaLine(data.ema50, '#34d399', 2.0)
+               + emaLine(data.ema200, '#b0b8c4', 1.2);
+
+  const priceAxisRight = W - margin.right + 8;
+  const priceAxis = [yTop, yTop - (yTop - yBot) * 0.25, yTop - (yTop - yBot) * 0.5, yTop - (yTop - yBot) * 0.75, yBot]
+    .map(v => `<text x="${priceAxisRight}" y="${priceY(v) + 3}" font-size="9" fill="#666">${_crtFmtPrice(v, sym)}</text>`)
+    .join('');
+
+  // Horizontal key levels: 50-EMA "now", anchor fractal, and the trade plan.
+  const hLine = (v, colour, label, dash) => {
+    if (v == null) return '';
+    const y = priceY(v);
+    if (y < margin.top || y > margin.top + H_price) return '';
+    return `<line x1="${margin.left}" x2="${margin.left + chartW}" y1="${y}" y2="${y}"
+              stroke="${colour}" stroke-width="0.9" stroke-dasharray="${dash || '4,4'}" stroke-opacity="0.75"/>
+            <text x="${margin.left + chartW - 6}" y="${y - 3}" font-size="9" fill="${colour}" text-anchor="end">${label}</text>`;
+  };
+  const planColour = row.direction === 'bearish' ? '#FF1744' : '#00E676';
+  const t = row.trade_plan || {};
+  const levels = (row.setup === 'BUY' || row.setup === 'SELL')
+    ? hLine(t.entry, planColour, 'entry', '0')
+      + hLine(t.sl,    '#ef4444', 'SL')
+      + hLine(t.tp1,   '#00E676', 'TP1')
+      + hLine(t.tp2,   '#f59e0b', 'TP2')
+    : '';
+  const e50Now = hLine(row.e50, '#34d399', `50 EMA ${_crtFmtPrice(row.e50, sym)}`, '8,4');
+  const anchorLine = hLine(row.anchor, '#93c5fd', `anchor ${_crtFmtPrice(row.anchor, sym)}`, '4,3');
+
+  // Markers (already re-indexed to this display window by /id50/detail).
+  const mk = data.markers || {};
+  const drawIdx = (idx, label, colour, isPeak) => {
+    if (idx === undefined || idx < 0 || idx >= candles.length) return '';
+    const c = candles[idx];
+    const x = xAt(idx), y = priceY(isPeak ? (mk.peak ?? c.close) : c.close);
+    return `<circle cx="${x}" cy="${y}" r="9" fill="${colour}" stroke="white" stroke-width="1.5"/>
+            <text x="${x}" y="${y + 4}" font-size="10" fill="white" font-weight="700" text-anchor="middle">${label}</text>`;
+  };
+  const markerSvg = drawIdx(mk.cross_idx, 'X', '#FFD93D', false)
+                  + drawIdx(mk.peak_idx,  'P', '#34d399', true);
+
+  const notesBadge = row.notes
+    ? `<text x="${margin.left + 8}" y="${margin.top + 14}" font-size="10" fill="#333">${(row.setup || '—')}  ·  grade ${row.grade || '—'}  ·  score ${row.score || 0}/26  ·  ${row.notes}</text>`
+    : '';
+
+  const legend = `
+    <div class="tdi123-chart-legend">
+      <span><span class="swatch" style="background:#34d399"></span>50 EMA (key level)</span>
+      <span><span class="swatch" style="background:#f59e0b"></span>13 EMA</span>
+      <span><span class="swatch" style="background:#b0b8c4"></span>200 EMA</span>
+      <span><span class="dot" style="background:#FFD93D"></span>13/50 cross</span>
+      <span><span class="dot" style="background:#34d399"></span>move-away peak</span>
+      <span><span class="swatch" style="background:#93c5fd"></span>anchor fractal</span>
+      ${(row.setup === 'BUY' || row.setup === 'SELL')
+        ? `<span><b style="color:${planColour}">${row.setup}</b> · entry ${_crtFmtPrice(t.entry, sym)} · SL ${_crtFmtPrice(t.sl, sym)} (${t.sl_pips || '?'} pips) · TP1 ${_crtFmtPrice(t.tp1, sym)} · TP2 ${_crtFmtPrice(t.tp2, sym)} · R:R ${t.rr1 != null ? t.rr1.toFixed(1) : '?'}</span>` : ''}
+    </div>`;
+
+  const svg = `<svg class="tdi123-chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="${margin.left}" y="${margin.top}" width="${chartW}" height="${H_price}" fill="none" stroke="#333" stroke-opacity="0.15"/>
+    ${levels}
+    ${e50Now}
+    ${anchorLine}
+    ${candleSvg}
+    ${emaSvg}
+    ${markerSvg}
+    ${priceAxis}
+    ${notesBadge}
+  </svg>`;
+  const bodyHtml = (row.setup === 'BUY' || row.setup === 'SELL')
+    ? `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-card);border-left:3px solid ${planColour};border-radius:6px">
+         <b style="color:${planColour}">${row.setup}</b> · grade <b>${_id50GradeCell(row.grade)}</b> · score ${row.score || 0}/26
+         · notes: ${row.notes || '—'}
+         · Entry <code>${_crtFmtPrice(t.entry, sym)}</code>
+         · SL <code>${_crtFmtPrice(t.sl, sym)}</code> (${t.sl_pips || '?'} pips)
+         · TP1 <code>${_crtFmtPrice(t.tp1, sym)}</code>
+         · TP2 <code>${_crtFmtPrice(t.tp2, sym)}</code>
+         · R:R ${t.rr1 != null ? t.rr1.toFixed(1) : '—'}
+       </div>`
+    : `<div style="margin-bottom:12px;padding:10px 14px;background:var(--bg-card);border-left:3px solid var(--text-muted);border-radius:6px">
+         No live ID50 setup for this pair. Chart shows current 13/50/200 EMA structure.
+       </div>`;
+
+  return bodyHtml + legend + svg;
+}
+
+const id50Btn = document.getElementById('id50RefreshBtn');
+if (id50Btn) id50Btn.addEventListener('click', loadId50);
 
 // ── WebSocket subscription (Phase B) ────────────────────────────────────────
 // The service emits 'refresh-complete' after each :02/:17/:32/:47 UTC refresh.
