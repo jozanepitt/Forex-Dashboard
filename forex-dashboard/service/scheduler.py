@@ -19,9 +19,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 import alerts
 import fetcher
+import market_hours
 from btmm_core import active_kill_zone
 import vwap9ema_strategy
-from config import BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_BACKFILL, DEFAULT_INTERVAL, PRIORITY_PAIRS, SERVICE_ROOT
+from config import (BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_BACKFILL, DEFAULT_INTERVAL,
+                    INTERVAL_SECS, PRIORITY_PAIRS, SERVICE_ROOT)
 
 log = logging.getLogger("scheduler")
 
@@ -82,6 +84,48 @@ def _fetch_guarded(sym: str, interval: str, limit: Optional[int] = None,
         raise box["err"]
 
 
+_last_gate_summary: dict[str, str] = {}
+
+
+def _live_symbols(runner: str, candles_by_pair: dict[str, dict],
+                  feeds: list[tuple[str, str]]) -> set[str]:
+    """Symbols a strategy may send a LIVE alert for this cycle: market open and
+    newest bar fresh on every feed it trades off (rules in market_hours). Every
+    `_run_*alerts` runner must filter its rows through this — the strategies
+    themselves take "now" from the newest candle, so on a frozen feed or a
+    closed market they keep reporting yesterday's setup as current.
+
+    `feeds` is [(candles_by_pair key, interval)], e.g. [("m15", "15min"),
+    ("1h", "1h")]. An allow-list, so a symbol with no candles is blocked too."""
+    now = time.time()
+    live: set[str] = set()
+    blocked: dict[str, int] = {}
+    for sym, tf in candles_by_pair.items():
+        reason = None
+        for key, interval in feeds:
+            try:
+                reason = market_hours.live_block_reason(
+                    sym, (tf or {}).get(key) or [], INTERVAL_SECS[interval], now)
+            except Exception as e:  # noqa: BLE001 — one bad bundle must not sink the runner
+                log.debug("%s live-alert gate failed for %s %s: %s", runner, sym, key, e)
+                reason = "bad data"
+            if reason:
+                break
+        if reason is None:
+            live.add(sym)
+        else:
+            kind = reason.split(" (")[0]
+            blocked[kind] = blocked.get(kind, 0) + 1
+
+    summary = (", ".join(f"{n} {kind}" for kind, n in sorted(blocked.items()))
+               or "all symbols live")
+    if _last_gate_summary.get(runner) != summary:      # log transitions, not every cycle
+        _last_gate_summary[runner] = summary
+        log.info("%s live-alert gate: %d/%d symbols live (%s)",
+                 runner, len(live), len(candles_by_pair), summary)
+    return live
+
+
 def refresh_all():
     global _prev_kill_zone
     log.info("refresh_all: starting (%d pairs)", len(PRIORITY_PAIRS))
@@ -115,7 +159,7 @@ def refresh_all():
 
     # Fire kill zone open alert on session transitions.
     # Suppressed in BTMM A+-only mode (user wants A+ setups only, nothing else).
-    if BTMM_ALERTS_ENABLED and not BTMM_APLUS_ONLY:
+    if BTMM_ALERTS_ENABLED and not BTMM_APLUS_ONLY and market_hours.is_market_open(None, time.time()):
         try:
             current_kz = active_kill_zone(int(time.time()))
             if current_kz and current_kz != _prev_kill_zone:
@@ -177,9 +221,14 @@ def _run_alerts():
     from btmm_core import analyze
     from config import DEFAULT_BACKFILL
 
+    candles_by_pair = {sym: {"m15": cache.read_candles(sym, DEFAULT_INTERVAL, DEFAULT_BACKFILL)}
+                       for sym in PRIORITY_PAIRS}
+    live = _live_symbols("BTMM", candles_by_pair, [("m15", DEFAULT_INTERVAL)])
     for sym in PRIORITY_PAIRS:
+        if sym not in live:
+            continue
         try:
-            bars = cache.read_candles(sym, DEFAULT_INTERVAL, DEFAULT_BACKFILL)
+            bars = candles_by_pair[sym]["m15"]
             if len(bars) < 200:
                 continue
             result = analyze(bars, symbol=sym)
@@ -217,8 +266,11 @@ def _run_crt_5am_alerts():
         candles_by_pair[sym] = {
             "m15": cache.read_candles(sym, "15min", limit=400),
         }
+    live = _live_symbols("CRT-5AM", candles_by_pair, [("m15", "15min")])
     result = crt_strategy.analyze_universe_5am(candles_by_pair)
     for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
         try:
             alerts.alert_crt_5am_setup(row["symbol"], row)
         except Exception as e:
@@ -236,8 +288,11 @@ def _run_vwap_mr_alerts():
         candles_by_pair[sym] = {
             "m15": cache.read_candles(sym, "15min", limit=400),
         }
+    live = _live_symbols("VWAP_MR", candles_by_pair, [("m15", "15min")])
     result = vwap_mean_reversion_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
         try:
             alerts.alert_vwap_mr_setup(row["symbol"], row)
         except Exception as e:
@@ -258,8 +313,11 @@ def _run_vwap9ema_alerts():
         candles_by_pair[sym] = {
             "m5": cache.read_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT),
         }
+    live = _live_symbols("VWAP9EMA", candles_by_pair, [("m5", "5min")])
     result = vwap9ema_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
         try:
             alerts.alert_vwap9ema_setup(row["symbol"], row)
         except Exception as e:
@@ -279,8 +337,11 @@ def _run_tdi123_alerts():
             "1d": cache.read_candles(sym, "1day", limit=60),
             "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
         }
+    live = _live_symbols("TDI123", candles_by_pair, [("m15", "15min"), ("1h", "1h")])
     result = tdi_cycle_123.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
         try:
             alerts.alert_tdi123_setup(row["symbol"], row)
         except Exception as e:
@@ -313,8 +374,11 @@ def _run_btmm123_alerts():
             "4h": cache.read_candles(sym, "4h", limit=200),
             "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
         }
+    live = _live_symbols("BTMM123", candles_by_pair, [("m15", "15min"), ("1h", "1h")])
     result = btmm_123.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
         try:
             alerts.alert_btmm123_setup(row["symbol"], row)
         except Exception as e:

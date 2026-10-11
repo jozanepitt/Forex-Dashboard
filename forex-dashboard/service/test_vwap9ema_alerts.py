@@ -142,6 +142,9 @@ def test_alert_path_vwap_is_anchored_at_midnight_not_the_last_100_bars(monkeypat
     seen = {}
     monkeypatch.setattr(cache, "read_candles", fake_read_candles)
     monkeypatch.setattr(alerts, "alert_vwap9ema_setup", lambda sym, row: seen.__setitem__(sym, row))
+    # The scheduler's live-alert gate compares the newest bar to the wall
+    # clock, so "now" has to sit just after this fixture's last bar (a Monday).
+    monkeypatch.setattr(scheduler.time, "time", lambda: float(series[-1]["ts_utc"] + 180))
 
     scheduler._run_vwap9ema_alerts()
 
