@@ -30,7 +30,9 @@ SUNDAY_NOW = ts(2026, 10, 11, 10, 2)      # the incident
 FRIDAY_NOW = ts(2026, 10, 9, 14, 2)       # market open, feed already frozen
 WEEKDAY_NOW = ts(2026, 10, 7, 10, 3)      # Wednesday, healthy
 FROZEN_BAR = ts(2026, 10, 9, 9, 20)
-SYM = "CAD/JPY"
+# The incident pair was CAD/JPY; the tests use EUR/USD because it is in every
+# strategy's universe, and the gate is an allow-list keyed on that universe.
+SYM = "EUR/USD"
 
 # runner name, strategy module, analyze fn, alert fns it may call
 RUNNERS = [
@@ -181,9 +183,9 @@ def test_one_malformed_bundle_does_not_sink_the_runner(harness, monkeypatch):
     harness["now"] = WEEKDAY_NOW
     good = _bars(ts(2026, 10, 7, 10, 0))
     monkeypatch.setattr(cache, "read_candles", lambda sym, interval, limit=None:
-                        [{"ts_utc": None}] if sym == "EUR/USD" else good)
+                        [{"ts_utc": None}] if sym == "GBP/USD" else good)
     monkeypatch.setattr(vwap9ema_strategy, "analyze_universe", lambda c: {
-        "pairs": [{"symbol": "EUR/USD", "setup": "BUY"}, {"symbol": SYM, "setup": "SELL"}]})
+        "pairs": [{"symbol": "GBP/USD", "setup": "BUY"}, {"symbol": SYM, "setup": "SELL"}]})
     scheduler._run_vwap9ema_alerts()
     assert harness["calls"] == [("alert_vwap9ema_setup", SYM)]
 
