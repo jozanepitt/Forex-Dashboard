@@ -87,7 +87,7 @@ def main() -> int:
         check("Discord webhook valid", False, str(e))
 
     # 4. Dashboard endpoints return data
-    for ep in ("/btmm123", "/vwap9ema", "/tdi123", "/vwap-mr"):
+    for ep in ("/btmm123", "/id50", "/vwap9ema", "/tdi123", "/vwap-mr"):
         try:
             st, body = _get(ep, timeout=180)
             n = len(body.get("pairs", []))
@@ -100,6 +100,7 @@ def main() -> int:
         import alerts
         import cache
         import btmm_123
+        import btmm_id50
         import vwap9ema_strategy
         import tdi_cycle_123
         import vwap_mean_reversion_strategy
@@ -125,6 +126,10 @@ def main() -> int:
         _drive(btmm_123.BTMM123_UNIVERSE,
                {"1h": ("1h", 3200), "4h": ("4h", 200), "m15": ("15min", 3200)},
                (btmm_123.analyze_universe, alerts.alert_btmm123_setup))
+
+        _drive(btmm_id50.BTMM_ID50_UNIVERSE,
+               {"m15": ("15min", DEFAULT_BACKFILL), "1h": ("1h", DEFAULT_BACKFILL)},
+               (btmm_id50.analyze_universe, alerts.alert_id50_setup))
 
         _drive(vwap9ema_strategy.VWAP9EMA_UNIVERSE,
                {"m5": ("5min", vwap9ema_strategy.M5_FETCH_LIMIT)},

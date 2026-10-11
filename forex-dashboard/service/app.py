@@ -17,6 +17,7 @@ import alerts
 import backtest as bt
 import vwap_mean_reversion_backtest
 import btmm_123
+import btmm_id50
 import cache
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
@@ -480,6 +481,103 @@ def btmm123_detail():
         "ema50": _tail(ema50),
         "ema200": _tail(ema200),
         "ema800": _tail(ema800),
+    })
+
+
+# ── BTMM ID50 endpoint ───────────────────────────────────────────────────────
+# M15 50-EMA-bounce retest scanner (13/50 cross -> move-away -> first-quality
+# retest + trap, TDI confirmed). M15 primary biased by H1 — same cache cadence
+# as BTMM123/TDI123.
+_ID50_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_ID50_TTL_SECS = 180
+
+
+@app.get("/id50")
+def id50():
+    """BTMM ID50 scanner across the universe."""
+    import time as _t
+
+    now = _t.time()
+    if _ID50_CACHE["payload"] is not None and (now - _ID50_CACHE["ts"]) < _ID50_TTL_SECS:
+        return jsonify(_ID50_CACHE["payload"])
+
+    universe = btmm_id50.BTMM_ID50_UNIVERSE
+    now_ts = int(now)
+
+    candles_by_pair: dict[str, dict] = {}
+    stale_set: set[str] = set()
+    for sym in universe:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
+            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
+        }
+        m15_last = cache.max_ts(sym, "15min")
+        if m15_last is None or now_ts > m15_last + 2 * INTERVAL_SECS["15min"] + 60:
+            stale_set.add(sym)
+
+    result = btmm_id50.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _ID50_CACHE["payload"] = result
+    _ID50_CACHE["ts"] = now
+    return jsonify(result)
+
+
+@app.get("/id50/detail")
+def id50_detail():
+    """Per-pair detail for the ID50 chart overlay: raw M15 candles + e13/e50/
+    e200 + cross/peak markers re-indexed to the detail window."""
+    symbol = request.args.get("symbol", "").upper().replace("_", "/")
+    if not symbol:
+        return jsonify({"error": "symbol required"}), 400
+    if "/" not in symbol and len(symbol) == 6:
+        symbol = f"{symbol[:3]}/{symbol[3:]}"
+
+    m15_bars, m15_stale = fetcher.get_candles(symbol, "15min", limit=DEFAULT_BACKFILL)
+    h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=DEFAULT_BACKFILL)
+
+    row = btmm_id50.analyze_pair(symbol, m15_bars or [],
+                                 h1_candles=h1_bars or None)
+    entry_bars = m15_bars or []
+    stale = bool(m15_stale or h1_stale)
+
+    from btmm_core import calc_ema
+    closes = [b["close"] for b in entry_bars]
+    ema13 = calc_ema(closes, 13) if len(closes) >= 13 else [None] * len(closes)
+    ema50 = calc_ema(closes, 50) if len(closes) >= 50 else [None] * len(closes)
+    ema200 = calc_ema(closes, 200) if len(closes) >= 200 else [None] * len(closes)
+
+    display_n = min(TDI123_CHART_DISPLAY_BARS, len(entry_bars)) if entry_bars else 0
+    offset = len(entry_bars) - display_n if entry_bars else 0
+
+    markers: dict = {}
+    if entry_bars and offset < len(entry_bars):
+        cross = row.get("cross") or {}
+        if cross.get("idx") is not None:
+            markers["cross_idx"] = max(0, cross["idx"] - offset)
+        mv = row.get("move_away") or {}
+        if mv.get("peak_idx") is not None:
+            markers["peak_idx"] = max(0, mv["peak_idx"] - offset)
+        if row.get("anchor") is not None:
+            markers["anchor"] = row.get("anchor")
+        if mv.get("peak") is not None:
+            markers["peak"] = mv.get("peak")
+        if row.get("e50") is not None:
+            markers["e50"] = row.get("e50")
+
+    def _tail(arr):
+        return arr[offset:] if offset > 0 else arr
+
+    return jsonify({
+        "symbol": symbol,
+        "timeframe": "M15",
+        "stale": stale,
+        "row": row,
+        "candles": _tail(entry_bars),
+        "ema13": _tail(ema13),
+        "ema50": _tail(ema50),
+        "ema200": _tail(ema200),
+        "markers": markers,
     })
 
 

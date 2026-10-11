@@ -118,6 +118,20 @@ BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "true").lower() in
 # setups develop even while real BTMM123 alerts stay off, if re-enabled.
 BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 
+# BTMM ID50 — M15 50-EMA-bounce retest scanner (design
+# docs/superpowers/specs/2026-09-24-btmm-id50-scanner-design.md). Shares
+# BTMM123's default-off discipline: dashboard-visible/Discord-silent until a
+# walk-forward backtest shows an edge (same rationale as BTMM 123 above).
+BTMM_ID50_ALERTS_ENABLED = os.environ.get("BTMM_ID50_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+BTMM_ID50_SESSION_FILTER = os.environ.get("BTMM_ID50_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
+BTMM_ID50_NEWS_FILTER = os.environ.get("BTMM_ID50_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+# Grade gate — same convention as BTMM123/TDI123: default true keeps ONLY the
+# top-tier Grade A setups (A+ and A) sent; set "false" to allow Grade A + B.
+BTMM_ID50_GRADE_A_ONLY = os.environ.get("BTMM_ID50_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+# WATCH — same "still forming" monitoring embed pattern, deliberately
+# independent of BTMM_ID50_ALERTS_ENABLED.
+BTMM_ID50_WATCH_ALERTS_ENABLED = os.environ.get("BTMM_ID50_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+
 # VWAP Mean Reversion (M15) — replaces VWAP+9EMA (2026-09-11). Adapted from
 # an external US-equity research spec; see
 # docs/superpowers/specs/2026-09-10-vwap-mean-reversion-strategy-design.md
