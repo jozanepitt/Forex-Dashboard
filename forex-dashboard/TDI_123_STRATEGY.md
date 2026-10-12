@@ -223,7 +223,7 @@ if is_bullish:
 else:
     baseline_extreme = baseline_at_p3 >= 63.0
     rsi_extreme      = rsi_at_p3 >= 68.0
-present = baseline_extreme or rsi_extreme    # EITHER threshold
+present = baseline_extreme                   # baseline must reach the zone (changed 2026-10-12; was baseline OR RSI)
 strong  = baseline_extreme and rsi_extreme   # BOTH thresholds
 ```
 If `p3_idx` is out of range for either series: `{"present": False, "reason": "index out of TDI series"}`.

@@ -464,3 +464,30 @@ def test_signal_cross_rejected_when_stale():
     cross = t._check_signal_cross(pat, fast, slow)
     assert cross["present"] is False
     assert cross["bars_since_cross"] > t.SIGNAL_CROSS_MAX_AGE
+
+
+# --- TDI extreme: the baseline must reach the zone (2026-10-12) --------------
+# Doctrine: the 34-period baseline has to enter the extreme at point 3. The
+# code used to accept the RSI line alone; in the walk-forward replay those
+# RSI-only alerts went 2 wins / 11 losses.
+
+def _extreme(direction, baseline, rsi):
+    pat = {"direction": direction, "p3": {"idx": 5}}
+    return t._check_tdi_extreme(pat, [rsi] * 10, [baseline] * 10)
+
+
+def test_rsi_alone_at_extreme_is_not_a_tdi_extreme():
+    assert _extreme("bullish", baseline=45.0, rsi=25.0)["present"] is False
+    assert _extreme("bearish", baseline=55.0, rsi=75.0)["present"] is False
+
+
+def test_baseline_at_extreme_is_enough():
+    ex = _extreme("bullish", baseline=36.0, rsi=40.0)
+    assert ex["present"] is True and ex["strong"] is False
+    ex = _extreme("bearish", baseline=64.0, rsi=60.0)
+    assert ex["present"] is True and ex["strong"] is False
+
+
+def test_baseline_and_rsi_at_extreme_is_strong():
+    assert _extreme("bullish", baseline=36.0, rsi=30.0)["strong"] is True
+    assert _extreme("bearish", baseline=64.0, rsi=70.0)["strong"] is True

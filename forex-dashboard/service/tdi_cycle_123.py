@@ -370,7 +370,8 @@ def _check_tdi_extreme(pattern: dict, rsi_series: list[float],
         rsi_extreme = rsi_at_p3 >= TDI_OB_STRICT
 
     return {
-        "present": bool(baseline_extreme or rsi_extreme),
+        # The baseline must reach the zone; the RSI line alone does not count.
+        "present": bool(baseline_extreme),
         "strong": bool(baseline_extreme and rsi_extreme),
         "baseline_at_p3": baseline_at_p3,
         "rsi_at_p3": rsi_at_p3,
@@ -798,7 +799,7 @@ def _analyze_timeframe(
         notes.append("TDI baseline + RSI both extreme")
     elif extreme["present"]:
         score += 2
-        notes.append("TDI extreme (partial)")
+        notes.append("TDI baseline extreme")
     if cross["present"]:
         score += 2
         notes.append("TDI signal cross confirmed")
@@ -849,7 +850,7 @@ def _analyze_timeframe(
     # capping the grade.
     if not extreme["present"]:
         grade = "NO-TRADE"
-        notes.append("no-trade: TDI baseline/RSI never reached an extreme at p3")
+        notes.append("no-trade: TDI baseline never reached an extreme at p3")
 
     if grade == "NO-TRADE":
         setup = "NO-TRADE"
