@@ -147,3 +147,38 @@ def test_crypto_with_fresh_bars_is_not_blocked_on_a_weekend():
 def test_crypto_with_frozen_bars_is_still_blocked():
     reason = mh.live_block_reason("BTC/USD", _bars(FROZEN_BAR, M5), M5, INCIDENT_NOW)
     assert reason is not None and "stale" in reason
+
+
+# --- closed-market bars ------------------------------------------------------
+# Audit 2026-10-12: fallback providers wrote flat zero-volume quotes for the
+# weekend (and an old import left copies of Friday's bars on Sat/Sun). About
+# 585 of the 3200 M15 bars every strategy reads were such bars.
+
+def test_zero_volume_weekend_bar_is_closed_market():
+    assert mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 10, 12, 0), 0)      # Saturday
+    assert mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 9, 21, 15), 0)      # Fri after the close
+    assert mh.is_closed_market_bar("XAU/USD", ts(2026, 10, 11, 20, 45), None)  # Sunday before the open
+
+
+def test_weekend_bar_with_volume_is_still_closed_market():
+    """Saturday never trades, whatever the volume column says."""
+    assert mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 10, 0, 0), 432.0)
+    assert mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 11, 18, 45), 250.0)
+
+
+def test_real_bars_at_the_edges_of_the_week_are_kept():
+    assert not mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 9, 20, 45), 150.0)   # last summer bar
+    assert not mh.is_closed_market_bar("EUR/USD", ts(2026, 1, 9, 21, 45), 150.0)    # winter: closes 22:00
+    assert not mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 11, 21, 0), 80.0)    # summer reopen
+    assert not mh.is_closed_market_bar("EUR/USD", ts(2026, 10, 7, 3, 0), 0)         # weekday, no-volume feed
+
+
+def test_crypto_has_no_closed_market_bars():
+    assert not mh.is_closed_market_bar("BTC/USD", ts(2026, 10, 10, 12, 0), 0)
+
+
+def test_drop_closed_market_bars_keeps_order_and_real_bars():
+    bars = [{"ts_utc": ts(2026, 10, 9, 20, 45), "volume": 10.0},
+            {"ts_utc": ts(2026, 10, 10, 9, 0), "volume": 0},
+            {"ts_utc": ts(2026, 10, 11, 21, 0), "volume": 5.0}]
+    assert mh.drop_closed_market_bars("EUR/USD", bars) == [bars[0], bars[2]]

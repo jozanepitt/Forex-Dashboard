@@ -359,3 +359,33 @@ def test_reset_detector_quiet_without_break():
     bars = [_bar(i * 3600, 1.10005, 1.09995, 1.1000) for i in range(220)]
     closes = [b["close"] for b in bars]
     assert m._detect_ema200_false_break(bars, closes)["active"] is False
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Stop already traded through (audit 2026-10-12)
+# ──────────────────────────────────────────────────────────────────────
+# Replay: ~1 in 10 BTMM 123 alerts quoted a stop that price had already
+# traded through since point 3 (H1: 50 alerts, 6 wins). The pattern has
+# failed by then; it must not be offered as a trade.
+
+def test_stop_already_hit_helper():
+    from tdi_cycle_123 import _stop_already_hit
+    after = [{"high": 1.2010, "low": 1.1990}, {"high": 1.2030, "low": 1.1950}]
+    assert _stop_already_hit(after, "BUY", 1.1960) is True
+    assert _stop_already_hit(after, "BUY", 1.1940) is False
+    assert _stop_already_hit(after, "SELL", 1.2020) is True
+    assert _stop_already_hit(after, "SELL", 1.2040) is False
+    assert _stop_already_hit([], "BUY", 1.1960) is False
+    assert _stop_already_hit(after, "BUY", None) is False
+
+
+def test_setup_is_no_trade_when_price_already_took_out_the_stop():
+    bars = _build_bullish_123_series()
+    # The last bar spikes far below point 3 (and so below any stop under it)
+    # before closing back up.
+    bars[-1] = _bar(bars[-1]["ts_utc"], bars[-1]["high"], 1.1700, bars[-1]["close"])
+    row = m.analyze_pair("EUR/USD", bars)
+    assert row["setup"] == "NO-TRADE"
+    assert row["grade"] == "NO-TRADE"
+    assert row["trade_plan"]["sl"] is None
+    assert "traded through the stop" in row["notes"]

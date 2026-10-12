@@ -92,3 +92,59 @@ def test_force_refresh_always_attempts(monkeypatch):
     forexfactory.get_events(force_refresh=True)
     forexfactory.get_events(force_refresh=True)
     assert len(calls) == 3
+
+
+# --- feed parsing -----------------------------------------------------------
+# Regression (2026-10-12): the feed sends dates as "MM-DD-YYYY" with times in
+# UTC. The parser only knew "April 28, 2026" and silently dropped every event,
+# so the news gate on every alert type had never blocked anything.
+
+_SAMPLE_FEED = b"""<?xml version="1.0" encoding="windows-1252"?>
+<weeklyevents>
+  <event><title>Core CPI m/m</title><country>USD</country>
+    <date><![CDATA[10-14-2026]]></date><time><![CDATA[12:30pm]]></time>
+    <impact><![CDATA[High]]></impact></event>
+  <event><title>Employment Change</title><country>AUD</country>
+    <date><![CDATA[10-15-2026]]></date><time><![CDATA[12:30am]]></time>
+    <impact><![CDATA[High]]></impact></event>
+  <event><title>Bank Holiday</title><country>JPY</country>
+    <date><![CDATA[10-11-2026]]></date><time><![CDATA[All Day]]></time>
+    <impact><![CDATA[Holiday]]></impact></event>
+</weeklyevents>"""
+
+
+def _utc(y, m, d, hh, mm):
+    import datetime as dt
+    return int(dt.datetime(y, m, d, hh, mm, tzinfo=dt.timezone.utc).timestamp())
+
+
+def test_parses_numeric_dates_as_utc():
+    assert forexfactory._parse_ts("10-14-2026", "12:30pm") == _utc(2026, 10, 14, 12, 30)
+    assert forexfactory._parse_ts("10-15-2026", "12:30am") == _utc(2026, 10, 15, 0, 30)
+    assert forexfactory._parse_ts("10-11-2026", "All Day") == _utc(2026, 10, 11, 0, 0)
+
+
+def test_fetch_feed_keeps_every_event(monkeypatch):
+    class _Resp:
+        content = _SAMPLE_FEED
+        def raise_for_status(self):
+            pass
+    monkeypatch.setattr(forexfactory.requests, "get", lambda *a, **k: _Resp())
+    events = forexfactory._fetch_feed()
+    assert [(e["currency"], e["impact"]) for e in events] == [
+        ("USD", "high"), ("AUD", "high"), ("JPY", "holiday")]
+    assert events[0]["ts"] == _utc(2026, 10, 14, 12, 30)
+
+
+def test_high_impact_event_blocks_its_currency(monkeypatch):
+    _reset_module_state()
+    class _Resp:
+        content = _SAMPLE_FEED
+        def raise_for_status(self):
+            pass
+    monkeypatch.setattr(forexfactory.requests, "get", lambda *a, **k: _Resp())
+    monkeypatch.setattr(forexfactory.time, "time", lambda: float(_utc(2026, 10, 14, 12, 10)))
+    assert forexfactory.currencies_in_window(30) == {"USD"}
+    monkeypatch.setattr(forexfactory.time, "time", lambda: float(_utc(2026, 10, 14, 10, 0)))
+    assert forexfactory.currencies_in_window(30) == set()
+    _reset_module_state()

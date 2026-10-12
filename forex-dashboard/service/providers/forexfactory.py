@@ -26,6 +26,7 @@ def _fetch_feed() -> list[dict]:
     resp.raise_for_status()
     root = ET.fromstring(resp.content)
     events = []
+    dropped = 0
     for ev in root.iter("event"):
         try:
             currency = (ev.findtext("country") or "").upper()
@@ -34,10 +35,9 @@ def _fetch_feed() -> list[dict]:
             date_str = ev.findtext("date") or ""
             time_str = ev.findtext("time") or ""
 
-            # Build UTC timestamp. FF dates are "Month Day, Year" e.g. "April 28, 2026"
-            # times are "Hour:MinAM/PM" e.g. "8:30am" or "All Day" / "Tentative"
             ts = _parse_ts(date_str, time_str)
             if ts is None:
+                dropped += 1
                 continue
 
             events.append({
@@ -47,28 +47,36 @@ def _fetch_feed() -> list[dict]:
                 "impact":   impact,  # "high" | "medium" | "low" | "holiday" | "non-economic"
             })
         except Exception:
-            pass
+            dropped += 1
+    if dropped:
+        # A feed-format change must be loud: the news gate fails open.
+        log.warning("forexfactory: %d of %d events could not be parsed",
+                    dropped, dropped + len(events))
     return events
 
 
 def _parse_ts(date_str: str, time_str: str) -> Optional[int]:
-    """Return UTC Unix timestamp or None if unparseable."""
-    try:
-        dt_str = f"{date_str} {time_str.strip()}".strip()
-        # Try common ForexFactory formats
-        for fmt in ("%B %d, %Y %I:%M%p", "%B %d, %Y %I%p"):
-            try:
-                dt = datetime.strptime(dt_str, fmt)
-                # FF times are Eastern Time. Approximate: UTC = ET + 4 (EDT) or +5 (EST)
-                # Use +4 as a reasonable default for trading hours
-                return int(dt.timestamp()) + 4 * 3600
-            except ValueError:
-                pass
-        # "All Day" or "Tentative" — return midnight UTC of the given date
-        dt = datetime.strptime(date_str.strip(), "%B %d, %Y")
-        return int(dt.replace(tzinfo=timezone.utc).timestamp())
-    except Exception:
-        return None
+    """Return UTC Unix timestamp or None if unparseable.
+
+    The XML feed sends dates as "MM-DD-YYYY" and times in UTC ("12:30pm"); the
+    older "April 28, 2026" form was Eastern Time. "All Day" / "Tentative" map
+    to midnight UTC of the given date."""
+    date_str = date_str.strip()
+    dt_str = f"{date_str} {time_str.strip()}".strip()
+    # (format, hours to add to reach UTC)
+    for fmt, utc_shift in (("%m-%d-%Y %I:%M%p", 0), ("%m-%d-%Y %I%p", 0),
+                           ("%B %d, %Y %I:%M%p", 4), ("%B %d, %Y %I%p", 4)):
+        try:
+            dt = datetime.strptime(dt_str, fmt).replace(tzinfo=timezone.utc)
+            return int(dt.timestamp()) + utc_shift * 3600
+        except ValueError:
+            pass
+    for fmt in ("%m-%d-%Y", "%B %d, %Y"):
+        try:
+            return int(datetime.strptime(date_str, fmt).replace(tzinfo=timezone.utc).timestamp())
+        except ValueError:
+            pass
+    return None
 
 
 def get_events(force_refresh: bool = False) -> list[dict]:

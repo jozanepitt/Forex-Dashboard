@@ -39,7 +39,7 @@ from config import PRIORITY_PAIRS
 from tdi_cycle_123 import (
     _find_swings, _find_123_pattern, _session_label, _in_active_session,
     _ema_targets, _atr, _htf_bias, _prev_week_hlc, _weekly_fib_pivots,
-    _location,
+    _location, _stop_already_hit,
 )
 
 log = logging.getLogger("btmm_123")
@@ -219,6 +219,12 @@ def _analyze_btmm_timeframe(
         sl = max(p3p + SL_STRUCT_ATR_MULT * atr, entry + SL_MIN_ATR_MULT * atr)
     else:
         entry, sl = None, None
+
+    if setup_type == "123" and _stop_already_hit(
+            entry_candles[pattern["p3"]["idx"] + 1:], setup, sl):
+        grade = setup = "NO-TRADE"
+        entry, sl = None, None
+        notes.append("no-trade: price already traded through the stop level since p3")
 
     def _pips(a: Optional[float], b: Optional[float]) -> Optional[float]:
         if a is None or b is None:

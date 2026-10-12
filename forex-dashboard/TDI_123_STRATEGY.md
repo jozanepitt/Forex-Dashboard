@@ -50,7 +50,7 @@ implementations.
 {"1min": 60, "5min": 300, "15min": 900, "30min": 1800, "1h": 3600, "4h": 14400, "1day": 86400}
 ```
 
-**Universe** — `PRIORITY_PAIRS` (`config.py:26-34`), 26 symbols
+**Universe** — `PRIORITY_PAIRS` (`config.py:26-34`), 27 symbols
 (`tdi_cycle_123.TDI123_UNIVERSE = list(PRIORITY_PAIRS)`):
 ```
 EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, USD/CAD, NZD/USD,
@@ -665,6 +665,17 @@ Stop is placed either 0.5×ATR beyond p3's extreme wick, or 1.0×ATR from
 entry — whichever produces the **larger** distance (more conservative). This
 guarantees a minimum 1×ATR stop even when entry sits right on p3.
 
+**Stop already traded through → NO-TRADE** (added 2026-10-12, also applied in
+`btmm_123.py`): if any bar after p3, including the latest one, has traded
+through the computed stop (`low <= sl` for a BUY, `high >= sl` for a SELL),
+the pattern has failed. The row is forced to `setup = grade = "NO-TRADE"`
+with `entry`/`sl` set to `None`. Helper: `_stop_already_hit`.
+
+**Input data** (added 2026-10-12): `cache.read_candles` drops closed-market
+bars for intraday intervals (Fri 22:00 → Sun 21:00 UTC, plus zero-volume bars
+from Fri 21:00) via `market_hours.is_closed_market_bar`, so every indicator
+is computed on traded bars only. Crypto is exempt.
+
 ---
 
 ## 16. Scoring formula (15-pt scale)
@@ -1055,7 +1066,7 @@ All booleans read via `os.environ.get(NAME, "default").lower() in ("1","true","y
 
 Shared infrastructure:
 ```python
-PRIORITY_PAIRS = [ ... 26 symbols, see §1 ... ]
+PRIORITY_PAIRS = [ ... 27 symbols, see §1 ... ]
 INTERVAL_SECS  = {"1min":60, "5min":300, "15min":900, "30min":1800, "1h":3600, "4h":14400, "1day":86400}
 DEFAULT_INTERVAL = "15min"
 DEFAULT_BACKFILL = 3200

@@ -54,6 +54,31 @@ def is_market_open(symbol: Optional[str], now_ts: float) -> bool:
     return not (_WEEKEND_CLOSE_MIN <= minute_of_week < reopen)
 
 
+# Hours when no FX, metal or index market trades in either DST regime:
+# Friday 22:00 UTC (winter close) until Sunday 21:00 UTC (summer open).
+_CERTAIN_CLOSE_MIN = 4 * 1440 + 22 * 60
+_EARLIEST_REOPEN_MIN = 6 * 1440 + 21 * 60
+
+
+def is_closed_market_bar(symbol: Optional[str], ts_utc: float, volume) -> bool:
+    """True for a candle that cannot be a real traded bar: anything stamped
+    inside the certain weekend closure, plus zero-volume bars in the summer-only
+    hour after Friday 21:00. Fallback providers emit flat weekend quotes; left in
+    the series they dilute every RSI/EMA/swing/Asian-range calculation."""
+    if instruments.asset_class(symbol) == "crypto":
+        return False
+    t = datetime.fromtimestamp(ts_utc, tz=timezone.utc)
+    minute_of_week = t.weekday() * 1440 + t.hour * 60 + t.minute
+    if _CERTAIN_CLOSE_MIN <= minute_of_week < _EARLIEST_REOPEN_MIN:
+        return True
+    return (not volume) and _WEEKEND_CLOSE_MIN <= minute_of_week < _EARLIEST_REOPEN_MIN
+
+
+def drop_closed_market_bars(symbol: Optional[str], bars: list[dict]) -> list[dict]:
+    return [b for b in bars
+            if not is_closed_market_bar(symbol, b["ts_utc"], b.get("volume"))]
+
+
 def stale_after_secs(interval_secs: int) -> int:
     """Oldest the newest bar may be: two bar-lengths, or one bar plus the
     fan-out allowance for short bars. MT5 hands back closed bars only, so a

@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
+import market_hours
 from config import DB_PATH
 
 _lock = threading.Lock()
@@ -93,14 +94,28 @@ def max_ts(symbol: str, interval: str) -> Optional[int]:
         return row["mx"] if row and row["mx"] is not None else None
 
 
+# Intraday intervals whose bars are checked against market hours on read.
+# 4h and daily bars legitimately start inside the closed window.
+_MARKET_HOURS_INTERVALS = ("1min", "5min", "15min", "30min", "1h")
+
+
 def read_candles(symbol: str, interval: str, limit: int = 800) -> list[dict]:
+    """Newest `limit` bars, oldest first. Closed-market bars (weekend quotes
+    from fallback providers) are skipped for intraday intervals so strategies
+    see the same series a broker chart shows."""
+    filtered = interval in _MARKET_HOURS_INTERVALS
+    # Over-fetch so `limit` real bars survive: a weekend is under 30% of a week.
+    fetch = limit + limit // 2 + 200 if filtered else limit
     with _connect() as conn:
         rows = conn.execute(
             """SELECT ts_utc, open, high, low, close, volume FROM candles
                WHERE symbol=? AND interval=?
                ORDER BY ts_utc DESC LIMIT ?""",
-            (symbol, interval, limit),
+            (symbol, interval, fetch),
         ).fetchall()
+    if filtered:
+        rows = [r for r in rows
+                if not market_hours.is_closed_market_bar(symbol, r["ts_utc"], r["volume"])][:limit]
     out = []
     for r in reversed(rows):
         out.append({

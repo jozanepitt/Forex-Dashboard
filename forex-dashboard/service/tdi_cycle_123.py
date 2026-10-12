@@ -647,6 +647,18 @@ def _adr_context(h1_candles: list[dict],
             "remaining": max(adr - trng, 0.0)}
 
 
+def _stop_already_hit(bars_after_p3: list[dict], setup: str, sl: Optional[float]) -> bool:
+    """True when price has traded through the stop level since point 3 — the
+    1-2-3 has failed and the quoted stop would already have been taken out."""
+    if sl is None:
+        return False
+    if setup == "BUY":
+        return any(b["low"] <= sl for b in bars_after_p3)
+    if setup == "SELL":
+        return any(b["high"] >= sl for b in bars_after_p3)
+    return False
+
+
 def _htf_bias(h4_bars: Optional[list[dict]]) -> Optional[str]:
     """Simple H4 bias from 50-EMA slope + price position."""
     if not h4_bars or len(h4_bars) < 60:
@@ -861,6 +873,11 @@ def _analyze_timeframe(
         sl = max(sl_struct, sl_floor)
     else:
         entry, sl = None, None
+
+    if _stop_already_hit(entry_candles[pattern["p3"]["idx"] + 1:], setup, sl):
+        grade = setup = "NO-TRADE"
+        entry, sl = None, None
+        notes.append("no-trade: price already traded through the stop level since p3")
 
     def _pips(a, b):
         if a is None or b is None:
