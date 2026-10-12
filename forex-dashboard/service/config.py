@@ -181,6 +181,15 @@ VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in (
 VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 
 
+# VWAP Bounce (M15) — trend-continuation entries off the session VWAP with the
+# 50-bar MVWAP as the trend filter. UNVALIDATED (rules come from chart review,
+# not a backtest), so Discord is OFF by default: dashboard-visible only until
+# a walk-forward test shows an edge. Same default-off discipline as BTMM123.
+VWAP_BOUNCE_ALERTS_ENABLED = os.environ.get("VWAP_BOUNCE_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+VWAP_BOUNCE_GRADE_A_ONLY = os.environ.get("VWAP_BOUNCE_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+VWAP_BOUNCE_NEWS_FILTER = os.environ.get("VWAP_BOUNCE_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+
+
 def load_keys():
     """Return list of {name, value} for keys defined in env.
 

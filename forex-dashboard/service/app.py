@@ -22,6 +22,7 @@ import cache
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
 import vwap9ema_strategy
+import vwap_bounce_strategy
 import fetcher
 import scheduler
 from providers import forexfactory
@@ -163,6 +164,44 @@ def vwap9ema():
     result["cached_at"] = int(now)
     _VWAP9EMA_CACHE["payload"] = result
     _VWAP9EMA_CACHE["ts"] = now
+    return jsonify(result)
+
+
+# 5-minute TTL cache for /vwap-bounce — M15-based, same rationale as /vwap-mr.
+_VWAP_BOUNCE_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_VWAP_BOUNCE_TTL_SECS = 300
+
+
+@app.get("/vwap-bounce")
+def vwap_bounce():
+    """VWAP Bounce scanner (M15) across the full pair universe. UNVALIDATED —
+    see vwap_bounce_strategy.py's module docstring."""
+    import time as _t
+    from concurrent.futures import ThreadPoolExecutor
+
+    now = _t.time()
+    if _VWAP_BOUNCE_CACHE["payload"] is not None and (now - _VWAP_BOUNCE_CACHE["ts"]) < _VWAP_BOUNCE_TTL_SECS:
+        return jsonify(_VWAP_BOUNCE_CACHE["payload"])
+
+    universe = vwap_bounce_strategy.VWAP_BOUNCE_UNIVERSE
+
+    def _fetch(sym):
+        bars, stale = fetcher.get_candles(sym, "15min", limit=vwap_bounce_strategy.M15_FETCH_LIMIT)
+        return sym, bars, stale
+
+    candles_by_pair: dict[str, dict] = {sym: {"m15": []} for sym in universe}
+    stale_set: set[str] = set()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sym, bars, stale in pool.map(_fetch, universe):
+            candles_by_pair[sym]["m15"] = bars
+            if stale:
+                stale_set.add(sym)
+
+    result = vwap_bounce_strategy.analyze_universe(candles_by_pair)
+    result["stale_pairs"] = sorted(stale_set)
+    result["cached_at"] = int(now)
+    _VWAP_BOUNCE_CACHE["payload"] = result
+    _VWAP_BOUNCE_CACHE["ts"] = now
     return jsonify(result)
 
 

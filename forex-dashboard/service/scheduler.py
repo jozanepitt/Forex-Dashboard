@@ -208,6 +208,13 @@ def refresh_all():
     except Exception as e:
         log.warning("VWAP Mean Reversion alerts failed: %s", e)
 
+    # Run VWAP Bounce (M15) scanner — dashboard-visible; Discord stays silent
+    # until VWAP_BOUNCE_ALERTS_ENABLED is turned on post-backtest.
+    try:
+        _run_vwap_bounce_alerts()
+    except Exception as e:
+        log.warning("VWAP Bounce alerts failed: %s", e)
+
     # Run live VWAP+9EMA scanner (UNVALIDATED — failed backtest 0/48) + Discord alerts
     try:
         _run_vwap9ema_alerts()
@@ -309,6 +316,28 @@ def _run_vwap_mr_alerts():
             alerts.alert_vwap_mr_watch(row["symbol"], row)
         except Exception as e:
             log.debug("VWAP_MR watch eval failed for %s: %s", row.get("symbol"), e)
+
+
+def _run_vwap_bounce_alerts():
+    """Run the VWAP Bounce (M15) scanner against the cache and fire Discord
+    alerts for confirmed setups (off by default — see config)."""
+    import cache
+    import vwap_bounce_strategy
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in vwap_bounce_strategy.VWAP_BOUNCE_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=vwap_bounce_strategy.M15_FETCH_LIMIT),
+        }
+    live = _live_symbols("VWAP_BOUNCE", candles_by_pair, [("m15", "15min")])
+    result = vwap_bounce_strategy.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
+        try:
+            alerts.alert_vwap_bounce_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("VWAP_BOUNCE alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 def _run_vwap9ema_alerts():

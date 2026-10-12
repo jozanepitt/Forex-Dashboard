@@ -435,6 +435,7 @@ td.mono{font-family:var(--font-mono)}
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
   <button class="mode-tab" data-mode="vwap9ema">⚠ VWAP+9EMA</button>
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
+  <button class="mode-tab" data-mode="vwap_bounce">🪃 VWAP Bounce</button>
   <button class="mode-tab" data-mode="btmm123">🎯 BTMM 123</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
   <button class="mode-tab" data-mode="id50">🎯 ID50 M15</button>
@@ -805,6 +806,49 @@ td.mono{font-family:var(--font-mono)}
       "vp-climax" variant (which failed its own honest backtest, 0/48) with a completely
       different, simpler rule, not a re-tuned version of it. Zero historical validation on
       any pair, including BTC/USD and ETH/USD.
+    </div>
+  </div>
+
+  <!-- ── VWAP Bounce (M15, UNVALIDATED) ───────────────────────────────────── -->
+  <div class="table-container" id="vwapBounceContainer" style="display:none">
+    <div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.4);color:var(--yellow);padding:10px 14px;border-radius:6px;margin-bottom:12px;font-weight:600">
+      ⚠ Unvalidated — rules come from chart review, not a backtest. Discord alerts are off. Trade at your own judgment.
+    </div>
+    <div class="trend-controls">
+      <button class="trend-refresh-btn" id="vwapBounceRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta">M15 · Today's VWAP (00:00 UTC anchor) + 50 MVWAP · all pairs · signal bar = last closed candle</div>
+    </div>
+    <div class="trend-summary" id="vwapBounceSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Setup</th>
+          <th>Grade</th>
+          <th>State</th>
+          <th>Trigger</th>
+          <th>Entry</th>
+          <th>Stop</th>
+          <th>Target</th>
+          <th>R:R</th>
+          <th>VWAP</th>
+          <th>MVWAP</th>
+          <th>MVWAP slope</th>
+          <th>RVOL</th>
+          <th>Body</th>
+        </tr>
+      </thead>
+      <tbody id="vwapBounceTableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>VWAP Bounce:</b> trades WITH the trend off the session VWAP. <b>Alignment</b> — the 50 MVWAP must be
+      sloping (at least 0.2 ATR per 10 bars; 0.5+ is strong) with the VWAP on the trend side of it.
+      <b>Trigger</b> — <i>Reject</i>: price tags the VWAP and closes back on the trend side;
+      <i>Reclaim</i>: price closes through the VWAP, holds the MVWAP, then closes back across the VWAP.
+      <b>Confirmation</b> — trigger candle RVOL ≥ 1.5 and body ≥ 55% (required for grade A).
+      <b>WATCH</b> = aligned and sitting on the VWAP, no trigger candle yet.
+      Stop is beyond the pullback extreme; target is the prior swing, or 1.5R if the swing is too close.
+      Volume is MT5 tick volume. Hover a row for the full note.
     </div>
   </div>
 
@@ -5039,7 +5083,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123' || mode === 'vwap9ema' || mode === 'id50';
+    const isScanner = mode === 'vwap_mr' || mode === 'btmm123' || mode === 'tdi123' || mode === 'vwap9ema' || mode === 'id50' || mode === 'vwap_bounce';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -5064,6 +5108,8 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     const tdi123Container  = document.getElementById('tdi123Container');
     const id50Container    = document.getElementById('id50Container');
     const vwap9emaContainer = document.getElementById('vwap9emaContainer');
+    const vwapBounceContainer = document.getElementById('vwapBounceContainer');
+    if (vwapBounceContainer) vwapBounceContainer.style.display = (mode === 'vwap_bounce') ? 'block' : 'none';
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
     if (vwapMrContainer)  vwapMrContainer.style.display  = (mode === 'vwap_mr')   ? 'block' : 'none';
     if (btmm123Container) btmm123Container.style.display = (mode === 'btmm123')   ? 'block' : 'none';
@@ -5079,6 +5125,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'tdi123')    loadTdi123();
     if (mode === 'id50')      loadId50();
     if (mode === 'vwap9ema')  loadVwap9ema();
+    if (mode === 'vwap_bounce') loadVwapBounce();
   });
 });
 
@@ -5791,6 +5838,87 @@ function renderVwap9emaTable(data) {
 }
 
 document.getElementById('vwap9emaRefreshBtn')?.addEventListener('click', loadVwap9ema);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// VWAP Bounce (M15, UNVALIDATED) — loader + renderer
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function loadVwapBounce() {
+  const tbody   = document.getElementById('vwapBounceTableBody');
+  const summary = document.getElementById('vwapBounceSummary');
+  const btn     = document.getElementById('vwapBounceRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Fetching M15 candles…';
+  tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const resp = await fetch(`${baseUrl}/vwap-bounce`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    renderVwapBounceTable(await resp.json());
+  } catch (err) {
+    console.error('VWAP Bounce load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load VWAP Bounce scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderVwapBounceTable(data) {
+  const tbody   = document.getElementById('vwapBounceTableBody');
+  const summary = document.getElementById('vwapBounceSummary');
+  const stateRank = {SIGNAL: 0, WATCH: 1, ALIGNED: 2};
+  const gradeRank = {A: 0, B: 1, C: 2};
+  const pairs = (data.pairs || []).slice().sort((a, b) =>
+    ((stateRank[a.state] ?? 3) - (stateRank[b.state] ?? 3)) ||
+    ((gradeRank[a.grade] ?? 3) - (gradeRank[b.grade] ?? 3)));
+
+  const stateCell = (p) => {
+    const map = {SIGNAL: ['var(--green)', 'Signal'], WATCH: ['var(--yellow)', 'Watch'], ALIGNED: ['var(--cyan)', 'Aligned'],
+                 'NOT-ALIGNED': ['var(--text-muted)', 'Not aligned'], 'NO-DATA': ['var(--text-muted)', 'No data'],
+                 ERROR: ['var(--red)', 'Error']};
+    const [c, label] = map[p.state] || ['var(--text-muted)', p.state || '—'];
+    return `<span style="color:${c}">${label}</span>`;
+  };
+  const slopeCell = (p) => {
+    if (p.mvwap_slope_atr == null) return '—';
+    const lbl = String(p.slope_label || '').replace('_', ' ');
+    const c = lbl.includes('rising') ? 'var(--green)' : lbl.includes('falling') ? 'var(--red)' : 'var(--text-muted)';
+    return `<span style="color:${c}">${lbl} (${p.mvwap_slope_atr > 0 ? '+' : ''}${p.mvwap_slope_atr})</span>`;
+  };
+  const rvolCell = (p) => {
+    if (p.rvol == null) return '—';
+    const c = p.rvol >= 1.5 ? 'var(--green)' : p.rvol < 0.7 ? 'var(--text-muted)' : 'var(--text-secondary)';
+    return `<span style="color:${c};font-weight:${p.vol_confirmed ? 700 : 500}">${p.rvol.toFixed(2)}${p.vol_confirmed ? ' ✓' : ''}</span>`;
+  };
+
+  const rows = pairs.map(p => `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
+      <td><b>${p.symbol}</b></td>
+      <td>${_crtSetupCell(p)}</td>
+      <td>${_crtGradeCell(p.grade)}</td>
+      <td>${stateCell(p)}</td>
+      <td>${p.trigger ? (p.trigger === 'reject' ? 'Reject' : 'Reclaim') : '—'}</td>
+      <td>${p.entry != null ? _crtFmtPrice(p.entry, p.symbol) : '—'}</td>
+      <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
+      <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
+      <td>${p.rr1 != null ? '1 : ' + p.rr1.toFixed(1) : '—'}</td>
+      <td>${p.vwap != null ? _crtFmtPrice(p.vwap, p.symbol) : '—'}</td>
+      <td>${p.mvwap != null ? _crtFmtPrice(p.mvwap, p.symbol) : '—'}</td>
+      <td>${slopeCell(p)}</td>
+      <td>${rvolCell(p)}</td>
+      <td>${p.body_pct != null ? Math.round(p.body_pct * 100) + '%' : '—'}</td>
+    </tr>`).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="14" style="text-align:center;padding:24px">No data.</td></tr>';
+
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
+  summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
+    `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> · ` +
+    `<span style="color:var(--yellow);font-weight:600">${data.watch || 0} WATCH</span>${stale}`;
+}
+
+document.getElementById('vwapBounceRefreshBtn')?.addEventListener('click', loadVwapBounce);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // BTMM 123 — loader + renderer (classic 1-2-3, BTMM-doctrine confirmed)

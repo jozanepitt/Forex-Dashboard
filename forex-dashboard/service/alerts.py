@@ -23,6 +23,7 @@ from config import (
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
     VWAP9EMA_ALERTS_ENABLED,
+    VWAP_BOUNCE_ALERTS_ENABLED, VWAP_BOUNCE_GRADE_A_ONLY, VWAP_BOUNCE_NEWS_FILTER,
 )
 from providers import forexfactory
 
@@ -1760,3 +1761,71 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     if _post_discord(embed):
         _mark_sent(pair, rule)
         log.info("VWAP9EMA alert sent: %s %s (UNVALIDATED strategy)", pair, setup)
+
+
+def alert_vwap_bounce_setup(pair: str, row: dict):
+    """Fire for a confirmed VWAP-bounce BUY/SELL (vwap_bounce_strategy.py).
+    Off by default; grade A only unless VWAP_BOUNCE_GRADE_A_ONLY is disabled.
+    UNVALIDATED strategy — every embed says so."""
+    if not VWAP_BOUNCE_ALERTS_ENABLED:
+        return
+    setup = row.get("setup")
+    if setup not in ("BUY", "SELL"):
+        return
+    grade = row.get("grade")
+    if grade != "A" and (VWAP_BOUNCE_GRADE_A_ONLY or grade != "B"):
+        return
+
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("VWAP_BOUNCE SUPPRESSED %s: incomplete trade plan", pair)
+        return
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.info("VWAP_BOUNCE SUPPRESSED %s: R:R below 0.8", pair)
+        return
+
+    if VWAP_BOUNCE_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("VWAP_BOUNCE news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            hit = _pair_currencies(pair) & blocked
+            log.info("VWAP_BOUNCE SUPPRESSED %s: high-impact news within 60m (%s)",
+                     pair, ",".join(sorted(hit)))
+            return
+
+    rule = f"vwap_bounce_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
+    rv = row.get("rvol")
+    trigger = "Rejection at VWAP" if row.get("trigger") == "reject" else "Reclaim of VWAP"
+    embed = {
+        "title": f"{arrow} {pair} — VWAP Bounce [M15] {setup}",
+        "description": row.get("notes") or "",
+        "color": colour,
+        "fields": [
+            {"name": "Direction", "value": f"**{setup}**", "inline": True},
+            {"name": "Grade", "value": f"**{grade} ({row.get('score', 0)}/10)**", "inline": True},
+            {"name": "Trigger", "value": trigger, "inline": True},
+            {"name": "🎯 Entry", "value": f"`{_fmt_price(entry, pair)}`", "inline": True},
+            {"name": "🛑 Stop Loss", "value": f"`{_fmt_price(sl, pair)}`", "inline": True},
+            {"name": "✅ Target", "value": f"`{_fmt_price(tp1, pair)}`  (1 : {row.get('rr1', 0):.1f})", "inline": True},
+            {"name": "VWAP / MVWAP",
+             "value": f"`{_fmt_price(row.get('vwap'), pair)}` / `{_fmt_price(row.get('mvwap'), pair)}`", "inline": True},
+            {"name": "MVWAP slope",
+             "value": f"{str(row.get('slope_label', '')).replace('_', ' ')} ({row.get('mvwap_slope_atr', 0):+.2f} ATR/10 bars)",
+             "inline": True},
+            {"name": "Volume",
+             "value": (f"RVOL {rv:.2f} · body {row.get('body_pct', 0):.0%}" if rv is not None else "no volume data"),
+             "inline": True},
+        ],
+        "footer": {"text": f"VWAP Bounce (unvalidated, not backtested) · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        log.info("VWAP_BOUNCE alert sent: %s %s grade %s (UNVALIDATED strategy)", pair, setup, grade)
