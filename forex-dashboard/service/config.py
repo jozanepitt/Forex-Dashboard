@@ -15,6 +15,10 @@ DB_PATH = SERVICE_ROOT / "candles.db"
 SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "3002"))
 SERVICE_HOST = os.environ.get("SERVICE_HOST", "127.0.0.1")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+# Bot token for the on-demand /analyse slash command (discord_bot.py). Separate
+# credential from the webhook above -- a webhook URL can't authenticate a bot
+# gateway connection.
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 
 # MT5 provider — primary source when terminal is running and logged in.
 MT5_ENABLED = os.environ.get("MT5_ENABLED", "true").lower() in ("1", "true", "yes")
@@ -179,7 +183,6 @@ VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in (
 # grade tiers to filter by. No watch-alerts: deliberately not adding "still
 # forming" noise to a strategy with zero validated edge.
 VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
-
 
 # VWAP Bounce (M15) — trend-continuation entries off the session VWAP with the
 # 50-bar MVWAP as the trend filter. UNVALIDATED (rules come from chart review,
