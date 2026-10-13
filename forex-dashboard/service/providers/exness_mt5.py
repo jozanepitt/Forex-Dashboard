@@ -69,6 +69,7 @@ class MT5Client:
     """Thin wrapper over the MetaTrader5 package with lazy init and a singleton-friendly shape."""
 
     INIT_RETRY_COOLDOWN_SECS = 30
+    STATUS_CACHE_SECS = 10
 
     def __init__(self, symbol_suffix: str = "m"):
         self._suffix = symbol_suffix
@@ -76,6 +77,8 @@ class MT5Client:
         self._broker_offset_secs = 0
         self._last_init_attempt = 0.0
         self._lock = threading.Lock()
+        self._status_cache: Optional[dict] = None
+        self._status_cache_ts = 0.0
 
     # ------------------------------------------------------------------ init
     def _ensure_init(self) -> bool:
@@ -212,11 +215,21 @@ class MT5Client:
         if not MT5_AVAILABLE:
             return {"available": False, "reason": "MetaTrader5 package not installed"}
         if not self._ensure_init():
-            err = mt5.last_error() if MT5_AVAILABLE else "unavailable"
+            with self._lock:
+                err = mt5.last_error() if MT5_AVAILABLE else "unavailable"
             return {"available": False, "reason": str(err)}
-        acct = mt5.account_info()
-        term = mt5.terminal_info()
-        return {
+        # Served from a short cache: the dashboard polls /status, and every MT5
+        # call must go through the lock (the binding is not thread-safe and
+        # holds the GIL during IPC — an unlocked call here overlapping a fetch
+        # froze the whole process on 2026-10-13).
+        now = time.time()
+        if self._status_cache and now - self._status_cache_ts < self.STATUS_CACHE_SECS:
+            return self._status_cache
+        with self._lock:
+            acct = mt5.account_info()
+            term = mt5.terminal_info()
+        self._status_cache_ts = now
+        self._status_cache = {
             "available": True,
             "broker_offset_secs": self._broker_offset_secs,
             "symbol_suffix":      self._suffix,
@@ -225,6 +238,7 @@ class MT5Client:
             "trade_mode":         _trade_mode_label(getattr(acct, "trade_mode", None)),
             "terminal_connected": bool(term and term.connected),
         }
+        return self._status_cache
 
 
 def _trade_mode_label(mode: Optional[int]) -> Optional[str]:

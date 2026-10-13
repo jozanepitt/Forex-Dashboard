@@ -168,3 +168,67 @@ def test_status_does_not_flag_pairs_stale_while_the_refresh_is_due(monkeypatch):
     assert all(p["fresh"] for p in fetcher.status_summary()["pairs"])
     monkeypatch.setattr(fetcher, "datetime", _Clock(LAST + 3 * M15 + 240))
     assert not any(p["fresh"] for p in fetcher.status_summary()["pairs"])
+
+
+# ── every MT5 call is serialized ─────────────────────────────────────────────
+# 2026-10-13 12:03 UTC: the whole process froze (no log lines from any thread,
+# zero CPU) during a refresh while a dashboard page was polling /status.
+# status() called mt5.account_info()/terminal_info() WITHOUT the client lock
+# while a fetch held it in another thread. The MetaTrader5 binding is not
+# thread-safe and holds the GIL during its IPC, so two overlapping calls can
+# wedge the interpreter.
+
+def test_status_makes_its_mt5_calls_under_the_client_lock(monkeypatch):
+    from providers import exness_mt5 as X
+    c = X.MT5Client(symbol_suffix="m")
+    c._initialized = True
+    seen = []
+
+    class _Fake:
+        @staticmethod
+        def account_info():
+            seen.append(("account_info", c._lock.locked()))
+            return type("A", (), {"login": 1, "server": "s", "trade_mode": 2})()
+
+        @staticmethod
+        def terminal_info():
+            seen.append(("terminal_info", c._lock.locked()))
+            return type("T", (), {"connected": True})()
+
+        @staticmethod
+        def last_error():
+            seen.append(("last_error", c._lock.locked()))
+            return (0, "")
+
+    monkeypatch.setattr(X, "mt5", _Fake, raising=False)
+    monkeypatch.setattr(X, "MT5_AVAILABLE", True)
+    out = c.status()
+    assert out["available"] is True and out["terminal_connected"] is True
+    assert seen and all(held for _, held in seen), seen
+
+
+def test_status_is_cached_briefly_so_page_polls_do_not_queue_on_mt5(monkeypatch):
+    from providers import exness_mt5 as X
+    c = X.MT5Client(symbol_suffix="m")
+    c._initialized = True
+    calls = []
+
+    class _Fake:
+        @staticmethod
+        def account_info():
+            calls.append(1)
+            return type("A", (), {"login": 1, "server": "s", "trade_mode": 2})()
+
+        @staticmethod
+        def terminal_info():
+            return type("T", (), {"connected": True})()
+
+    monkeypatch.setattr(X, "mt5", _Fake, raising=False)
+    monkeypatch.setattr(X, "MT5_AVAILABLE", True)
+    now = [1000.0]
+    monkeypatch.setattr(X.time, "time", lambda: now[0])
+    c.status(); c.status(); c.status()
+    assert len(calls) == 1
+    now[0] += X.MT5Client.STATUS_CACHE_SECS + 1
+    c.status()
+    assert len(calls) == 2

@@ -1,8 +1,9 @@
 # service-guardian-loop.ps1
 # Keeps the forex signal service (app.py, port 3002) alive WITHOUT admin rights.
 # Launched hidden at logon by the Startup-folder shortcut, and also started
-# immediately when first installed. Loops every 3 minutes: if port 3002 is not
-# listening on TWO checks 5 seconds apart (debounced -- see below), it relaunches
+# immediately when first installed. Loops every minute: if port 3002 is not
+# listening on TWO checks 5 seconds apart (debounced -- see below), or it is
+# listening but /health does not answer three times in a row, it relaunches
 # app.py DETACHED via WMI (Win32_Process.Create) so the service is owned by the
 # WMI host and survives this loop, the logon session, etc.
 #
@@ -37,6 +38,25 @@ while ($true) {
             # mode as the zombie-kill case below, just from the other side).
             Start-Sleep -Seconds 5
             $up = Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue
+        }
+        if ($up) {
+            # Listening is not the same as answering. The service has frozen with
+            # the port still open (2026-10-12 for 26 minutes; 2026-10-13 the whole
+            # process wedged inside an MT5 call), and an in-process check cannot
+            # see a frozen interpreter. Probe /health from here: three failures
+            # ten seconds apart mean it is hung -> treat it as down.
+            $answering = $false
+            foreach ($try in 1..3) {
+                try {
+                    $resp = Invoke-WebRequest -Uri "http://127.0.0.1:3002/health" -UseBasicParsing -TimeoutSec 5
+                    if ($resp.StatusCode -eq 200) { $answering = $true; break }
+                } catch { }
+                Start-Sleep -Seconds 10
+            }
+            if (-not $answering) {
+                Write-Log "service is listening but /health failed 3 times -> treating as hung"
+                $up = $null
+            }
         }
         if (-not $up) {
             # Clear any zombie app.py, then verify each one is actually gone before relaunching.
@@ -78,5 +98,5 @@ while ($true) {
     catch {
         Write-Log "loop error: $($_.Exception.Message)"
     }
-    Start-Sleep -Seconds 180
+    Start-Sleep -Seconds 60
 }
