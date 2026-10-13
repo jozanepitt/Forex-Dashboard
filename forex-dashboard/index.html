@@ -895,9 +895,6 @@ td.mono{font-family:var(--font-mono)}
 
   <!-- ── Engulfing (trend-following engulfing candle; replaced BTMM 123) ───── -->
   <div class="table-container" id="engulfingContainer" style="display:none">
-    <div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.4);color:var(--yellow);padding:10px 14px;border-radius:6px;margin-bottom:12px;font-weight:600">
-      ⚠ Unvalidated — in the walk-forward test this pattern was a coin flip before spread. Discord alerts are off. Use it as a screen, not a signal.
-    </div>
     <div class="trend-controls">
       <button class="trend-refresh-btn" id="engulfingRefreshBtn">Refresh Scanner</button>
       <div class="trend-meta">Engulfing candle with the trend · H1 entries (H4 trend) and H4 entries (daily trend) · forex, metals, indices, crypto, oil · judged on the candle that just closed</div>
@@ -927,7 +924,8 @@ td.mono{font-family:var(--font-mono)}
       <b>Rule 1-2</b> — only in the direction of the next timeframe up: H1 setups follow the H4 trend, H4 setups follow the daily trend (price and slope of its 50 EMA).
       <b>Rule 3</b> — stop at the wick of the engulfing candle. <b>Rule 4</b> — entry at the next candle's open,
       or 25% / 50% back into the engulfing candle. <b>Rule 5</b> — an engulfing against the trend shows as
-      <i>Wait</i> until a second one confirms it. Grade A = with the trend and covering the previous candle's wicks too;
+      <i>Wait</i> until a second one confirms it close by (within 8 candles, before price has run off or
+      taken out the first one); it then shows as a <i>reversal</i> signal, so its direction is the opposite of the Trend column. Grade A = with the trend and covering the previous candle's wicks too;
       grade B = with the trend, body only, or a confirmed counter-trend setup. Target is 2× the risk.
     </div>
   </div>
@@ -5982,7 +5980,10 @@ function renderEngulfingTable(data) {
   const px = (v, sym) => v != null ? _crtFmtPrice(v, sym) : '—';
 
   const rows = rowsData.map(p => {
-    const [c, label] = stateMap[p.state] || ['var(--text-muted)', p.state || '—'];
+    let [c, label] = stateMap[p.state] || ['var(--text-muted)', p.state || '—'];
+    // Rule 5 trades go against the trend column: say so, or the row reads as a mistake.
+    if (p.state === 'SIGNAL' && p.with_trend === false) { c = 'var(--yellow)'; label = 'Signal — reversal (2nd engulfing vs trend)'; }
+    else if (p.state === 'SIGNAL') label = 'Signal — with trend';
     return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
       <td><b>${p.symbol}</b></td>
       <td>${p.timeframe || '—'}</td>

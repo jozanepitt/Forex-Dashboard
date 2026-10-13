@@ -52,7 +52,7 @@ MIN_BARS = 20
 MIN_BODY_ATR = 0.25          # the engulfing candle's body must be at least this many ATRs
 MIN_PREV_BODY_PCT = 0.10     # the engulfed candle needs a real body (not a doji)
 OPEN_GAP_TOL_ATR = 0.05      # FX candles open on the previous close; allow a hair of gap
-CONFIRM_LOOKBACK = 12        # Rule 5: the first counter-trend engulfing must be this recent
+CONFIRM_LOOKBACK = 8         # Rule 5: the first counter-trend engulfing must be this recent
 SL_BUFFER_ATR = 0.10         # room beyond the wick for spread
 TARGET_RR = 2.0
 SESSION_START_UTC = 7
@@ -113,15 +113,31 @@ def _in_session(ts_utc: int) -> bool:
 
 
 def _earlier_engulfing(bars: list[dict], kind: str, atr: float) -> bool:
-    """Rule 5: was there an earlier engulfing of the same kind in the last
-    CONFIRM_LOOKBACK bars, with no opposite engulfing since?"""
+    """Rule 5, as the rule card draws it: the newest candle is the SECOND
+    engulfing of this kind, close to the first.
+
+    The first must sit within the last CONFIRM_LOOKBACK bars with no opposite
+    engulfing since; price must not have traded back beyond the first one's
+    wick (that would void it); and the new candle must still overlap the
+    first one's range (otherwise the move has already run and this is a chase,
+    not a confirmation)."""
     n = len(bars)
+    cur = bars[-1]
     for i in range(n - 2, max(1, n - 2 - CONFIRM_LOOKBACK), -1):
         k = engulfing_kind(bars[i - 1], bars[i], atr)
-        if k == kind:
-            return True
-        if k is not None:
+        if k is None:
+            continue
+        if k != kind:
             return False
+        first = bars[i]
+        between = bars[i + 1:]
+        if kind == "bearish":
+            voided = any(b["high"] > first["high"] for b in between)
+            still_there = cur["high"] >= first["low"]
+        else:
+            voided = any(b["low"] < first["low"] for b in between)
+            still_there = cur["low"] <= first["high"]
+        return (not voided) and still_there
     return False
 
 

@@ -341,3 +341,56 @@ def test_the_same_candle_never_alerts_twice(monkeypatch):
     alerts.alert_engulfing_setup("EUR/USD", row)
     assert len(sent) == 1
     alerts._engulf_last_alerted.clear()
+
+
+# ── Rule 5 must look like the rule card (2026-10-13) ─────────────────────────
+# Card 8 draws the two opposite engulfings close together at the turn: the
+# first, a small bounce, then the second. Seen live: USTEC H4 "confirmed" a
+# sell with a first engulfing two days and 600 points earlier, and gold H1
+# "confirmed" one although price had since made a new high above the first.
+
+def _counter_series(gap_bars, drift, second_shift=0.0):
+    """Uptrend lead-in, a bearish engulfing, `gap_bars` small candles moving
+    `drift` each, then a second bearish engulfing."""
+    bars = _with_pattern(_lead_in(), BEAR_PREV, BEAR_CUR)
+    p = bars[-1]["close"]
+    for _ in range(gap_bars):
+        i = len(bars)
+        c = p + drift
+        o = p
+        if drift < 0:                      # keep falling bars from engulfing anything: tiny equal bodies
+            bars.append(_bar(i, o, o + 0.0002, c - 0.0002, c))
+        else:
+            bars.append(_bar(i, o, c + 0.0002, o - 0.0002, c))
+        p = c
+    p += second_shift
+    return _with_pattern(bars, (p, p + 0.0011, p - 0.0002, p + 0.0009), (p + 0.0009, p + 0.0013, p - 0.0018, p - 0.0014))
+
+
+def test_second_engulfing_close_to_the_first_confirms():
+    row = e.analyze_timeframe("EUR/USD", _counter_series(3, +0.0001), UP_H4, timeframe="H1")
+    assert row["setup"] == "SELL" and row["confirmed_counter"] is True
+
+
+def test_second_engulfing_after_price_already_ran_away_does_not_confirm():
+    # eight candles sliding 15 pips each: the second pattern forms 120 pips below the first
+    bars = _counter_series(5, -0.0015)
+    row = e.analyze_timeframe("EUR/USD", bars, UP_H4, timeframe="H1")
+    assert row["setup"] == "NO-TRADE" and row["state"] == "WAIT-CONFIRM"
+
+
+def test_first_engulfing_is_void_once_price_trades_back_above_it():
+    # price climbs back over the first engulfing candle's high (1.1126) before the second forms
+    bars = _counter_series(4, +0.0012)
+    row = e.analyze_timeframe("EUR/USD", bars, UP_H4, timeframe="H1")
+    assert row["setup"] == "NO-TRADE" and row["state"] == "WAIT-CONFIRM"
+
+
+def test_first_engulfing_too_long_ago_does_not_confirm():
+    bars = _counter_series(e.CONFIRM_LOOKBACK + 2, +0.00002)
+    row = e.analyze_timeframe("EUR/USD", bars, UP_H4, timeframe="H1")
+    assert row["setup"] == "NO-TRADE" and row["state"] == "WAIT-CONFIRM"
+
+
+def test_confirm_lookback_matches_the_card():
+    assert e.CONFIRM_LOOKBACK == 8
