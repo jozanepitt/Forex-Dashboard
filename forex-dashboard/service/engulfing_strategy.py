@@ -25,7 +25,7 @@ walk-forward test over 27 pairs, gross of spread, gave for with-trend signals
 entered at the next open with a 2R target: H1 11,328 signals, 32% wins,
 -0.03R (M15, since dropped: 13,550 signals, 33% wins, -0.01R). No target multiple, grade,
 session or candle size changed that. Every row carries `"validated": False`
-and Discord alerts are off by default (ENGULF_ALERTS_ENABLED).
+and Discord alerts are on for grade A only (user decision, 2026-10-13).
 """
 from __future__ import annotations
 

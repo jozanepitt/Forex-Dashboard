@@ -249,10 +249,12 @@ def _pair_row(prev=BULL_PREV, cur=BULL_CUR):
     return e.analyze_pair("EUR/USD", _with_pattern(_lead_in(), prev, cur), h4_candles=UP_H4, d1_candles=UP_D1)
 
 
-def test_alerts_default_off_in_config():
+def test_alerts_default_on_and_grade_a_only_in_config():
+    """User decision 2026-10-13: send grade A engulfing setups to Discord."""
     import config
     src = open(config.__file__, encoding="utf-8").read()
-    assert 'os.environ.get("ENGULF_ALERTS_ENABLED", "false")' in src
+    assert 'os.environ.get("ENGULF_ALERTS_ENABLED", "true")' in src
+    assert 'os.environ.get("ENGULF_GRADE_A_ONLY", "true")' in src
 
 
 def test_no_alert_when_disabled(monkeypatch):
