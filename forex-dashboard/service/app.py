@@ -398,7 +398,7 @@ def tdi123_detail():
 
 # ── Engulfing endpoint (replaced BTMM 123 on 2026-10-13) ────────────────────
 # Trend-following engulfing candles: H1 entries on the H4 trend and H4 entries
-# on the daily trend, for forex, gold, silver and oil. Computed from
+# on the daily trend, for every dashboard pair plus oil. Computed from
 # the candle cache only (no live provider fetch), so the tab loads instantly.
 _ENGULF_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
 _ENGULF_TTL_SECS = 60

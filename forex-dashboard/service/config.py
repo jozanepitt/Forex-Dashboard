@@ -123,8 +123,8 @@ TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower(
 TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 
 # Engulfing — trend-following engulfing-candle scanner (engulfing_strategy.py):
-# H1 entries with the H4 trend and H4 entries with the daily trend, on forex,
-# gold, silver and oil. Replaced BTMM 123 on 2026-10-13. ALERTS default FALSE: the walk-forward test over 27 pairs showed
+# H1 entries with the H4 trend and H4 entries with the daily trend, on every
+# dashboard pair plus oil. Replaced BTMM 123 on 2026-10-13. ALERTS default FALSE: the walk-forward test over 27 pairs showed
 # no edge (M15 with-trend, entry at the next open, 2R target: 13,550 signals,
 # 33% wins, -0.01R before spread) and about 195 M15 signals a day.
 ENGULF_ALERTS_ENABLED = os.environ.get("ENGULF_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")

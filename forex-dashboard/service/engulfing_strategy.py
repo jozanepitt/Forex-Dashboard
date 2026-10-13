@@ -1,5 +1,5 @@
 """Trend-following Engulfing scanner (H1 entries on the H4 trend, H4 entries
-on the daily trend; forex, gold, silver and oil).
+on the daily trend; every dashboard pair plus oil).
 
 Rules, from the user's rule cards (2026-10-13):
 
@@ -22,8 +22,8 @@ is a fixed multiple of the risk (TARGET_RR).
 
 Replaced BTMM 123 on the dashboard (2026-10-13). NO EDGE SHOWN: the
 walk-forward test over 27 pairs, gross of spread, gave for with-trend signals
-entered at the next open with a 2R target: M15 13,550 signals, 33% wins,
--0.01R; H1 11,328 signals, 32% wins, -0.03R. No target multiple, grade,
+entered at the next open with a 2R target: H1 11,328 signals, 32% wins,
+-0.03R (M15, since dropped: 13,550 signals, 33% wins, -0.01R). No target multiple, grade,
 session or candle size changed that. Every row carries `"validated": False`
 and Discord alerts are off by default (ENGULF_ALERTS_ENABLED).
 """
@@ -36,13 +36,12 @@ import instruments
 from config import PRIORITY_PAIRS
 from tdi_cycle_123 import _atr, _htf_bias
 
-# Forex pairs, gold and silver from the main pair list, plus the two oil
-# contracts (user request 2026-10-13). Indices, the dollar index and crypto are
-# left out. The oil symbols are not in PRIORITY_PAIRS, so the scheduler fetches
-# their candles separately (EXTRA_SYMBOLS).
+# Every dashboard pair (forex, gold, silver, indices, the dollar index, crypto)
+# plus the two oil contracts (user requests 2026-10-13). The oil symbols are
+# not in PRIORITY_PAIRS, so the scheduler fetches their candles separately
+# (EXTRA_SYMBOLS).
 EXTRA_SYMBOLS = ["USOIL", "UKOIL"]
-ENGULF_UNIVERSE = [p for p in PRIORITY_PAIRS
-                   if instruments.asset_class(p) in ("fx", "jpy", "metal")] + EXTRA_SYMBOLS
+ENGULF_UNIVERSE = list(PRIORITY_PAIRS) + EXTRA_SYMBOLS
 
 # Candles read per timeframe. Entries are H1 (trend from H4) and H4 (trend
 # from D1); the trend read needs at least 60 bars of its timeframe.

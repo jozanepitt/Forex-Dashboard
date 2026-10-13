@@ -210,17 +210,15 @@ def test_analyze_universe_shape():
     assert all("setup" in p for p in res["pairs"])
 
 
-def test_universe_is_forex_metals_and_oil():
-    import instruments
+def test_universe_is_every_dashboard_pair_plus_oil():
     from config import PRIORITY_PAIRS
     u = e.ENGULF_UNIVERSE
-    fx = [p for p in PRIORITY_PAIRS if instruments.asset_class(p) in ("fx", "jpy")]
-    assert all(p in u for p in fx) and len(fx) == 19
-    assert "XAU/USD" in u and "XAG/USD" in u                # gold and silver
-    assert "USOIL" in u and "UKOIL" in u
-    for excluded in ("US30", "USTEC", "DE30", "DXY", "BTC/USD", "ETH/USD"):
-        assert excluded not in u
-    assert len(u) == len(set(u)) == 23
+    assert u[:len(PRIORITY_PAIRS)] == list(PRIORITY_PAIRS)   # forex, metals, indices, crypto
+    assert "XAU/USD" in u and "XAG/USD" in u
+    for back in ("US30", "USTEC", "DE30", "DXY", "BTC/USD", "ETH/USD"):
+        assert back in u
+    assert u[-2:] == ["USOIL", "UKOIL"]
+    assert len(u) == len(set(u)) == len(PRIORITY_PAIRS) + 2
 
 
 def test_oil_symbols_have_instrument_specs():
