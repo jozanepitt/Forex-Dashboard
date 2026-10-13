@@ -798,7 +798,8 @@ td.mono{font-family:var(--font-mono)}
       session VWAP on the M5 chart — no pullback pattern, no volume-profile filter, no
       volume-climax filter. Deliberately simplified per explicit user request; check volume/
       context yourself before trading. London+NY session (UTC 09:00–23:00) only.
-      Entry shown is the raw mid-price at the next bar's open; real fills will differ slightly.
+      A cross is reported for up to 15 minutes (the last three closed M5 candles). Entry shown is the
+      newest candle's close, raw mid-price; real fills will differ slightly.
       The VWAP and ±1σ/±2σ standard-deviation band columns are shown for your own reference
       only — session-anchored, (H+L+C)/3 source, same as the VWAP line itself — and play no
       part in the BUY/SELL signal.
@@ -816,7 +817,7 @@ td.mono{font-family:var(--font-mono)}
     </div>
     <div class="trend-controls">
       <button class="trend-refresh-btn" id="vwapBounceRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta">M15 · Today's VWAP (00:00 UTC anchor) + 50 MVWAP · all pairs · signal bar = last closed candle</div>
+      <div class="trend-meta">M15 · Today's VWAP (00:00 UTC anchor) + 50 MVWAP · all pairs · judged on the candle that just closed</div>
     </div>
     <div class="trend-summary" id="vwapBounceSummary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table">
@@ -1111,6 +1112,10 @@ const FOREX_PAIRS = [
   { symbol:'GBP/CHF', base:1.1160, type:'minor', pip:0.0001, decimals:5, pipValue:10.2 },
   { symbol:'AUD/JPY', base:100.70, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
   { symbol:'CAD/JPY', base:113.20, type:'minor', pip:0.01, decimals:3, pipValue:6.5 },
+  { symbol:'GBP/AUD', base:1.9000, type:'minor', pip:0.0001, decimals:5, pipValue:6.5 },
+  { symbol:'AUD/CAD', base:0.9930, type:'minor', pip:0.0001, decimals:5, pipValue:7.3 },
+  { symbol:'AUD/CHF', base:0.5800, type:'minor', pip:0.0001, decimals:5, pipValue:11.3 },
+  { symbol:'AUD/NZD', base:1.2450, type:'minor', pip:0.0001, decimals:5, pipValue:6.0 },
   { symbol:'XAU/USD', base:2050.0, type:'metal', pip:0.10, decimals:2, pipValue:10 },
   { symbol:'XAG/USD', base:24.50,  type:'metal', pip:0.01, decimals:3, pipValue:50 },
   { symbol:'DE30',    base:25000,  type:'index', pip:1.0,  decimals:1, pipValue:1 },
@@ -1124,6 +1129,7 @@ const FOREX_PAIRS = [
 const PRIORITY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
   'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/CHF', 'GBP/CHF', 'CAD/JPY', 'EUR/AUD',
+  'GBP/AUD', 'AUD/CAD', 'AUD/CHF', 'AUD/NZD',
   'XAU/USD', 'XAG/USD', 'DE30', 'US30', 'USTEC', 'DXY', 'BTC/USD', 'ETH/USD'
 ];
 

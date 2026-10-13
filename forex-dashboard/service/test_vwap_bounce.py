@@ -38,8 +38,8 @@ def _vwap_now(bars):
 
 
 def _bull_setup(trigger_vol=320.0, pullback_vol=40.0):
-    """Uptrend from 00:00, a quiet pullback that tags the VWAP, a bull
-    rejection candle, then the forming entry bar."""
+    """Uptrend from 00:00, a quiet pullback that tags the VWAP, then a bull
+    rejection candle as the newest (just closed) bar."""
     bars = _trend(_flat_day(), 40, +0.0002)                 # 00:00 -> 10:00, 1.1000 -> 1.1080
     # Quiet pullback towards (but staying above) the VWAP.
     for _ in range(3):
@@ -52,8 +52,6 @@ def _bull_setup(trigger_vol=320.0, pullback_vol=40.0):
     v = _vwap_now(probe)
     c = o + 0.0015
     bars.append(_bar(bars[-1]["ts_utc"] + STEP, o, c + 0.0001, v - 0.00002, c, trigger_vol))
-    # Forming bar (the entry bar).
-    bars.append(_bar(bars[-1]["ts_utc"] + STEP, c, c + 0.0001, c - 0.0001, c, 20.0))
     return bars
 
 
@@ -168,7 +166,6 @@ def test_break_hold_mvwap_then_reclaim_is_a_buy():
     o = bars[-1]["close"]
     c = _vwap_now(bars) + 0.0012
     bars.append(_bar(bars[-1]["ts_utc"] + STEP, o, c + 0.0001, o - 0.0001, c, 320.0))
-    bars.append(_bar(bars[-1]["ts_utc"] + STEP, c, c + 0.0001, c - 0.0001, c, 20.0))
     row = vb.analyze_pair("EUR/USD", bars)
     assert row["setup"] == "BUY"
     assert row["trigger"] == "reclaim"
@@ -184,19 +181,16 @@ def test_reclaim_after_losing_the_mvwap_is_not_a_trade():
     o = bars[-1]["close"]
     c = _vwap_now(bars) + 0.0012
     bars.append(_bar(bars[-1]["ts_utc"] + STEP, o, c + 0.0001, o - 0.0001, c, 320.0))
-    bars.append(_bar(bars[-1]["ts_utc"] + STEP, c, c + 0.0001, c - 0.0001, c, 20.0))
     row = vb.analyze_pair("EUR/USD", bars)
     assert row["setup"] == "NO-TRADE"
 
 
 def test_aligned_and_near_vwap_without_a_trigger_is_watch():
-    bars = _bull_setup()[:-2]                               # stop before the rejection candle
+    bars = _bull_setup()[:-1]                               # stop before the rejection candle
     # One more quiet bar drifting down to sit just above the VWAP.
     o = bars[-1]["close"]
     c = _vwap_now(bars) + 0.0001
     bars.append(_bar(bars[-1]["ts_utc"] + STEP, o, o + 0.0001, c - 0.00005, c, 30.0))
-    o = bars[-1]["close"]
-    bars.append(_bar(bars[-1]["ts_utc"] + STEP, o, o + 0.0001, o - 0.0001, o, 30.0))   # forming
     row = vb.analyze_pair("EUR/USD", bars)
     assert row["setup"] == "NO-TRADE"
     assert row["state"] == "WATCH"
@@ -278,3 +272,67 @@ def test_no_trade_row_never_alerts(monkeypatch):
     sent = _alert_harness(monkeypatch)
     alerts.alert_vwap_bounce_setup("EUR/USD", vb.analyze_pair("EUR/USD", []))
     assert sent == []
+
+
+# ── cached scan (what the dashboard tab calls) ───────────────────────────────
+# The tab used to trigger a live per-symbol provider fetch on every load
+# (29s for 27 pairs behind the MT5 lock). It now reads the candle cache the
+# scheduler already keeps fresh.
+
+def test_scan_cached_reads_the_cache_for_every_pair_and_never_fetches():
+    asked = []
+
+    def read(sym, interval, limit):
+        asked.append((sym, interval, limit))
+        return _bull_setup() if sym == "EUR/USD" else []
+
+    now = _bull_setup()[-1]["ts_utc"] + STEP + 120      # two minutes after the bar closed
+    res = vb.scan_cached(read, now)
+    assert [a[0] for a in asked] == vb.VWAP_BOUNCE_UNIVERSE
+    assert {a[1:] for a in asked} == {("15min", vb.M15_FETCH_LIMIT)}
+    assert len(res["pairs"]) == len(vb.VWAP_BOUNCE_UNIVERSE)
+    assert res["buys"] == 1
+
+
+def test_scan_cached_flags_stale_pairs_but_not_fresh_ones():
+    fresh = _bull_setup()
+    now = fresh[-1]["ts_utc"] + STEP + 120               # Wednesday morning, market open
+    old = [dict(b, ts_utc=b["ts_utc"] - 6 * 3600) for b in fresh]
+
+    def read(sym, interval, limit):
+        return old if sym == "GBP/USD" else fresh
+
+    res = vb.scan_cached(read, now)
+    assert res["stale_pairs"] == ["GBP/USD"]
+
+
+# ── the newest cached bar is the signal bar ──────────────────────────────────
+# Providers drop the still-forming candle, so the cache only ever holds closed
+# bars. The first version of this scanner treated the newest bar as "forming"
+# and judged the one before it: every signal was 15 minutes late and quoted
+# the stale open of an already-closed bar as the entry (found 2026-10-13).
+
+def test_signal_is_taken_from_the_newest_bar():
+    bars = _bull_setup()
+    row = vb.analyze_pair("EUR/USD", bars)
+    assert row["setup"] == "BUY"
+    assert row["signal_ts"] == bars[-1]["ts_utc"]
+    assert row["entry"] == bars[-1]["close"]
+    assert row["current_price"] == bars[-1]["close"]
+
+
+def test_a_signal_one_bar_old_is_no_longer_reported():
+    bars = _bull_setup()
+    o = bars[-1]["close"]
+    bars.append(_bar(bars[-1]["ts_utc"] + STEP, o, o + 0.0002, o - 0.0001, o + 0.0001, 60.0))
+    row = vb.analyze_pair("EUR/USD", bars)
+    assert row["setup"] == "NO-TRADE"
+
+
+def test_scan_cached_does_not_call_data_stale_while_the_next_refresh_is_due():
+    """Just after a quarter-hour the newest cached bar closed 15+ minutes ago
+    and the scheduler has not fetched the next one yet. That is normal."""
+    fresh = _bull_setup()
+    now = fresh[-1]["ts_utc"] + 2 * STEP + 180            # 3 minutes into the following bar
+    res = vb.scan_cached(lambda sym, interval, limit: fresh, now)
+    assert res["stale_pairs"] == []

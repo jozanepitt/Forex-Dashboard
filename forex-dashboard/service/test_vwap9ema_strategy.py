@@ -57,7 +57,7 @@ def _ts_offset(base_minute_offset):
 def _buy_cross_series():
     """22 M5 bars, 10:00-11:45 UTC on 2026-01-05: a decline (9EMA settles
     below VWAP) followed by a sharp rally that crosses the 9EMA back above
-    VWAP exactly on the signal bar (index 20, i.e. n-2 for n=22)."""
+    VWAP on bar index 20 -- the second-newest of the 22 closed bars."""
     candles = []
     price = 1.1000
     for i in range(15):
@@ -90,9 +90,13 @@ def _sell_cross_series():
 def test_buy_signal_on_cross_above():
     row = m.analyze_pair("EURUSDm", _buy_cross_series())
     assert row["setup"] == "BUY", row.get("notes")
-    assert abs(row["entry"] - 1.0991) < 1e-6
-    assert abs(row["sl"] - 1.09767) < 1e-5
-    assert abs(row["tp1"] - 1.10196) < 1e-5
+    candles = _buy_cross_series()
+    assert row["entry"] == candles[-1]["close"]              # newest closed bar
+    swing = min(c["low"] for c in candles[19:])               # bar before the cross .. newest
+    stop = swing - m.STOP_BUFFER * (row["entry"] - swing)
+    assert abs(row["sl"] - stop) < 1e-9
+    assert abs(row["tp1"] - (row["entry"] + m.RR * (row["entry"] - stop))) < 1e-9
+    assert row["cross_ts"] == candles[20]["ts_utc"]
     assert row["grade"] == "UNVALIDATED"
     assert "crossed above" in row["notes"].lower()
 
@@ -100,9 +104,12 @@ def test_buy_signal_on_cross_above():
 def test_sell_signal_on_cross_below():
     row = m.analyze_pair("EURUSDm", _sell_cross_series())
     assert row["setup"] == "SELL", row.get("notes")
-    assert abs(row["entry"] - 1.1009) < 1e-6
-    assert abs(row["sl"] - 1.10233) < 1e-5
-    assert abs(row["tp1"] - 1.09804) < 1e-5
+    candles = _sell_cross_series()
+    assert row["entry"] == candles[-1]["close"]
+    swing = max(c["high"] for c in candles[19:])
+    stop = swing + m.STOP_BUFFER * (swing - row["entry"])
+    assert abs(row["sl"] - stop) < 1e-9
+    assert abs(row["tp1"] - (row["entry"] - m.RR * (stop - row["entry"]))) < 1e-9
     assert row["grade"] == "UNVALIDATED"
     assert "crossed below" in row["notes"].lower()
 
@@ -252,11 +259,55 @@ def test_both_vwap_scanners_share_the_same_anchor():
         assert m._forex_day_start_utc(ts) == mr._forex_day_of(ts), ts
 
 
-def test_entry_gap_past_swing_extreme_is_no_trade():
-    """Entry bar gaps below the swing low (BUY case), inverting the risk
-    setup -- caught by the defensive guard and skipped as NO-TRADE."""
+def test_degenerate_stop_is_no_trade():
+    """No bar since the cross traded below the newest close, so the swing
+    low sits on the entry price: zero risk, nothing to offer."""
     candles = _buy_cross_series()
-    candles[-1]["open"] = candles[-2]["low"] - 0.001  # force a gap well below the swing
+    for c in candles[19:]:
+        c["low"] = candles[-1]["close"]
     row = m.analyze_pair("EURUSDm", candles)
     assert row["setup"] == "NO-TRADE"
-    assert "wrong side" in row["notes"].lower()
+    assert "wrong side" in row["notes"].lower() or "risk is zero" in row["notes"].lower()
+
+
+# ── every closed bar since the last scan is checked (2026-10-13) ─────────────
+# The candle cache only holds CLOSED bars, and M5 is refreshed once per
+# 15-minute cycle. The scanner used to test a single bar (n-2, on the false
+# assumption that the newest bar was still forming), so it saw one M5 bar in
+# three and reported what it did see a bar late.
+
+def _extend(candles, n, step):
+    out = [dict(c) for c in candles]
+    for _ in range(n):
+        last = out[-1]
+        p = round(last["close"] + step, 6)
+        out.append(_bar(last["ts_utc"] + 300, last["close"], round(max(p, last["close"]) + 0.0002, 6),
+                        round(min(p, last["close"]) - 0.0002, 6), p, 150))
+    return out
+
+
+def test_cross_on_the_newest_bar_is_reported():
+    candles = _buy_cross_series()[:21]                 # the cross bar (index 20) is now the newest
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["setup"] == "BUY", row.get("notes")
+    assert row["cross_ts"] == candles[-1]["ts_utc"]
+    assert row["entry"] == candles[-1]["close"]
+
+
+def test_cross_two_bars_back_is_still_reported():
+    candles = _extend(_buy_cross_series(), 1, +0.0003)  # cross is now at n-3
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["setup"] == "BUY", row.get("notes")
+    assert row["cross_ts"] == candles[20]["ts_utc"]
+    assert row["entry"] == candles[-1]["close"]
+
+
+def test_cross_older_than_the_scan_window_is_not_reported():
+    candles = _extend(_buy_cross_series(), 2, +0.0003)  # cross is now at n-4
+    row = m.analyze_pair("EURUSDm", candles)
+    assert row["setup"] == "NO-TRADE"
+    assert "cross" in row["notes"].lower()
+
+
+def test_lookback_covers_one_refresh_cycle():
+    assert m.CROSS_LOOKBACK_BARS * 5 == 15

@@ -167,38 +167,25 @@ def vwap9ema():
     return jsonify(result)
 
 
-# 5-minute TTL cache for /vwap-bounce — M15-based, same rationale as /vwap-mr.
+# Short TTL for /vwap-bounce: the scan reads the candle cache only, so it is
+# cheap; the TTL just absorbs bursts of tab refreshes.
 _VWAP_BOUNCE_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
-_VWAP_BOUNCE_TTL_SECS = 300
+_VWAP_BOUNCE_TTL_SECS = 60
 
 
 @app.get("/vwap-bounce")
 def vwap_bounce():
-    """VWAP Bounce scanner (M15) across the full pair universe. UNVALIDATED —
-    see vwap_bounce_strategy.py's module docstring."""
+    """VWAP Bounce scanner (M15) across the full pair universe, computed from
+    the candle cache (no live provider fetch). UNVALIDATED — see
+    vwap_bounce_strategy.py's module docstring."""
     import time as _t
-    from concurrent.futures import ThreadPoolExecutor
 
     now = _t.time()
     if _VWAP_BOUNCE_CACHE["payload"] is not None and (now - _VWAP_BOUNCE_CACHE["ts"]) < _VWAP_BOUNCE_TTL_SECS:
         return jsonify(_VWAP_BOUNCE_CACHE["payload"])
 
-    universe = vwap_bounce_strategy.VWAP_BOUNCE_UNIVERSE
-
-    def _fetch(sym):
-        bars, stale = fetcher.get_candles(sym, "15min", limit=vwap_bounce_strategy.M15_FETCH_LIMIT)
-        return sym, bars, stale
-
-    candles_by_pair: dict[str, dict] = {sym: {"m15": []} for sym in universe}
-    stale_set: set[str] = set()
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for sym, bars, stale in pool.map(_fetch, universe):
-            candles_by_pair[sym]["m15"] = bars
-            if stale:
-                stale_set.add(sym)
-
-    result = vwap_bounce_strategy.analyze_universe(candles_by_pair)
-    result["stale_pairs"] = sorted(stale_set)
+    result = vwap_bounce_strategy.scan_cached(
+        lambda sym, interval, limit: cache.read_candles(sym, interval, limit=limit), now)
     result["cached_at"] = int(now)
     _VWAP_BOUNCE_CACHE["payload"] = result
     _VWAP_BOUNCE_CACHE["ts"] = now

@@ -70,6 +70,9 @@ STOP_BUFFER = 0.10
 # as the earlier full-universe expansion.
 SESSION_START_UTC = 9
 SESSION_END_UTC = 23
+# The cache holds closed bars only and M5 is refreshed once per 15-minute
+# cycle, so each scan must look at every bar that closed since the last one.
+CROSS_LOOKBACK_BARS = 3
 MIN_BARS = 12  # matches backtest_mt5.run_day()'s own floor (n<12 -> return []); below this the EMA hasn't converged
 
 
@@ -107,8 +110,9 @@ def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
 
 
 def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
-    """Most-recent-bar VWAP+9EMA signal: the 9 EMA crossing the session VWAP
-    on the M5 chart, nothing else. Bullish cross (9EMA moves from at-or-below
+    """VWAP+9EMA signal: the 9 EMA crossing the session VWAP on the M5 chart
+    within the last CROSS_LOOKBACK_BARS closed bars, nothing else. Entry is
+    the newest bar's close. Bullish cross (9EMA moves from at-or-below
     VWAP to above it) -> BUY; bearish cross -> SELL. The 9EMA runs over the
     FULL fetched M5 history (chart-true, never day-reset); the VWAP is
     anchored at the current forex day (00:00 UTC)."""
@@ -168,30 +172,36 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
         "vwap_lower_2": round(vwap[-1] - 2 * stdev[-1], 6),
     })
 
-    i = n - 2  # most recently closed signal/confirmation bar; i+1 is the entry bar
-    if i < 3:
+    last = n - 1  # newest bar; the cache only ever holds closed bars
+    if last < CROSS_LOOKBACK_BARS + 1:
         out["notes"] = "Insufficient bars into today's session for a signal check."
         return out
 
     # The cross, and nothing else: 9EMA moving from at-or-below VWAP to above
-    # it (or the mirror image) between the previous bar and this one.
+    # it (or the mirror image). Newest bar first, so the most recent cross wins
+    # and its direction is by construction still in effect on the newest bar.
     sig = 0
-    if e9[i - 1] <= vwap[i - 1] and e9[i] > vwap[i]:
-        sig = 1
-    elif e9[i - 1] >= vwap[i - 1] and e9[i] < vwap[i]:
-        sig = -1
+    i = last
+    for i in range(last, last - CROSS_LOOKBACK_BARS, -1):
+        if e9[i - 1] <= vwap[i - 1] and e9[i] > vwap[i]:
+            sig = 1
+            break
+        if e9[i - 1] >= vwap[i - 1] and e9[i] < vwap[i]:
+            sig = -1
+            break
     if sig == 0:
-        out["notes"] = "No 9EMA/VWAP cross on the most recent bar."
+        out["notes"] = (f"No 9EMA/VWAP cross in the last {CROSS_LOOKBACK_BARS} bars "
+                        f"({CROSS_LOOKBACK_BARS * 5} minutes).")
         return out
 
-    j = i + 1
-    entry = opens[j]
+    entry = closes[last]
 
+    # Swing extreme from the bar before the cross through the newest bar.
     if sig == 1:
-        sw = min(lows[i], lows[i - 1])
+        sw = min(lows[i - 1:last + 1])
         stop = sw - STOP_BUFFER * (entry - sw)
     else:
-        sw = max(highs[i], highs[i - 1])
+        sw = max(highs[i - 1:last + 1])
         stop = sw + STOP_BUFFER * (sw - entry)
 
     # Defensive guard: stop must be on the correct side of entry
@@ -208,6 +218,7 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
     out.update({
         "setup": "BUY" if sig == 1 else "SELL",
         "entry": entry, "sl": stop, "tp1": target,
+        "cross_ts": bars[i]["ts_utc"], "bars_since_cross": last - i,
         "notes": (f"9EMA crossed {'above' if sig == 1 else 'below'} VWAP. "
                   f"UNVALIDATED strategy (no backtest at all) -- check volume "
                   f"yourself before trading."),

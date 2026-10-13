@@ -31,6 +31,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+import market_hours
 from config import PRIORITY_PAIRS
 from tdi_cycle_123 import _atr
 
@@ -58,6 +59,7 @@ SL_MIN_ATR = 0.5
 SWING_LOOKBACK = 40
 TP_FALLBACK_RR = 1.5
 MIN_BARS = MVWAP_LEN + SLOPE_LOOKBACK + 5
+STALE_AFTER_SECS = 2 * 900 + 600   # newest bar opened more than 40 minutes ago
 SESSION_START_UTC = 7        # London open to the end of the NY afternoon
 SESSION_END_UTC = 20
 
@@ -132,8 +134,9 @@ def _in_session(ts_utc: int) -> bool:
 # ── scanner ──────────────────────────────────────────────────────────────────
 
 def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
-    """Evaluate the most recently CLOSED M15 bar (index n-2); the newest bar
-    is the forming one and its open is the entry price."""
+    """Evaluate the newest bar. The candle cache only holds CLOSED bars (the
+    providers drop the still-forming one), so the newest bar is the candle
+    that just closed and its close is the price a trader can act on."""
     out: dict = {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE", "score": 0,
                  "state": "NO-DATA", "trigger": None, "validated": False}
     bars = m15_candles or []
@@ -142,10 +145,10 @@ def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
         out["notes"] = f"Insufficient data ({n} M15 bars, need >= {MIN_BARS})."
         return out
 
-    i = n - 2
+    i = n - 1
     vw = vwap_series(bars)
     mv = sma_series(vw, MVWAP_LEN)
-    atr = _atr(bars[:i + 1])
+    atr = _atr(bars)
     if not atr or mv[i] is None or mv[i - SLOPE_LOOKBACK] is None:
         out["notes"] = "Indicators not ready."
         return out
@@ -154,11 +157,12 @@ def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
     label = slope_label(slope)
     sig = bars[i]
     close = sig["close"]
-    in_session = _in_session(bars[n - 1]["ts_utc"])
+    in_session = _in_session(sig["ts_utc"] + 900)      # the moment the bar closed
     out.update({
         "vwap": round(vw[i], 6), "mvwap": round(mv[i], 6),
         "mvwap_slope_atr": round(slope, 2), "slope_label": label,
-        "current_price": bars[n - 1]["close"], "in_active_session": in_session,
+        "current_price": close, "in_active_session": in_session,
+        "signal_ts": sig["ts_utc"],
         "atr": atr,
     })
 
@@ -237,7 +241,7 @@ def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
     else:
         grade = "C"
 
-    entry = bars[n - 1]["open"]
+    entry = close
     ext = wick(sig)
     for b in pull:
         ext = min(ext, wick(bars[b])) if s == 1 else max(ext, wick(bars[b]))
@@ -296,3 +300,24 @@ def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
         "sells": sum(1 for p in pairs if p["setup"] == "SELL"),
         "watch": sum(1 for p in pairs if p.get("state") == "WATCH"),
     }
+
+
+def scan_cached(read_candles, now_ts: float) -> dict:
+    """Run the scanner on cached M15 bars — no provider calls, so the dashboard
+    tab loads in well under a second. `read_candles(symbol, interval, limit)`
+    is cache.read_candles; the scheduler keeps that cache fresh every 15
+    minutes. Pairs whose newest bar is too old are listed in `stale_pairs`."""
+    candles = {sym: {"m15": read_candles(sym, "15min", limit=M15_FETCH_LIMIT)}
+               for sym in VWAP_BOUNCE_UNIVERSE}
+    result = analyze_universe(candles)
+    stale = []
+    for sym, tf in candles.items():
+        bars = tf["m15"]
+        if not market_hours.is_market_open(sym, now_ts):
+            continue
+        # The cache holds closed bars and is refreshed a few minutes after each
+        # quarter-hour, so the newest bar's OPEN is normally 15-34 minutes old.
+        if not bars or now_ts - bars[-1]["ts_utc"] > STALE_AFTER_SECS:
+            stale.append(sym)
+    result["stale_pairs"] = sorted(stale)
+    return result
