@@ -170,12 +170,53 @@ def test_insufficient_data_is_no_trade():
     assert e.analyze_timeframe("EUR/USD", [], None, timeframe="M15")["setup"] == "NO-TRADE"
 
 
-def test_grade_a_needs_trend_and_a_full_engulf():
-    bars = _with_pattern(_lead_in(), BULL_PREV, BULL_CUR)
-    assert e.analyze_timeframe("EUR/USD", bars, UP_H4, timeframe="M15")["grade"] == "A"
-    wide_prev = (1.1120, 1.1140, 1.1100, 1.1110)
-    bars = _with_pattern(_lead_in(), wide_prev, BULL_CUR)
-    assert e.analyze_timeframe("EUR/USD", bars, UP_H4, timeframe="M15")["grade"] == "B"
+def _pullback_lead():
+    """40 quiet candles near 1.1130, then four red ones stepping down to 1.1120:
+    the engulfing pair that follows makes the lowest low of the last 20 candles."""
+    bars = [_bar(i, 1.1130, 1.1133, 1.1127, 1.1131 if i % 2 else 1.1129) for i in range(40)]
+    p = 1.1130
+    for c in (1.1126, 1.1123, 1.1121, 1.1120):
+        bars.append(_bar(len(bars), p, p + 0.0001, c - 0.0002, c))
+        p = c
+    return bars
+
+
+def test_strength_follows_where_the_candle_closes():
+    """From the user's strong/weak cards: weak closes inside the previous
+    candle's wick, strong closes beyond it, very strong has a body that covers
+    the previous candle wick to wick."""
+    prev = _bar(0, *BULL_PREV)                                 # high 1.1123, low 1.1108
+    assert e.engulf_strength(prev, _bar(1, 1.1110, 1.1124, 1.1104, 1.1122)) == "weak"
+    assert e.engulf_strength(prev, _bar(1, *BULL_CUR)) == "strong"          # closes 1.1132 > 1.1123
+    assert e.engulf_strength(prev, _bar(1, 1.1107, 1.1136, 1.1104, 1.1132)) == "very_strong"
+    bprev = _bar(0, *BEAR_PREV)                                # high 1.1122, low 1.1107
+    assert e.engulf_strength(bprev, _bar(1, 1.1120, 1.1126, 1.1106, 1.1108)) == "weak"
+    assert e.engulf_strength(bprev, _bar(1, *BEAR_CUR)) == "strong"         # closes 1.1098 < 1.1107
+
+
+def test_swing_extreme_means_the_candle_made_the_20_bar_low_or_high():
+    bars = _with_pattern(_pullback_lead(), BULL_PREV, BULL_CUR)
+    assert e.at_swing_extreme(bars, "bullish") is True
+    assert e.at_swing_extreme(_with_pattern(_lead_in(), BULL_PREV, BULL_CUR), "bullish") is False
+    down = _with_pattern(_lead_in(step=-0.0002, start=1.1240), BEAR_PREV, BEAR_CUR)
+    assert e.at_swing_extreme(down, "bearish") is False          # falling market: not the 20-candle high
+
+
+def test_grade_a_is_trend_plus_strong_close_plus_swing_extreme():
+    """User decision 2026-10-13. The one variant that tested above zero:
+    H1 +0.07R over 259, H4 +0.11R over 191 (gross)."""
+    a = e.analyze_timeframe("EUR/USD", _with_pattern(_pullback_lead(), BULL_PREV, BULL_CUR), UP_H4, timeframe="H1")
+    assert a["setup"] == "BUY" and a["grade"] == "A"
+    assert a["strength"] == "strong" and a["at_extreme"] is True
+
+    # strong close, with the trend, but in the middle of a run: not at a swing low
+    b = e.analyze_timeframe("EUR/USD", _with_pattern(_lead_in(), BULL_PREV, BULL_CUR), UP_H4, timeframe="H1")
+    assert b["setup"] == "BUY" and b["grade"] == "B" and b["at_extreme"] is False
+
+    # at the swing low and with the trend, but the close stays inside the previous wick
+    weak_cur = (1.1110, 1.1124, 1.1104, 1.1122)
+    c = e.analyze_timeframe("EUR/USD", _with_pattern(_pullback_lead(), BULL_PREV, weak_cur), UP_H4, timeframe="H1")
+    assert c["setup"] == "BUY" and c["grade"] == "B" and c["strength"] == "weak"
 
 
 # ── pair / universe ──────────────────────────────────────────────────────────
@@ -246,7 +287,7 @@ def _alert_harness(monkeypatch, enabled=True, a_only=True):
 
 
 def _pair_row(prev=BULL_PREV, cur=BULL_CUR):
-    return e.analyze_pair("EUR/USD", _with_pattern(_lead_in(), prev, cur), h4_candles=UP_H4, d1_candles=UP_D1)
+    return e.analyze_pair("EUR/USD", _with_pattern(_pullback_lead(), prev, cur), h4_candles=UP_H4, d1_candles=UP_D1)
 
 
 def test_alerts_default_on_and_grade_a_only_in_config():

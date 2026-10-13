@@ -91,6 +91,33 @@ def covers_wicks(prev: dict, cur: dict) -> bool:
     return cur["high"] >= prev["high"] and cur["low"] <= prev["low"]
 
 
+SWING_LOOKBACK = 20          # candles: the engulfing candle must make their low (buy) / high (sell)
+
+
+def engulf_strength(prev: dict, cur: dict) -> str:
+    """'weak', 'strong' or 'very_strong', by where the engulfing candle closes
+    (the user's strong/weak cards): weak closes inside the previous candle's
+    wick, strong closes beyond it, very strong has a BODY that covers the
+    previous candle wick to wick."""
+    lo, hi = min(cur["open"], cur["close"]), max(cur["open"], cur["close"])
+    if lo <= prev["low"] and hi >= prev["high"]:
+        return "very_strong"
+    if cur["close"] > cur["open"]:
+        return "strong" if cur["close"] > prev["high"] else "weak"
+    return "strong" if cur["close"] < prev["low"] else "weak"
+
+
+def at_swing_extreme(bars: list[dict], kind: str) -> bool:
+    """Did the newest candle make the lowest low (bullish) or highest high
+    (bearish) of the last SWING_LOOKBACK candles? That is an engulfing at the
+    turn of a pullback, not in the middle of a run."""
+    cur = bars[-1]
+    window = bars[-(SWING_LOOKBACK + 1):]
+    if kind == "bullish":
+        return cur["low"] <= min(b["low"] for b in window)
+    return cur["high"] >= max(b["high"] for b in window)
+
+
 HTF_ENGULF_LOOKBACK = 3      # H4 candles (12 hours) in which the higher-timeframe engulfing must sit
 
 
@@ -206,10 +233,17 @@ def analyze_timeframe(symbol: str, bars: list[dict], h4_candles: Optional[list[d
         level = top - s * frac * rng
         return min(level, entry) if s == 1 else max(level, entry)
 
-    strong_body = bool(atr) and body >= 0.6 * atr
+    strength = engulf_strength(prev, cur)
+    extreme = at_swing_extreme(bars, kind)
     in_session = out["in_active_session"]
-    score = (4 if with_trend else 2) + (3 if full else 0) + (2 if strong_body else 0) + (1 if in_session else 0)
-    if with_trend and full:
+    # Grade A (the only grade sent to Discord): with the trend, a strong close
+    # (beyond the previous candle's wick) and made at a swing extreme. Chosen by
+    # the user on 2026-10-13; it is the one variant that tested above zero
+    # (H1 +0.07R over 259 signals, H4 +0.11R over 191, gross) and fires about
+    # once a day across all instruments.
+    score = ((4 if with_trend else 2) + (3 if extreme else 0)
+             + (2 if strength != "weak" else 0) + (1 if in_session else 0))
+    if with_trend and strength != "weak" and extreme:
         grade = "A"
     elif with_trend or confirmed_counter:
         grade = "B"
@@ -219,7 +253,11 @@ def analyze_timeframe(symbol: str, bars: list[dict], h4_candles: Optional[list[d
     notes = [f"{kind.capitalize()} engulfing on {timeframe}",
              f"with the {htf_label} {trend} trend" if with_trend
              else f"against the {htf_label} {trend} trend, confirmed by a second engulfing",
-             "covers the previous candle's wicks" if full else "body only (previous wicks stick out)"]
+             {"weak": "weak close (inside the previous candle's wick)",
+              "strong": "strong close (beyond the previous candle's wick)",
+              "very_strong": "very strong (body covers the whole previous candle)"}[strength],
+             f"made the {SWING_LOOKBACK}-candle {'low' if s == 1 else 'high'}" if extreme
+             else "not at a swing extreme"]
     htf_eng = recent_htf_engulfing(h4_candles, kind)
     if htf_eng:
         notes.append(f"the {htf_label} printed an engulfing the same way in its last 3 candles")
@@ -230,6 +268,7 @@ def analyze_timeframe(symbol: str, bars: list[dict], h4_candles: Optional[list[d
     out.update({
         "setup": "BUY" if s == 1 else "SELL", "grade": grade, "score": score, "state": "SIGNAL",
         "with_trend": with_trend, "confirmed_counter": confirmed_counter, "full_engulf": full,
+        "strength": strength, "at_extreme": extreme,
         "htf_engulfing": htf_eng,
         "entry": entry, "entry_25": retrace(0.25), "entry_50": retrace(0.50),
         "sl": sl, "tp1": tp1, "rr1": TARGET_RR,

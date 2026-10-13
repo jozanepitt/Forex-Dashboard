@@ -125,8 +125,9 @@ TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "fal
 # Engulfing — trend-following engulfing-candle scanner (engulfing_strategy.py):
 # H1 entries with the H4 trend and H4 entries with the daily trend, on every
 # dashboard pair plus oil. Replaced BTMM 123 on 2026-10-13.
-# ALERTS default TRUE, grade A only (with the trend and covering the previous
-# candle's wicks) — switched on at the user's explicit request on 2026-10-13.
+# ALERTS default TRUE, grade A only (with the trend, closing beyond the previous
+# candle's wick, and made at a 20-candle swing extreme) — switched on at the
+# user's explicit request on 2026-10-13.
 # For the record: the walk-forward test showed no edge (with-trend, next open,
 # 2R target: H1 9,098 signals 32% wins -0.04R; grade A no better than B).
 ENGULF_ALERTS_ENABLED = os.environ.get("ENGULF_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")

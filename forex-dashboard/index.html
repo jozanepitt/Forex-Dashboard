@@ -915,9 +915,11 @@ td.mono{font-family:var(--font-mono)}
           <th>Stop (wick)</th>
           <th>Target 2R</th>
           <th>Stop pips</th>
+          <th>Close</th>
+          <th>Swing</th>
         </tr>
       </thead>
-      <tbody id="engulfingTableBody"><tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="engulfingTableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>Engulfing:</b> two candles of opposite colour where the second's body completely covers the first's.
@@ -925,8 +927,7 @@ td.mono{font-family:var(--font-mono)}
       <b>Rule 3</b> — stop at the wick of the engulfing candle. <b>Rule 4</b> — entry at the next candle's open,
       or 25% / 50% back into the engulfing candle. <b>Rule 5</b> — an engulfing against the trend shows as
       <i>Wait</i> until a second one confirms it close by (within 8 candles, before price has run off or
-      taken out the first one); it then shows as a <i>reversal</i> signal, so its direction is the opposite of the Trend column. Grade A = with the trend and covering the previous candle's wicks too;
-      grade B = with the trend, body only, or a confirmed counter-trend setup. Target is 2× the risk.
+      taken out the first one); it then shows as a <i>reversal</i> signal, so its direction is the opposite of the Trend column. Grade A = with the trend, a strong close (beyond the previous candle's wick) and made at the 20-candle low or high — the only grade sent to Discord; grade B = any other with-trend setup, or a confirmed reversal. Target is 2× the risk.
     </div>
   </div>
 
@@ -5937,7 +5938,7 @@ async function loadEngulfing() {
   const btn     = document.getElementById('engulfingRefreshBtn');
   if (btn) btn.disabled = true;
   summary.textContent = 'Reading candles…';
-  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
@@ -5947,7 +5948,7 @@ async function loadEngulfing() {
   } catch (err) {
     console.error('Engulfing load failed', err);
     summary.innerHTML = `<span style="color:var(--red)">Failed to load Engulfing scanner: ${err.message}</span>`;
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -5997,9 +5998,11 @@ function renderEngulfingTable(data) {
       <td>${px(p.sl, p.symbol)}</td>
       <td>${px(p.tp1, p.symbol)}</td>
       <td>${p.sl_pips != null ? p.sl_pips : '—'}</td>
+      <td>${p.strength ? p.strength.replace('_', ' ') : '—'}</td>
+      <td>${p.at_extreme == null ? '—' : (p.at_extreme ? '<span style="color:var(--green)">yes</span>' : 'no')}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="12" style="text-align:center;padding:24px">No data.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="14" style="text-align:center;padding:24px">No data.</td></tr>';
 
   summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
     `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> · ` +
