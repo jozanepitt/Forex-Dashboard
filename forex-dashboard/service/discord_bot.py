@@ -49,7 +49,7 @@ GUILD_ID = 1499049344152764466
 STRATEGY_CHOICES = [
     app_commands.Choice(name="BTMM", value="BTMM"),
     app_commands.Choice(name="TDI123", value="TDI123"),
-    app_commands.Choice(name="BTMM123", value="BTMM123"),
+    app_commands.Choice(name="ENGULFING", value="ENGULFING"),
 ]
 
 
@@ -170,7 +170,7 @@ async def on_ready():
     )
 
 
-@client.tree.command(name="analyse", description="Run a live BTMM / TDI123 / BTMM123 read on a pair")
+@client.tree.command(name="analyse", description="Run a live BTMM / TDI123 / Engulfing read on a pair")
 @app_commands.describe(pair="e.g. EURUSD, XAU/USD, DE30", strategy="Which strategy to run")
 @app_commands.choices(strategy=STRATEGY_CHOICES)
 async def analyse(interaction: discord.Interaction, pair: str, strategy: app_commands.Choice[str]):

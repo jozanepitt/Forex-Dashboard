@@ -76,6 +76,10 @@ SYMBOL_SPECS: dict[str, dict] = {
     # handles this, no override needed. Price ~100, 3-digit, so pip=0.01 and
     # min_sl_pips=15 ≈ 0.15% of price.
     "DXY":     dict(pip=0.01,   digits=3, cls="index", min_sl_pips=15),
+    # ── Energy (Exness USOILm / UKOILm, 3-digit, ~$60-90). Used by the
+    #    Engulfing scanner only; not in PRIORITY_PAIRS. ──
+    "USOIL":   dict(pip=0.01,   digits=3, cls="energy", min_sl_pips=30),   # WTI, 30 pips = $0.30
+    "UKOIL":   dict(pip=0.01,   digits=3, cls="energy", min_sl_pips=30),   # Brent
     # ── Crypto ──
     "BTC/USD": dict(pip=1.0,    digits=1, cls="crypto", min_sl_pips=150),
     "ETH/USD": dict(pip=0.1,    digits=2, cls="crypto", min_sl_pips=50),

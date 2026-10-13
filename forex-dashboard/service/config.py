@@ -122,25 +122,14 @@ TDI123_JOURNAL_ENABLED = os.environ.get("TDI123_JOURNAL_ENABLED", "true").lower(
 # (skips silently once every gate has actually passed).
 TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
 
-# BTMM 123 — classic 1-2-3 price action confirmed by BTMM doctrine (EMA Level
-# cascade + stop hunt + Asian range) instead of a TDI/oscillator dependency.
-# Replaces the removed Malaysian SNR Emperor slot.
-# ALERTS default FALSE: this is a brand-new strategy with no track record.
-# TDI Cycle 123's own history (looked fine on paper, proved breakeven-to-
-# negative only after a proper walk-forward backtest) is why — BTMM 123 stays
-# dashboard-visible/Discord-silent until a backtest shows a real edge.
-BTMM123_ALERTS_ENABLED = os.environ.get("BTMM123_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
-BTMM123_SESSION_FILTER = os.environ.get("BTMM123_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
-BTMM123_NEWS_FILTER = os.environ.get("BTMM123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
-# Grade gate — default true (2026-09-13: restored per user request — BTMM123
-# was drifting to A+B, user wants only the highest-tier Grade A setups sent).
-# Set "false" to allow Grade A + B again.
-BTMM123_GRADE_A_ONLY = os.environ.get("BTMM123_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
-# WATCH (default OFF — 2026-09-13: disabled per user request, same reason as
-# TDI123_WATCH_ALERTS_ENABLED above): same "still forming" monitoring embed,
-# deliberately independent of BTMM123_ALERTS_ENABLED — lets you watch A/B
-# setups develop even while real BTMM123 alerts stay off, if re-enabled.
-BTMM123_WATCH_ALERTS_ENABLED = os.environ.get("BTMM123_WATCH_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+# Engulfing — trend-following engulfing-candle scanner (engulfing_strategy.py):
+# H1 entries with the H4 trend and H4 entries with the daily trend, on forex,
+# gold, silver and oil. Replaced BTMM 123 on 2026-10-13. ALERTS default FALSE: the walk-forward test over 27 pairs showed
+# no edge (M15 with-trend, entry at the next open, 2R target: 13,550 signals,
+# 33% wins, -0.01R before spread) and about 195 M15 signals a day.
+ENGULF_ALERTS_ENABLED = os.environ.get("ENGULF_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+ENGULF_GRADE_A_ONLY = os.environ.get("ENGULF_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+ENGULF_NEWS_FILTER = os.environ.get("ENGULF_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
 # BTMM ID50 — M15 50-EMA-bounce retest scanner (design
 # docs/superpowers/specs/2026-09-24-btmm-id50-scanner-design.md). Shares

@@ -17,7 +17,7 @@ from flask_socketio import SocketIO
 import alerts
 import backtest as bt
 import vwap_mean_reversion_backtest
-import btmm_123
+import engulfing_strategy
 import btmm_core
 import btmm_id50
 import cache
@@ -396,126 +396,30 @@ def tdi123_detail():
     })
 
 
-# ── BTMM 123 endpoint ────────────────────────────────────────────────────────
-# Classic 1-2-3 price action (or 200EMA Re-set), BTMM-doctrine confirmed.
-# Replaces the removed Malaysian SNR Emperor slot. H1 primary biased by H4,
-# plus M15 trigger leg — same structure as TDI123.
-_BTMM123_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
-_BTMM123_TTL_SECS = 180  # same cadence as TDI123 — H1 primary
+# ── Engulfing endpoint (replaced BTMM 123 on 2026-10-13) ────────────────────
+# Trend-following engulfing candles: H1 entries on the H4 trend and H4 entries
+# on the daily trend, for forex, gold, silver and oil. Computed from
+# the candle cache only (no live provider fetch), so the tab loads instantly.
+_ENGULF_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_ENGULF_TTL_SECS = 60
 
 
-@app.get("/btmm123")
-def btmm123():
-    """BTMM 123 scanner across the universe."""
+@app.get("/engulfing")
+def engulfing():
     import time as _t
 
     now = _t.time()
-    if _BTMM123_CACHE["payload"] is not None and (now - _BTMM123_CACHE["ts"]) < _BTMM123_TTL_SECS:
-        return jsonify(_BTMM123_CACHE["payload"])
-
-    universe = btmm_123.BTMM123_UNIVERSE
-    now_ts = int(now)
-
-    candles_by_pair: dict[str, dict] = {}
-    stale_set: set[str] = set()
-    for sym in universe:
-        candles_by_pair[sym] = {
-            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
-            "4h": cache.read_candles(sym, "4h", limit=200),
-            "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
-        }
-        h1_last = cache.max_ts(sym, "1h")
-        if h1_last is None or now_ts > h1_last + 2 * INTERVAL_SECS["1h"] + 60:
-            stale_set.add(sym)
-
-    result = btmm_123.analyze_universe(candles_by_pair)
-    result["stale_pairs"] = sorted(stale_set)
+    if _ENGULF_CACHE["payload"] is not None and (now - _ENGULF_CACHE["ts"]) < _ENGULF_TTL_SECS:
+        return jsonify(_ENGULF_CACHE["payload"])
+    candles_by_pair = engulfing_strategy.read_bundle(
+        lambda sym, interval, limit: cache.read_candles(sym, interval, limit=limit))
+    result = engulfing_strategy.analyze_universe(candles_by_pair)
     result["cached_at"] = int(now)
-    _BTMM123_CACHE["payload"] = result
-    _BTMM123_CACHE["ts"] = now
+    _ENGULF_CACHE["payload"] = result
+    _ENGULF_CACHE["ts"] = now
     return jsonify(result)
 
 
-@app.get("/btmm123/detail")
-def btmm123_detail():
-    """Per-pair detail for the BTMM 123 chart overlay: raw candles + EMAs
-    + swing/pattern markers, for the frontend to draw the 1/2/3 markers.
-
-    ?timeframe=H1|M15 (default H1), same convention as /tdi123/detail —
-    H1 is biased by H4, M15 (the trigger leg) is biased by H1.
-    """
-    symbol = request.args.get("symbol", "").upper().replace("_", "/")
-    if not symbol:
-        return jsonify({"error": "symbol required"}), 400
-    if "/" not in symbol and len(symbol) == 6:
-        symbol = f"{symbol[:3]}/{symbol[3:]}"
-
-    timeframe = request.args.get("timeframe", "H1").upper()
-    if timeframe not in ("H1", "M15"):
-        timeframe = "H1"
-
-    h1_bars, h1_stale = fetcher.get_candles(symbol, "1h", limit=DEFAULT_BACKFILL)
-    h4_bars, h4_stale = fetcher.get_candles(symbol, "4h", limit=200)
-    m15_bars, m15_stale = ([], False)
-    if timeframe == "M15":
-        m15_bars, m15_stale = fetcher.get_candles(symbol, "15min", limit=DEFAULT_BACKFILL)
-
-    full = btmm_123.analyze_pair(symbol, h1_bars, h4_candles=h4_bars or None,
-                                  m15_candles=m15_bars or None)
-
-    if timeframe == "M15":
-        row = full.get("m15") or {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
-                                   "timeframe": "M15", "score": 0}
-        entry_bars = m15_bars
-        stale = bool(m15_stale or h1_stale)
-    else:
-        row = full
-        entry_bars = h1_bars
-        stale = bool(h1_stale or h4_stale)
-
-    from btmm_core import calc_ema
-    closes = [b["close"] for b in entry_bars]
-    ema50 = calc_ema(closes, 50) if len(closes) >= 50 else [None] * len(closes)
-    ema200 = calc_ema(closes, 200) if len(closes) >= 300 else [None] * len(closes)
-    ema800 = calc_ema(closes, 800) if len(closes) >= 2400 else [None] * len(closes)
-
-    display_n = min(TDI123_CHART_DISPLAY_BARS, len(entry_bars)) if entry_bars else 0
-    pattern = row.get("pattern") or {}
-    swing_idxs = [pattern[k]["idx"] for k in ("p1", "p2", "p3") if k in pattern]
-    if swing_idxs and entry_bars:
-        min_swing_idx = min(swing_idxs)
-        display_n = max(display_n, len(entry_bars) - min_swing_idx + 5)
-    display_n = min(display_n, len(entry_bars)) if entry_bars else 0
-    offset = len(entry_bars) - display_n if entry_bars else 0
-
-    if offset > 0 and pattern:
-        row = dict(row)
-        row["pattern"] = dict(pattern)
-        for k in ("p1", "p2", "p3"):
-            if k in pattern:
-                pt = dict(pattern[k])
-                pt["idx"] = pt["idx"] - offset
-                row["pattern"][k] = pt
-
-    def _tail(arr):
-        return arr[offset:] if offset > 0 else arr
-
-    return jsonify({
-        "symbol": symbol,
-        "timeframe": timeframe,
-        "stale": stale,
-        "row": row,
-        "candles": _tail(entry_bars),
-        "ema50": _tail(ema50),
-        "ema200": _tail(ema200),
-        "ema800": _tail(ema800),
-    })
-
-
-# ── BTMM ID50 endpoint ───────────────────────────────────────────────────────
-# M15 50-EMA-bounce retest scanner (13/50 cross -> move-away -> first-quality
-# retest + trap, TDI confirmed). M15 primary biased by H1 — same cache cadence
-# as BTMM123/TDI123.
 _ID50_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
 _ID50_TTL_SECS = 180
 
@@ -609,7 +513,7 @@ def id50_detail():
     })
 
 
-ANALYZE_STRATEGIES = ("BTMM", "TDI123", "BTMM123")
+ANALYZE_STRATEGIES = ("BTMM", "TDI123", "ENGULFING")
 
 
 @app.get("/analyze")
@@ -642,12 +546,12 @@ def analyze_on_demand():
         m15, s4 = fetcher.get_candles(symbol, "15min", DEFAULT_BACKFILL)
         stale = any((s1, s2, s3, s4))
         result = tdi_cycle_123.analyze_pair(symbol, h1, h4_candles=h4, d1_candles=d1, m15_candles=m15)
-    else:  # BTMM123
-        h1, s1 = fetcher.get_candles(symbol, "1h", DEFAULT_BACKFILL)
-        h4, s2 = fetcher.get_candles(symbol, "4h", 200)
-        m15, s3 = fetcher.get_candles(symbol, "15min", DEFAULT_BACKFILL)
+    else:  # ENGULFING
+        h1, s1 = fetcher.get_candles(symbol, "1h", engulfing_strategy.H1_LIMIT)
+        h4, s2 = fetcher.get_candles(symbol, "4h", engulfing_strategy.H4_LIMIT)
+        d1, s3 = fetcher.get_candles(symbol, "1day", engulfing_strategy.D1_LIMIT)
         stale = any((s1, s2, s3))
-        result = btmm_123.analyze_pair(symbol, h1, h4_candles=h4, m15_candles=m15)
+        result = engulfing_strategy.analyze_pair(symbol, h1, h4_candles=h4, d1_candles=d1)
 
     return jsonify({
         "pair": symbol,

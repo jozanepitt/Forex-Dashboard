@@ -41,8 +41,7 @@ RUNNERS = [
      ["alert_vwap_mr_setup", "alert_vwap_mr_watch"]),
     ("_run_tdi123_alerts", "tdi_cycle_123", "analyze_universe",
      ["alert_tdi123_setup", "alert_tdi123_watch"]),
-    ("_run_btmm123_alerts", "btmm_123", "analyze_universe",
-     ["alert_btmm123_setup", "alert_btmm123_watch"]),
+    ("_run_engulfing_alerts", "engulfing_strategy", "analyze_universe", ["alert_engulfing_setup"]),
     ("_run_id50_alerts", "btmm_id50", "analyze_universe",
      ["alert_id50_setup", "alert_id50_watch"]),
     ("_run_crt_5am_alerts", "crt_strategy", "analyze_universe_5am", ["alert_crt_5am_setup"]),
@@ -151,7 +150,7 @@ def test_btmm_core_runner_is_gated_on_a_frozen_weekday_feed(harness, monkeypatch
 
 
 H1_RUNNERS = [r for r in RUNNERS if r[0] in
-              ("_run_tdi123_alerts", "_run_btmm123_alerts", "_run_id50_alerts")]
+              ("_run_tdi123_alerts", "_run_engulfing_alerts", "_run_id50_alerts")]
 
 
 @pytest.mark.parametrize("runner,module,fn,alert_fns", H1_RUNNERS, ids=[r[0] for r in H1_RUNNERS])

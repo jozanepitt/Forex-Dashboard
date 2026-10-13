@@ -222,6 +222,18 @@ def refresh_all():
     if updated:
         _record_refresh(time.time())  # mark healthy only when we actually got fresh data
 
+    # Symbols only the Engulfing scanner uses (oil): not in PRIORITY_PAIRS, so
+    # the loop above never fetches them.
+    import engulfing_strategy
+    for sym in engulfing_strategy.EXTRA_SYMBOLS:
+        time.sleep(FANOUT_DELAY_SECS)
+        try:
+            _fetch_guarded(sym, "1h", limit=engulfing_strategy.H1_LIMIT)
+            _fetch_guarded(sym, "4h", limit=engulfing_strategy.H4_LIMIT)
+            _fetch_guarded(sym, "1day", limit=engulfing_strategy.D1_LIMIT)
+        except Exception as e:
+            log.warning("Engulfing extra fetch failed for %s: %s", sym, e)
+
     # Fetch M5 candles for the VWAP+9EMA universe (full PRIORITY_PAIRS list --
     # paced same as the main fetch loop above so this doesn't hammer MT5).
     # No other live strategy uses M5; every other fetch above is M15/1h/4h/1day.
@@ -263,12 +275,12 @@ def refresh_all():
     except Exception as e:
         log.warning("TDI123 alerts failed: %s", e)
 
-    # Run BTMM 123 scanner (BTMM-doctrine 1-2-3) — dashboard-visible; Discord
-    # stays silent until BTMM123_ALERTS_ENABLED is turned on post-backtest.
+    # Run the Engulfing scanner (replaced BTMM 123) — dashboard-visible; Discord
+    # stays silent unless ENGULF_ALERTS_ENABLED is turned on.
     try:
-        _run_btmm123_alerts()
+        _run_engulfing_alerts()
     except Exception as e:
-        log.warning("BTMM123 alerts failed: %s", e)
+        log.warning("Engulfing alerts failed: %s", e)
 
     # Run BTMM ID50 (M15 50-EMA-bounce retest) scanner — dashboard-visible;
     # Discord stays silent until BTMM_ID50_ALERTS_ENABLED is turned on
@@ -470,31 +482,23 @@ def _run_tdi123_alerts():
         log.debug("TDI123 journal resolve failed: %s", e)
 
 
-def _run_btmm123_alerts():
-    """Run the BTMM 123 scanner and fire Discord alerts for confirmed setups."""
+def _run_engulfing_alerts():
+    """Run the Engulfing scanner and fire Discord alerts for confirmed setups
+    (off by default — see config)."""
     import cache
-    import btmm_123
+    import engulfing_strategy
 
-    candles_by_pair: dict[str, dict] = {}
-    for sym in btmm_123.BTMM123_UNIVERSE:
-        candles_by_pair[sym] = {
-            "1h": cache.read_candles(sym, "1h", limit=DEFAULT_BACKFILL),
-            "4h": cache.read_candles(sym, "4h", limit=200),
-            "m15": cache.read_candles(sym, "15min", limit=DEFAULT_BACKFILL),
-        }
-    live = _live_symbols("BTMM123", candles_by_pair, [("m15", "15min"), ("1h", "1h")])
-    result = btmm_123.analyze_universe(candles_by_pair)
+    candles_by_pair = engulfing_strategy.read_bundle(
+        lambda sym, interval, limit: cache.read_candles(sym, interval, limit=limit))
+    live = _live_symbols("ENGULF", candles_by_pair, [("1h", "1h")])
+    result = engulfing_strategy.analyze_universe(candles_by_pair)
     for row in result.get("pairs", []):
         if row.get("symbol") not in live:
             continue
         try:
-            alerts.alert_btmm123_setup(row["symbol"], row)
+            alerts.alert_engulfing_setup(row["symbol"], row)
         except Exception as e:
-            log.debug("BTMM123 alert eval failed for %s: %s", row.get("symbol"), e)
-        try:
-            alerts.alert_btmm123_watch(row["symbol"], row)
-        except Exception as e:
-            log.debug("BTMM123 watch eval failed for %s: %s", row.get("symbol"), e)
+            log.debug("ENGULF alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 def _run_id50_alerts():

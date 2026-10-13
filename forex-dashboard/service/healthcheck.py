@@ -12,7 +12,7 @@ Checks:
   1. Service /health responds.
   2. Scheduler is fresh — last successful refresh < 20 min ago (not stalled).
   3. Discord webhook is valid (non-destructive GET — no message posted).
-  4. Each dashboard endpoint (/btmm123) returns data.
+  4. Each dashboard endpoint (/engulfing) returns data.
   5. Alert pipeline runs end-to-end with zero errors (Discord stubbed).
 
 Exit code 0 = all passed, 1 = something failed.
@@ -87,7 +87,7 @@ def main() -> int:
         check("Discord webhook valid", False, str(e))
 
     # 4. Dashboard endpoints return data
-    for ep in ("/btmm123", "/id50", "/vwap9ema", "/tdi123", "/vwap-mr"):
+    for ep in ("/engulfing", "/id50", "/vwap9ema", "/tdi123", "/vwap-mr"):
         try:
             st, body = _get(ep, timeout=180)
             n = len(body.get("pairs", []))
@@ -99,7 +99,7 @@ def main() -> int:
     try:
         import alerts
         import cache
-        import btmm_123
+        import engulfing_strategy
         import btmm_id50
         import vwap9ema_strategy
         import tdi_cycle_123
@@ -123,9 +123,10 @@ def main() -> int:
                 except Exception:
                     errs += 1
 
-        _drive(btmm_123.BTMM123_UNIVERSE,
-               {"1h": ("1h", 3200), "4h": ("4h", 200), "m15": ("15min", 3200)},
-               (btmm_123.analyze_universe, alerts.alert_btmm123_setup))
+        _drive(engulfing_strategy.ENGULF_UNIVERSE,
+               {"1h": ("1h", engulfing_strategy.H1_LIMIT), "4h": ("4h", engulfing_strategy.H4_LIMIT),
+                "1d": ("1day", engulfing_strategy.D1_LIMIT)},
+               (engulfing_strategy.analyze_universe, alerts.alert_engulfing_setup))
 
         _drive(btmm_id50.BTMM_ID50_UNIVERSE,
                {"m15": ("15min", DEFAULT_BACKFILL), "1h": ("1h", DEFAULT_BACKFILL)},

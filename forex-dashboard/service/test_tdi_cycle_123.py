@@ -771,3 +771,15 @@ def test_htf_context_is_neutral_on_a_flat_higher_timeframe():
 def test_htf_context_without_data():
     assert t._htf_tdi_context(None, "bearish")["available"] is False
     assert t._htf_tdi_context(_closes_to_bars([1.1] * 20), "bullish")["available"] is False
+
+
+# --- stop already traded through (moved here when btmm_123 was removed) -------
+
+def test_stop_already_hit_helper():
+    after = [{"high": 1.2010, "low": 1.1990}, {"high": 1.2030, "low": 1.1950}]
+    assert t._stop_already_hit(after, "BUY", 1.1960) is True
+    assert t._stop_already_hit(after, "BUY", 1.1940) is False
+    assert t._stop_already_hit(after, "SELL", 1.2020) is True
+    assert t._stop_already_hit(after, "SELL", 1.2040) is False
+    assert t._stop_already_hit([], "BUY", 1.1960) is False
+    assert t._stop_already_hit(after, "BUY", None) is False
