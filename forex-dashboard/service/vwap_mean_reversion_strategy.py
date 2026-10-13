@@ -40,14 +40,16 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import instruments
+from config import PRIORITY_PAIRS
 from tdi_cycle_123 import _atr
 
-VWAP_MR_UNIVERSE = [
-    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "USD/CAD", "NZD/USD",
-    "USTEC",  # Nasdaq -- the source spec was written for US equity index
-    # futures/ETFs (ES/NQ/SPY/QQQ) in the first place; this is closer to
-    # its native instrument than any forex major is.
-]
+# Full PRIORITY_PAIRS universe (2026-10-08, per explicit user request — same 27
+# pairs TDI123/BTMM123/ID50/VWAP9EMA scan, for dashboard parity). NOTE: the
+# VWAP mean-reversion spec was originally written for US equity index
+# futures/ETFs (ES/NQ/SPY/QQQ); USTEC is its native-style instrument. The added
+# pairs (JPY/AUD crosses, metals, crypto) are NOT backtested for this strategy —
+# treat their signals as unvalidated until a walk-forward pass confirms edge.
+VWAP_MR_UNIVERSE = list(PRIORITY_PAIRS)
 
 MIN_BARS_BEFORE_SIGNAL = 15
 Z_EXTENSION_THRESHOLD = 2.0

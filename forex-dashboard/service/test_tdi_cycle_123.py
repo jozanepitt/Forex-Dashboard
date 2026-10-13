@@ -304,13 +304,14 @@ def test_session_labels_and_active_window():
     assert t._session_label(_ts(8)) == "London-open"
     assert t._session_label(_ts(11)) == "London"
     assert t._session_label(_ts(14)) == "NY-open"
-    assert t._session_label(_ts(18)) == "NY-afternoon"
+    assert t._session_label(_ts(18)) == "NY-late"
     assert t._session_label(_ts(2)) == "Asian"
-    # active window = 07:00-16:00 UTC
+    # active window = 03:00-18:00 UTC (05:00-20:00 SAST per user rule)
     assert t._in_active_session(_ts(7)) is True
     assert t._in_active_session(_ts(15)) is True
-    assert t._in_active_session(_ts(16)) is False   # NY-open close, exclusive
-    assert t._in_active_session(_ts(3)) is False     # Asian dead-zone
+    assert t._in_active_session(_ts(16)) is True    # NY-afternoon, still active
+    assert t._in_active_session(_ts(18)) is False   # 20:00 SAST, exclusive
+    assert t._in_active_session(_ts(2)) is False     # before window opens
 
 
 def test_adr_context_from_daily_candles():
