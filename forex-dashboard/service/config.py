@@ -89,6 +89,26 @@ TDI123_ADR_FILTER = os.environ.get("TDI123_ADR_FILTER", "false").lower() in ("1"
 # feed is current-week), so it can't be backtested retrospectively.
 TDI123_NEWS_FILTER = os.environ.get("TDI123_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 TDI123_NEWS_WINDOW_MIN = int(os.environ.get("TDI123_NEWS_WINDOW_MIN", "60"))
+# Asset classes that never get a TDI123 Discord alert (dashboard still shows
+# them). Metals and crypto went 2 wins from 16 in the walk-forward replay and
+# 0 from 12 in the live journal. Comma-separated; set empty to alert on all.
+# Midline reset (source diagram: point 2 returns to the 50 line between the two
+# extremes). Reported on every row as row["midline"]; only ENFORCED when this is
+# true. Level is the sell-side threshold; buys use the mirror (100 - level).
+TDI123_MIDLINE_RULE = os.environ.get("TDI123_MIDLINE_RULE", "false").lower() in ("1", "true", "yes")
+TDI123_MIDLINE_LEVEL_SELL = float(os.environ.get("TDI123_MIDLINE_LEVEL_SELL", "50"))
+# Which 1-2-3 the scanner looks for:
+#   "peak"  — the multi-day peak formation read off the TDI (RSI beyond 68/32,
+#             back to the 50 line, back into the 63-68 / 37-32 zone short of
+#             point 1). This is what the source charts show.
+#   "swing" — the older 5-bar-fractal price pattern (a ~14-hour double top).
+# Default stays "swing": the 2026-10-13 replay of "peak" (27 pairs, gross of
+# spread) gave H4 -0.04R over 78 formations, H1 -0.15R over 94 and M15 +0.09R
+# over 151 — faithful to the source charts, but no edge shown. Set
+# TDI123_PATTERN_MODE=peak to run it.
+TDI123_PATTERN_MODE = os.environ.get("TDI123_PATTERN_MODE", "swing").strip().lower()
+TDI123_EXCLUDED_CLASSES = tuple(
+    c.strip().lower() for c in os.environ.get("TDI123_EXCLUDED_CLASSES", "metal,crypto").split(",") if c.strip())
 # JOURNAL (default ON): log every fired alert to the trades table and auto-resolve
 # its outcome (win at TP1 / loss at SL) from cached candles each refresh, so the
 # dashboard builds a REAL track record instead of relying on backtests.

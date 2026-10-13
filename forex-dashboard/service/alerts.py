@@ -15,7 +15,7 @@ from config import (
     CRT_5AM_GRADE_A_ONLY, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
     TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
-    TDI123_WATCH_ALERTS_ENABLED,
+    TDI123_WATCH_ALERTS_ENABLED, TDI123_EXCLUDED_CLASSES,
     BTMM123_ALERTS_ENABLED, BTMM123_SESSION_FILTER, BTMM123_NEWS_FILTER,
     BTMM123_GRADE_A_ONLY, BTMM123_WATCH_ALERTS_ENABLED,
     BTMM_ID50_ALERTS_ENABLED, BTMM_ID50_SESSION_FILTER, BTMM_ID50_NEWS_FILTER,
@@ -751,6 +751,8 @@ def alert_tdi123_setup(pair: str, row: dict):
     """
     if not TDI123_ALERTS_ENABLED:
         return
+    if instruments.asset_class(pair) in TDI123_EXCLUDED_CLASSES:
+        return
 
     # M15 leg evaluated FIRST and unconditionally — independent of whatever
     # the H1 leg's gates decide below. Bug found 2026-09-10: this recursion
@@ -994,6 +996,8 @@ def alert_tdi123_watch(pair: str, row: dict):
     Discord as it develops instead of only on the dashboard. Skips silently
     once everything passes — the real alert already covers that case."""
     if not TDI123_WATCH_ALERTS_ENABLED:
+        return
+    if instruments.asset_class(pair) in TDI123_EXCLUDED_CLASSES:
         return
 
     # M15 leg evaluated first and unconditionally — see alert_tdi123_setup's

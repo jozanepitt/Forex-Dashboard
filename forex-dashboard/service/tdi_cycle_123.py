@@ -248,6 +248,193 @@ def _find_123_pattern(swings: list[dict], bars: list[dict],
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 2b. Multi-day peak formation, found on the TDI itself
+# ──────────────────────────────────────────────────────────────────────────────
+# The source charts (Gold, FRA40, USDCAD, NAS100 — all H1) number the three
+# points on the TDI pane, not on price:
+#   1  the RSI line peaks BEYOND the strict level (68 / 32) while the yellow
+#      baseline is pushed into the 63-68 (37-32) zone
+#   2  the RSI line comes back to the 50 line
+#   3  the RSI line returns to the zone but stops SHORT of its point-1 reading
+#      (the "divergence" line), with price back at the point-1 extreme
+# and the page notes the pattern "may take up to 4 days to be completed".
+# The fractal finder above (_find_123_pattern) catches a 14-hour double top
+# inside ONE push instead — the RSI never resets — so this is a separate finder.
+try:
+    from config import TDI123_PATTERN_MODE as PATTERN_MODE
+except Exception:  # noqa: BLE001 — config without the flag (older checkouts)
+    PATTERN_MODE = "swing"
+
+PEAK_MIN_SPAN = 12        # bars from point 1 to point 3 (H1: half a day)
+PEAK_MAX_SPAN = 96        # H1: four trading days
+PEAK_P3_MAX_AGE = 8       # point 3 must be within this many bars of the newest
+PEAK_RESET_LEVEL = 52.0   # "back to the 50 line", with 2 points of grace
+PEAK_PRICE_WINDOW = 3     # price extreme is read within +/- this many bars of the RSI turn
+# The baseline (a 34-bar average of the RSI) differs by a point or so between
+# broker feeds. The source's own USD/JPY example (28 Aug - 2 Sep 2026) peaks at
+# 62.4 on the Exness feed, so allow one point of grace on the 63 / 37 level.
+PEAK_BASELINE_GRACE = 1.0
+
+
+def _find_peak_formation(bars: list[dict], rsi_series: list[float],
+                         baseline_series: list[float],
+                         symbol: Optional[str] = None) -> Optional[dict]:
+    """Newest completed 1-2-3 on the TDI, either direction (freshest point 3 wins)."""
+    best = None
+    for direction in ("bearish", "bullish"):
+        cand = _peak_formation_one(bars, rsi_series, baseline_series, direction, symbol)
+        if cand and (best is None or cand["p3"]["idx"] > best["p3"]["idx"]):
+            best = cand
+    return best
+
+
+def _peak_formation_one(bars, rsi_series, baseline_series, direction, symbol):
+    n = len(bars)
+    if n < PEAK_MIN_SPAN + PEAK_P3_MAX_AGE + 5 or len(rsi_series) != n or len(baseline_series) != n:
+        return None
+    bear = direction == "bearish"
+    lo = max(0, n - 1 - PEAK_P3_MAX_AGE - PEAK_MAX_SPAN - 40)
+    # Work on a tail, mirrored for buys so one set of comparisons serves both:
+    # r is "how overbought", highs are "how extended".
+    off = lo
+    r = [x if bear else 100.0 - x for x in rsi_series[lo:]]
+    b = [x if bear else 100.0 - x for x in baseline_series[lo:]]
+    ext = [(x["high"] if bear else -x["low"]) for x in bars[lo:]]
+    pull = [(x["low"] if bear else -x["high"]) for x in bars[lo:]]
+    last = len(r) - 1
+
+    # Point 3: the highest RSI reading of the last few bars, back inside the zone,
+    # and already turned (at least one later bar).
+    j3 = max(range(max(0, last - PEAK_P3_MAX_AGE), last + 1), key=lambda k: (r[k], k))
+    if j3 >= last or r[j3] < TDI_OB_ZONE:
+        return None
+
+    # Walk back to the reset. Any higher reading on the way means this is not
+    # the top of the second push.
+    k = j3 - 1
+    while k >= 0 and r[k] > PEAK_RESET_LEVEL:
+        if r[k] > r[j3]:
+            return None
+        k -= 1
+    if k < 0:
+        return None
+
+    # Keep walking back through the first push: it ends where the RSI was last
+    # at the midline BEFORE going beyond the strict level.
+    m = k
+    seen_strict = False
+    while m >= 0:
+        if r[m] >= TDI_OB_STRICT:
+            seen_strict = True
+        elif seen_strict and r[m] <= PEAK_RESET_LEVEL:
+            break
+        m -= 1
+    if not seen_strict:
+        return None
+    j1 = max(range(m + 1, k + 1), key=lambda q: (r[q], -q))
+    if r[j1] < TDI_OB_STRICT:
+        return None
+
+    span = j3 - j1
+    if not (PEAK_MIN_SPAN <= span <= PEAK_MAX_SPAN):
+        return None
+    if r[j1] - r[j3] < DIVERGENCE_MIN_RSI_DELTA:          # point 3 must stop short of point 1
+        return None
+    base_peak = max(b[j1:j3 + 1])
+    if base_peak < TDI_OB_ZONE - PEAK_BASELINE_GRACE:       # the baseline must have entered the zone
+        return None
+    j2 = min(range(j1 + 1, j3), key=lambda q: (r[q], q))
+
+    # Price points: the extreme within a few bars of each RSI turn.
+    w = PEAK_PRICE_WINDOW
+    i1 = max(range(max(0, j1 - w), j1 + w + 1), key=lambda q: (ext[q], -q))
+    i3 = max(range(max(i1 + 2, j3 - w), min(last, j3 + w) + 1), key=lambda q: (ext[q], -q))
+    if i3 - i1 < 3:
+        return None
+    i2 = min(range(i1 + 1, i3), key=lambda q: (pull[q], q))
+
+    price = bars[-1]["close"]
+    pip = _pip_size(price, symbol)
+    leg1_range = ext[i1] - pull[i2]
+    if leg1_range < MIN_LEG1_PIPS * pip:
+        return None
+    overshoot = ext[i3] - ext[i1]                           # > 0: point 3 pushed beyond point 1
+    if overshoot >= 0:
+        if overshoot > POINT3_OVERSHOOT_PCT * leg1_range:
+            return None
+        p3_kind = "overshoot"
+    else:
+        if -overshoot > POINT3_SHORTFALL_PCT * leg1_range:
+            return None
+        p3_kind = "shortfall"
+
+    def pt(i, kind):
+        bar = bars[off + i]
+        if kind == "ext":
+            price_ = bar["high"] if bear else bar["low"]
+            typ = "high" if bear else "low"
+        else:
+            price_ = bar["low"] if bear else bar["high"]
+            typ = "low" if bear else "high"
+        return {"type": typ, "idx": off + i, "price": price_, "ts_utc": bar["ts_utc"]}
+
+    back = (lambda v: v) if bear else (lambda v: 100.0 - v)
+    return {
+        "direction": direction, "kind": "peak",
+        "p1": pt(i1, "ext"), "p2": pt(i2, "pull"), "p3": pt(i3, "ext"),
+        "leg1_range": leg1_range, "leg1_range_pips": leg1_range / pip,
+        "p3_kind": p3_kind, "p3_overshoot_pct": round(overshoot / leg1_range, 3),
+        "rsi_p1": back(r[j1]), "rsi_p2": back(r[j2]), "rsi_p3": back(r[j3]),
+        "rsi_idx": {"p1": off + j1, "p2": off + j2, "p3": off + j3},
+        "baseline_peak": back(base_peak), "span_bars": span,
+    }
+
+
+def _peak_extreme(pattern: dict, rsi_series: list[float], baseline_series: list[float]) -> dict:
+    """TDI-extreme result for a peak formation, in the shape _check_tdi_extreme
+    returns. The finder already required the baseline in the zone somewhere
+    between points 1 and 3 and the RSI beyond the strict level at point 1."""
+    i3 = pattern["p3"]["idx"]
+    bear = pattern["direction"] == "bearish"
+    g = PEAK_BASELINE_GRACE
+    base_ok = (pattern["baseline_peak"] >= TDI_OB_ZONE - g) if bear else (pattern["baseline_peak"] <= TDI_OS_ZONE + g)
+    rsi_ok = (pattern["rsi_p1"] >= TDI_OB_STRICT) if bear else (pattern["rsi_p1"] <= TDI_OS_STRICT)
+    return {
+        "present": bool(base_ok), "strong": bool(base_ok and rsi_ok),
+        "baseline_at_p3": baseline_series[i3], "rsi_at_p3": pattern["rsi_p3"],
+        "baseline_peak": pattern["baseline_peak"], "rsi_at_p1": pattern["rsi_p1"],
+        "rsi_at_p2": pattern["rsi_p2"],
+    }
+
+
+HTF_CONTEXT_BARS = 12     # how far back the higher timeframe's extreme may be
+
+
+def _htf_tdi_context(candles: Optional[list[dict]], direction: str) -> dict:
+    """Big-picture TDI read on the next timeframe up (H4 for an H1 setup).
+
+    For a sell: has the higher timeframe's RSI been beyond 68, or its baseline
+    in the 63+ zone, within the last HTF_CONTEXT_BARS bars — and is there a
+    completed peak formation of its own in the same direction? Reported on the
+    row as `htf_tdi`; informational, not a gate."""
+    if not candles or len(candles) < 60:
+        return {"available": False, "rsi_extreme": False, "baseline_extreme": False, "formation": False}
+    from btmm_core import _rsi
+    rsi = _rsi([c["close"] for c in candles], 13)
+    base = _baseline_series(rsi, 34)
+    k = HTF_CONTEXT_BARS
+    if direction == "bearish":
+        rsi_ext = max(rsi[-k:]) >= TDI_OB_STRICT
+        base_ext = max(base[-k:]) >= TDI_OB_ZONE - PEAK_BASELINE_GRACE
+    else:
+        rsi_ext = min(rsi[-k:]) <= TDI_OS_STRICT
+        base_ext = min(base[-k:]) <= TDI_OS_ZONE + PEAK_BASELINE_GRACE
+    form = _peak_formation_one(candles, rsi, base, direction, None) is not None
+    return {"available": True, "rsi": round(rsi[-1], 1), "baseline": round(base[-1], 1),
+            "rsi_extreme": bool(rsi_ext), "baseline_extreme": bool(base_ext), "formation": bool(form)}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 3. Divergence check — price 1→3 vs TDI RSI 1→3
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -376,6 +563,38 @@ def _check_tdi_extreme(pattern: dict, rsi_series: list[float],
         "baseline_at_p3": baseline_at_p3,
         "rsi_at_p3": rsi_at_p3,
     }
+
+
+# Midline reset. Source diagram: points 1 and 3 are in the extreme zone and
+# point 2 returns to the 50 line. Reported on every row; only enforced when
+# MIDLINE_REQUIRED is on (config TDI123_MIDLINE_RULE) — off until the replay
+# shows it helps.
+TDI_MIDLINE = 50.0
+try:
+    from config import TDI123_MIDLINE_RULE as MIDLINE_REQUIRED, TDI123_MIDLINE_LEVEL_SELL
+except Exception:  # noqa: BLE001 — config without the flags (older checkouts)
+    MIDLINE_REQUIRED, TDI123_MIDLINE_LEVEL_SELL = False, TDI_MIDLINE
+
+
+def _midline_reset(pattern: dict, rsi_series: list[float], level: Optional[float] = None) -> dict:
+    """Did the RSI line get back to the midline between point 1 and point 3?
+
+    `level` is the sell-side threshold (default 50): a bearish 1-2-3 needs the
+    RSI at or below it somewhere between the two peaks; a bullish one needs it
+    at or above the mirror level (100 - level) between the two lows."""
+    if level is None:
+        level = TDI_MIDLINE
+    i1, i3 = pattern["p1"]["idx"], pattern["p3"]["idx"]
+    if not (0 <= i1 < i3 < len(rsi_series)) or i3 - i1 < 2:
+        return {"present": False, "rsi_between": None, "level": level}
+    between = rsi_series[i1 + 1:i3]
+    if pattern["direction"] == "bearish":
+        reach, ok = min(between), min(between) <= level
+        shown = level
+    else:
+        reach, ok = max(between), max(between) >= 100.0 - level
+        shown = 100.0 - level
+    return {"present": bool(ok), "rsi_between": round(reach, 1), "level": shown}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -592,6 +811,20 @@ def _location(price: float, direction: str, pivots: Optional[dict]) -> dict:
             "zone": zone, "loc_ratio": round(loc, 3)}
 
 
+# Locations that cannot present as grade A/B. "poor"/"wrongside" is Davit's
+# rule (don't sell into support). "prime"/"extended" was added 2026-10-13 from
+# the walk-forward replay: a setup at or beyond the weekly R100/S100 means the
+# week has already run a full range, and fading it lost on both timeframes
+# (H1 -0.47R over 26 setups, M15 -0.74R over 17). NOTE this goes against the
+# source material, which calls the 61-100 band high-probability — keep
+# measuring it in the journal.
+LOCATION_CAPPED = ("poor", "wrongside", "prime", "extended")
+
+
+def _cap_grade_for_location(grade: str, quality: str) -> str:
+    return "C" if grade in ("A", "B") and quality in LOCATION_CAPPED else grade
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 7d. Session + ADR context (Tier-1 timing filters)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -717,15 +950,19 @@ def _analyze_timeframe(
     slow_arr = _sma(rsi_series, 7)
     baseline_series = _baseline_series(rsi_series, 34)
 
-    # 1. Swings
-    swings = _find_swings(entry_candles)
-    if len(swings) < 3:
-        return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
-                "reason": "not enough swings",
-                "score": 0, "current_price": price, "timeframe": timeframe}
+    if PATTERN_MODE == "peak":
+        # 1+2. Multi-day peak formation read off the TDI (see section 2b).
+        pattern = _find_peak_formation(entry_candles, rsi_series, baseline_series, symbol=symbol)
+    else:
+        # 1. Swings
+        swings = _find_swings(entry_candles)
+        if len(swings) < 3:
+            return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
+                    "reason": "not enough swings",
+                    "score": 0, "current_price": price, "timeframe": timeframe}
 
-    # 2. 123 geometry
-    pattern = _find_123_pattern(swings, entry_candles, symbol=symbol)
+        # 2. 123 geometry
+        pattern = _find_123_pattern(swings, entry_candles, symbol=symbol)
     if not pattern:
         return {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE",
                 "reason": "no 123 pattern",
@@ -738,7 +975,12 @@ def _analyze_timeframe(
     div = _check_divergence(pattern, rsi_series)
 
     # 4. TDI extreme at point 3
-    extreme = _check_tdi_extreme(pattern, rsi_series, baseline_series)
+    if pattern.get("kind") == "peak":
+        extreme = _peak_extreme(pattern, rsi_series, baseline_series)
+    else:
+        extreme = _check_tdi_extreme(pattern, rsi_series, baseline_series)
+
+    midline = _midline_reset(pattern, rsi_series, TDI123_MIDLINE_LEVEL_SELL)
 
     # 5. Signal cross confirmation
     cross = _check_signal_cross(pattern, fast_arr, slow_arr)
@@ -835,9 +1077,12 @@ def _analyze_timeframe(
     # Davit's location gate (kept as a filter, not a score): a clean TDI setup on
     # the WRONG side of the weekly pivot — selling into support or buying into
     # resistance — is a sucker move. Cap those to C so they can't present as A/B.
-    if location["quality"] in ("poor", "wrongside") and grade in ("A", "B"):
-        grade = "C"
-        notes.append("grade capped: poor pivot location")
+    capped = _cap_grade_for_location(grade, location["quality"])
+    if capped != grade:
+        grade = capped
+        notes.append("grade capped: poor pivot location"
+                     if location["quality"] in ("poor", "wrongside")
+                     else f"grade capped: {location['quality']} pivot location (stretched week)")
 
     # StrictlyCorrect's own foundational rule (not a score, a hard requirement):
     # "ONLY WHEN THE BASELINE ENTERS AN EXTREME, IS WHEN WE TRADE." TDI extreme
@@ -851,6 +1096,10 @@ def _analyze_timeframe(
     if not extreme["present"]:
         grade = "NO-TRADE"
         notes.append("no-trade: TDI baseline never reached an extreme at p3")
+    elif MIDLINE_REQUIRED and not midline["present"]:
+        grade = "NO-TRADE"
+        notes.append(f"no-trade: RSI never reset to the midline between p1 and p3 "
+                     f"(reached {midline['rsi_between']}, needs {midline['level']:.0f})")
 
     if grade == "NO-TRADE":
         setup = "NO-TRADE"
@@ -936,6 +1185,8 @@ def _analyze_timeframe(
         "adr_remaining_pips": _pips(0, adr_ctx["remaining"]) if adr_ctx else None,
         "tp1_reachable": tp1_reachable,
         "trend_regime": trend,
+        "midline": midline,
+        "htf_tdi": _htf_tdi_context(bias_candles, direction),
         "tdi_extreme": {
             "present": extreme["present"],
             "strong": extreme.get("strong", False),

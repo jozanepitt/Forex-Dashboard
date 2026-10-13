@@ -200,6 +200,33 @@ zone → setup = SELL.
 
 ---
 
+## 4b. Peak-formation finder (opt-in, added 2026-10-13)
+
+`TDI123_PATTERN_MODE` (config, default `swing`) selects the pattern finder.
+The peak finder is opt-in: its replay over 27 pairs (gross of spread) gave
+H4 -0.04R over 78 formations, H1 -0.15R over 94 and M15 +0.09R over 151.
+`swing` is the fractal finder in §3-§4. `peak` is `_find_peak_formation`,
+written from the source's own TDI charts (Gold, FRA40, USDCAD, NAS100, H1),
+which number the three points on the TDI pane:
+
+| Point | Rule (sell; buys mirror at 32 / 37 / 50) |
+|---|---|
+| 1 | RSI line peaks at or beyond 68 (`TDI_OB_STRICT`) |
+| 2 | RSI line returns to the 50 line (`PEAK_RESET_LEVEL = 52`, two points of grace) |
+| 3 | RSI line is back at or above 63 but at least `DIVERGENCE_MIN_RSI_DELTA` below its point-1 reading, is the highest reading since point 2, lies within `PEAK_P3_MAX_AGE = 8` bars of the newest bar and has at least one later bar |
+| baseline | reaches 63 somewhere from point 1 to point 3 (`PEAK_BASELINE_GRACE = 1.0`: the source's USD/JPY example of 28 Aug - 2 Sep 2026 peaks at 62.4 on the Exness feed) |
+| span | 12 to 96 bars from point 1 to point 3 (H1: half a day to four days) |
+| price | price points are the extremes within 3 bars of each RSI turn; point 3 may overshoot point 1 by 65% of leg 1 or fall short by 25% (same limits as §4) |
+
+In this mode `_peak_extreme` replaces §5's check: the baseline condition is
+formation-wide instead of "at point 3". Scoring, the signal cross, location,
+stops and targets are unchanged. The fractal finder found patterns lasting
+about 14 hours on H1, in which the RSI almost never reset to 50.
+
+Checked against the source: USD/JPY (point 1 28 Aug 17:00 at 160.20, point 3
+2 Sep 01:00 at 160.39) and NAS100/USTEC (point 1 4 Aug, point 3 7 Aug 2026)
+are both found.
+
 ## 5. TDI extreme check (at point 3)
 
 `_check_tdi_extreme(pattern, rsi_series, baseline_series)` —
@@ -442,7 +469,10 @@ But it acts as a **hard grade cap**:
 # Davit's location gate (kept as a filter, not a score): a clean TDI setup on
 # the WRONG side of the weekly pivot — selling into support or buying into
 # resistance — is a sucker move. Cap those to C so they can't present as A/B.
-if location["quality"] in ("poor", "wrongside") and grade in ("A", "B"):
+# 2026-10-13: "prime" and "extended" are capped too (LOCATION_CAPPED,
+# _cap_grade_for_location). Replay: fading a week that has already run to
+# R100/S100 lost on both timeframes. This departs from the source material.
+if location["quality"] in ("poor", "wrongside", "prime", "extended") and grade in ("A", "B"):
     grade = "C"
     notes.append("grade capped: poor pivot location")
 ```
@@ -1061,6 +1091,7 @@ All booleans read via `os.environ.get(NAME, "default").lower() in ("1","true","y
 | `TDI123_ADR_FILTER` | `false` | Gate alerts on TP1-reachable-given-remaining-ADR (off by default — hard-gating it starves the strategy) |
 | `TDI123_NEWS_FILTER` | `true` | Suppress alerts within `TDI123_NEWS_WINDOW_MIN` of high-impact news |
 | `TDI123_NEWS_WINDOW_MIN` | `60` | Minutes, news suppression window |
+| `TDI123_EXCLUDED_CLASSES` | `metal,crypto` | Asset classes that never get a TDI123 Discord alert (added 2026-10-13; dashboard still shows them) |
 | `TDI123_JOURNAL_ENABLED` | `true` | Auto-track fired alerts into the trade journal |
 | `TDI123_WATCH_ALERTS_ENABLED` | `false` | (separate watch-alert feature, out of core scope) |
 
