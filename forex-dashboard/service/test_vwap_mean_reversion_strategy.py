@@ -624,3 +624,31 @@ def test_analyze_universe_shape():
     assert result["universe"] == m.VWAP_MR_UNIVERSE
     assert len(result["pairs"]) == len(m.VWAP_MR_UNIVERSE)
     assert result["sells"] >= 1
+
+
+# ── target already reached (2026-10-13) ──────────────────────────────────────
+# Seen live: GBP/JPY and AUD/JPY stayed listed as grade-A BUYs after price had
+# already snapped back through the VWAP. The target (the VWAP) was BELOW the
+# entry for a buy. A mean-reversion trade whose mean has been reached is over.
+
+def test_target_reached_helper():
+    assert m._target_reached("BUY", entry=110.207, tp1=110.164) is True
+    assert m._target_reached("BUY", entry=110.100, tp1=110.164) is False
+    assert m._target_reached("SELL", entry=0.58070, tp1=0.58108) is True
+    assert m._target_reached("SELL", entry=0.58070, tp1=0.58008) is False
+    assert m._target_reached("BUY", entry=1.1000, tp1=1.1000) is True
+
+
+def test_buy_is_dropped_once_price_is_back_at_the_vwap():
+    candles = _build_long_setup_series()
+    assert m.analyze_pair("EUR/USD", candles)["setup"] == "BUY"
+    vwap_now = m._vwap_series(candles)[-1]
+    last = candles[-1]
+    close = vwap_now + 0.0004                               # snapped back through the VWAP
+    candles.append(_bar(last["ts_utc"] + 900, close + 0.0002, last["close"] - 0.0001, close,
+                        open_=last["close"], vol=15))
+    row = m.analyze_pair("EUR/USD", candles)
+    assert row["setup"] == "NO-TRADE"
+    if row["extension"] and "Regime" not in row["notes"]:
+        assert "already" in row["notes"].lower()
+

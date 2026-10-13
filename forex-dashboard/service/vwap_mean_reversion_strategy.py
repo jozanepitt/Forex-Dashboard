@@ -436,6 +436,12 @@ def _calc_stop_and_targets(candles: list[dict], extension: dict, confirmation: d
     }
 
 
+def _target_reached(setup: str, entry: float, tp1: float) -> bool:
+    """True when price is already at or beyond the VWAP target: the reversion
+    this trade was meant to capture has happened."""
+    return tp1 <= entry if setup == "BUY" else tp1 >= entry
+
+
 _SESSION_ORDER = {"ACTIVE": 0, "LONDON": 1, "NY-LATE": 1, "ASIAN": 2}
 
 
@@ -507,6 +513,15 @@ def analyze_pair(symbol: str, m15_candles: list[dict]) -> dict:
     depth_tier = _depth_tier_label(extension["z"])
     plan = _calc_stop_and_targets(m15_candles, extension, confirmation, vwap, sigma, symbol)
     fresh = i <= plan["time_stop_bar_idx"]
+
+    if _target_reached(plan["setup"], plan["entry"], plan["tp1"]):
+        out["confirmation"] = confirmation
+        out["grade"] = "NO-TRADE"
+        out["notes"] = (
+            f"Mean reversion already complete: price is back at the VWAP after the "
+            f"z={extension['z']:.2f} extension at bar {extension['idx']}."
+        )
+        return out
 
     notes = (
         f"{plan['setup']} confirmed: extension z={extension['z']:.2f} ({depth_tier}) at bar "

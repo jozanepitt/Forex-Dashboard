@@ -84,6 +84,82 @@ def _fetch_guarded(sym: str, interval: str, limit: Optional[int] = None,
         raise box["err"]
 
 
+_refresh_listener = None
+
+
+def set_refresh_listener(fn) -> None:
+    """Register the callable to run after each refresh (app.py passes its
+    WebSocket emitter). The scheduler must never import app: the service runs
+    app.py as __main__, so `from app import ...` loads a SECOND copy of it —
+    a second Flask/SocketIO instance nobody is connected to and a second
+    RotatingFileHandler that breaks service.log at its first rollover."""
+    global _refresh_listener
+    _refresh_listener = fn
+
+
+def _notify_refresh(pairs_updated: int) -> None:
+    if _refresh_listener is None:
+        return
+    try:
+        _refresh_listener(pairs_updated)
+    except Exception as e:  # noqa: BLE001 — a dead socket must not fail the refresh
+        log.debug("refresh listener failed: %s", e)
+
+
+# HTTP self-check: on 2026-10-12 the web server stopped answering for 26
+# minutes while this scheduler kept running, and the guardian (which only
+# checks that the port is listening) never noticed.
+HTTP_SELF_CHECK_FAILS = 3          # consecutive one-minute failures before exiting
+HTTP_SELF_CHECK_TIMEOUT = 5
+_http_fail_streak = 0
+
+
+def _probe_health() -> bool:
+    import requests
+    from config import SERVICE_HOST, SERVICE_PORT
+    r = requests.get(f"http://{SERVICE_HOST}:{SERVICE_PORT}/health", timeout=HTTP_SELF_CHECK_TIMEOUT)
+    return r.status_code == 200
+
+
+def _exit_for_restart() -> None:
+    """Dump every thread's stack for the post-mortem, then exit hard so the
+    guardian sees the port closed and relaunches the service."""
+    import faulthandler
+    import os
+    from pathlib import Path
+    try:
+        with open(Path(__file__).parent / "hang_dump.log", "a", encoding="utf-8") as fh:
+            fh.write(f"\n===== web server unresponsive at {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+            fh.flush()
+            faulthandler.dump_traceback(file=fh, all_threads=True)
+    except Exception as e:  # noqa: BLE001
+        log.warning("hang dump failed: %s", e)
+    logging.shutdown()
+    os._exit(3)
+
+
+def _http_self_check(probe=None, on_dead=None) -> None:
+    """Runs every minute. Exits the process after HTTP_SELF_CHECK_FAILS
+    consecutive failed probes of our own /health endpoint."""
+    global _http_fail_streak
+    try:
+        ok = bool((probe or _probe_health)())
+    except Exception:  # noqa: BLE001
+        ok = False
+    if ok:
+        if _http_fail_streak:
+            log.info("web server answering again after %d failed self-check(s)", _http_fail_streak)
+        _http_fail_streak = 0
+        return
+    _http_fail_streak += 1
+    log.warning("web self-check failed (%d/%d)", _http_fail_streak, HTTP_SELF_CHECK_FAILS)
+    if _http_fail_streak >= HTTP_SELF_CHECK_FAILS:
+        log.error("web server unresponsive for %d checks - exiting so the guardian restarts the service",
+                  _http_fail_streak)
+        _http_fail_streak = 0
+        (on_dead or _exit_for_restart)()
+
+
 _last_gate_summary: dict[str, str] = {}
 
 
@@ -221,13 +297,8 @@ def refresh_all():
     except Exception as e:
         log.warning("VWAP9EMA alerts failed: %s", e)
 
-    # Notify dashboard subscribers via WebSocket. Late import keeps scheduler importable
-    # standalone (e.g. for tests) without pulling Flask-SocketIO into the import graph.
-    try:
-        from app import emit_refresh_complete
-        emit_refresh_complete(updated)
-    except Exception as e:
-        log.debug("emit_refresh_complete unavailable: %s", e)
+    # Notify dashboard subscribers via WebSocket (listener registered by app.main).
+    _notify_refresh(updated)
 
 
 def _run_alerts():
@@ -487,6 +558,9 @@ def start() -> BackgroundScheduler:
     # Independent watchdog every 5 min — alerts if refresh_all has stalled.
     sched.add_job(_watchdog, "cron", minute="*/5", id="watchdog",
                   misfire_grace_time=60, max_instances=1, coalesce=True)
+    # Web-server self-check every minute (see _http_self_check).
+    sched.add_job(_http_self_check, "interval", seconds=60, id="http_self_check",
+                  misfire_grace_time=30, max_instances=1, coalesce=True)
     sched.start()
-    log.info("scheduler started (refresh cron :02,:17,:32,:47 UTC; watchdog every 5m)")
+    log.info("scheduler started (refresh cron :02,:17,:32,:47 UTC; watchdog every 5m; web self-check every 1m)")
     return sched

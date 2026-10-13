@@ -5,6 +5,7 @@ import json
 import logging
 import socket
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib.parse import unquote
@@ -836,6 +837,14 @@ def main():
         forexfactory.get_events()
     except Exception as e:
         log.warning("news prefetch failed: %s", e)
+    # A thread that dies with an uncaught exception is otherwise invisible
+    # (pythonw has no console): record it in service.log.
+    def _log_thread_crash(args):
+        log.error("uncaught exception in thread %s", getattr(args.thread, "name", "?"),
+                  exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+    threading.excepthook = _log_thread_crash
+
+    scheduler.set_refresh_listener(emit_refresh_complete)
     scheduler.start()
     log.info("listening on http://%s:%d (with WebSocket)", SERVICE_HOST, SERVICE_PORT)
     sio.run(app, host=SERVICE_HOST, port=SERVICE_PORT, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)

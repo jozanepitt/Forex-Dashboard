@@ -66,7 +66,11 @@ def get_candles(symbol: str, interval: str = "15min",
         stale = _backfill(symbol, interval, limit)
         return cache.read_candles(symbol, interval, limit), stale
 
-    if now_ts < last_ts + interval_secs + 60:
+    # The cache holds CLOSED bars only (providers drop the forming one). The
+    # newest bar opened at last_ts and closed one interval later; the next one
+    # cannot exist until two intervals after last_ts, so asking the provider
+    # before then just burns the MT5 lock for nothing.
+    if now_ts < last_ts + 2 * interval_secs:
         return cache.read_candles(symbol, interval, limit), False
 
     stale = _incremental(symbol, interval, last_ts)
@@ -158,7 +162,8 @@ def status_summary(interval: str = "15min") -> dict:
             "lastTs":  last_ts,
             "lastIso": (datetime.fromtimestamp(last_ts, tz=timezone.utc)
                          .strftime("%Y-%m-%d %H:%M:%S") if last_ts else None),
-            "fresh":   bool(last_ts and now_ts < last_ts + 2 * interval_secs),
+            # closed bars only: the next one lands ~2 intervals after last_ts, plus refresh lag
+            "fresh":   bool(last_ts and now_ts < last_ts + 2 * interval_secs + 600),
         })
     return {
         "pairs": pairs,
