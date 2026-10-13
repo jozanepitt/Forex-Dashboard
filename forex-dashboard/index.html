@@ -5096,10 +5096,19 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     document.getElementById('backtestView').style.display = mode === 'backtest' ? 'block' : 'none';
 
     // Hide/show BTMM-specific UI (stats bar, filters, risk calc, sim banner)
-    ['statsBar','controlsBar','riskCalc','simBanner'].forEach(id => {
+    ['statsBar','controlsBar','riskCalc'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = (isOverlay || isScanner) ? 'none' : '';
     });
+    // The simulated-data warning belongs on the BTMM tab only, and only while a
+    // pair is actually running on generated prices. Clearing the inline style
+    // here used to reveal it on every return to the tab, live data or not.
+    const simBanner = document.getElementById('simBanner');
+    if (simBanner) {
+      const anySimulated = (typeof pairData !== 'undefined')
+        && Object.values(pairData).some(p => p && p.isRealData === false);
+      simBanner.style.display = (!isOverlay && !isScanner && anySimulated) ? '' : 'none';
+    }
 
     // Scanner containers: show the active one, hide all others
     const btmmContainer    = document.getElementById('btmmTableContainer');
