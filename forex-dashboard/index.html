@@ -48,6 +48,23 @@ header{background:var(--bg-surface);border-bottom:1px solid var(--border);paddin
 .btn-refresh:hover{background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-light)}
 .btn-settings{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-secondary);width:32px;height:32px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;transition:all .2s}
 .btn-settings:hover{background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-light)}
+.restart-overlay{position:fixed;inset:0;background:rgba(5,6,8,.82);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
+.restart-overlay.show{display:flex}
+.restart-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:12px;padding:24px 28px;width:100%;max-width:420px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.restart-card h3{font-size:1rem;margin-bottom:14px;color:var(--text-primary)}
+.restart-steps{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:.85rem}
+.restart-steps li{display:flex;gap:10px;align-items:center;color:var(--text-muted)}
+.restart-steps li::before{content:'○';width:14px;text-align:center;font-family:var(--font-mono)}
+.restart-steps li.active{color:var(--text-primary)}
+.restart-steps li.active::before{content:'…'}
+.restart-steps li.done{color:var(--green)}
+.restart-steps li.done::before{content:'✓'}
+.restart-steps li.fail{color:var(--red)}
+.restart-steps li.fail::before{content:'✕'}
+.restart-msg{margin-top:16px;font-size:.8rem;color:var(--text-secondary);min-height:1.2em}
+.restart-msg.good{color:var(--green)}
+.restart-msg.bad{color:var(--red)}
+.restart-close{margin-top:14px;display:none}
 
 .mode-tabs{display:flex;gap:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:3px;margin:16px 24px 0}
 .mode-tab{padding:8px 18px;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);font-family:var(--font-sans);font-size:.8rem;font-weight:500;cursor:pointer;transition:all .2s}
@@ -423,9 +440,23 @@ td.mono{font-family:var(--font-mono)}
     <div class="refresh-timer" id="refreshTimer">Next refresh: 30m</div>
     <div class="sast-clock"><span class="sast-label">SAST</span><span id="sastClock">--:--:--</span></div>
     <button class="btn-refresh" id="btnRefresh">↻ Refresh</button>
+    <button class="btn-refresh" id="btnRestart" title="Restart the signal service, Discord bot and guardians">⟲ Restart</button>
     <button class="btn-settings" id="btnSettings" title="Settings">⚙</button>
   </div>
 </header>
+<div class="restart-overlay" id="restartOverlay" role="dialog" aria-modal="true" aria-labelledby="restartTitle">
+  <div class="restart-card">
+    <h3 id="restartTitle">Restarting services</h3>
+    <ul class="restart-steps">
+      <li id="rsRefresh">Let the running data refresh finish</li>
+      <li id="rsStop">Stop the service, Discord bot and guardians</li>
+      <li id="rsStart">Start them again</li>
+      <li id="rsMt5">Check the MT5 data feed</li>
+    </ul>
+    <div class="restart-msg" id="restartMsg"></div>
+    <button class="btn-refresh restart-close" id="restartClose">Close</button>
+  </div>
+</div>
 <div class="sim-banner" id="simBanner" style="display:none">⚠ <strong>SIMULATED DATA:</strong> Pairs without live API data use generated price data. Scores are indicative only — not real market signals. Twelve Data API provides live data for all 28 pairs.</div>
 
 <div class="mode-tabs">
@@ -927,7 +958,7 @@ td.mono{font-family:var(--font-mono)}
       <b>Rule 3</b> — stop at the wick of the engulfing candle. <b>Rule 4</b> — entry at the next candle's open,
       or 25% / 50% back into the engulfing candle. <b>Rule 5</b> — an engulfing against the trend shows as
       <i>Wait</i> until a second one confirms it close by (within 8 candles, before price has run off or
-      taken out the first one); it then shows as a <i>reversal</i> signal, so its direction is the opposite of the Trend column. Grade A = with the trend, a strong close (beyond the previous candle's wick) and made at the 20-candle low or high — the only grade sent to Discord; grade B = any other with-trend setup, or a confirmed reversal. Target is 2× the risk.
+      taken out the first one); it then shows as a <i>reversal</i> signal, so its direction is the opposite of the Trend column. Grade A = with the trend, a strong close (beyond the previous candle's wick) and made at the 20-candle low or high; grade B = any other with-trend setup, or a confirmed reversal. Grades A and B are sent to Discord. Target is 2× the risk.
     </div>
   </div>
 
@@ -4647,6 +4678,137 @@ document.getElementById('confidenceGroup').addEventListener('click', (e) => {
 document.getElementById('sortSelect').addEventListener('change', (e) => { currentSort = e.target.value; render(); });
 document.getElementById('searchInput').addEventListener('input', (e) => { searchTerm = e.target.value; render(); });
 
+// ── Restart services ──
+// POST /admin/restart hands the restart to restart-services.ps1, then this
+// panel follows it: /health answering from a NEW pid means the fresh process
+// is up, and /status mt5.available means it has its data feed back.
+const RESTART_TIMEOUT_MS = 120000;
+let restartRunning = false;
+let restartRun = 0;   // each click gets a new id; an older polling loop stops when it changes
+
+async function restartFetchJson(path, opts = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 3000);
+  try {
+    const resp = await fetch(`${API_CONFIG.baseUrl}${path}`, { cache: 'no-store', signal: ctl.signal, ...opts });
+    return { status: resp.status, body: await resp.json().catch(() => ({})) };
+  } finally { clearTimeout(timer); }
+}
+
+function restartStep(id, state) {
+  const el = document.getElementById(id);
+  el.classList.remove('active', 'done', 'fail');
+  if (state) el.classList.add(state);
+}
+
+function restartMessage(text, tone) {
+  const el = document.getElementById('restartMsg');
+  el.textContent = text;
+  el.className = 'restart-msg' + (tone ? ' ' + tone : '');
+}
+
+async function restartServices() {
+  if (restartRunning) return;
+  if (!confirm('Restart all services?\n\nThe signal service, Discord bot and guardians stop and start again. The dashboard is offline for about 10–20 seconds (longer if a data refresh is running).')) return;
+  restartRunning = true;
+  const run = ++restartRun;
+  const steps = ['rsRefresh', 'rsStop', 'rsStart', 'rsMt5'];
+  steps.forEach(s => restartStep(s, null));
+  restartMessage('');
+  document.getElementById('restartClose').style.display = 'none';
+  document.getElementById('restartOverlay').classList.add('show');
+  const t0 = Date.now();
+  const secs = () => Math.round((Date.now() - t0) / 1000);
+  const fail = (text) => {
+    restartMessage(text, 'bad');
+    document.getElementById('restartClose').style.display = 'inline-block';
+    restartRunning = false;
+  };
+
+  let oldPid = null, oldStart = null, waitingForRefresh = false;
+  try {
+    const r = await restartFetchJson('/admin/restart', { method: 'POST' });
+    if (r.status === 403) return fail(r.body.error || 'Restart refused. Open the dashboard at http://localhost:3002 and try again.');
+    if (r.status !== 202 && r.status !== 409) return fail(`Restart failed (HTTP ${r.status}).`);
+    oldPid = r.body.pid;
+    oldStart = r.body.started_at;
+    waitingForRefresh = !!r.body.waiting_for_refresh;
+    if (r.status === 409) restartMessage('A restart was already running; following it.');
+  } catch (e) {
+    return fail('The service is not answering, so it cannot be restarted from here. The guardian relaunches it within about a minute.');
+  }
+
+  restartStep('rsRefresh', waitingForRefresh ? 'active' : 'done');
+  if (!waitingForRefresh) restartStep('rsStop', 'active');
+  let warned = false, mt5Since = null, mt5Failed = false;
+  let stopT0 = null;        // the 2-minute clock starts once the old process stops answering
+  const showClose = () => { document.getElementById('restartClose').style.display = 'inline-block'; };
+  while (true) {
+    await new Promise(res => setTimeout(res, 1000));
+    if (run !== restartRun) return;                                                      // a newer click took over
+    if (!document.getElementById('restartOverlay').classList.contains('show')) return;   // closed by the user
+    let h = null;
+    try { h = await restartFetchJson('/health'); } catch (e) { h = null; }
+    if (h && h.status === 200 && h.body.pid === oldPid && h.body.started_at === oldStart) {
+      // old process still answering: waiting for the refresh, or about to be stopped
+      if (waitingForRefresh) restartMessage(`Waiting for the data refresh to finish… ${secs()}s`);
+      if (Date.now() - t0 > RESTART_TIMEOUT_MS + 180000 && !warned) {
+        warned = true;
+        restartMessage('The restart has not started after 5 minutes. Check service\\guardian.log; you can close this and try again.', 'bad');
+        showClose();
+      }
+      continue;
+    }
+    stopT0 = stopT0 || Date.now();
+    restartStep('rsRefresh', 'done');
+    restartStep('rsStop', 'done');
+    if (!h || h.status !== 200) {
+      restartStep('rsStart', 'active');
+      if (Date.now() - stopT0 > RESTART_TIMEOUT_MS) {
+        if (!warned) {
+          warned = true;
+          restartMessage('Not back after 2 minutes. The guardian retries within a minute; this panel keeps checking and turns green when the service is up.', 'bad');
+          showClose();
+        }
+      } else {
+        restartMessage(`Starting… ${secs()}s`);
+      }
+      continue;
+    }
+    restartStep('rsStart', 'done');
+    restartStep('rsMt5', 'active');
+    let mt5 = false;
+    try {
+      const st = await restartFetchJson('/status');
+      mt5 = !!(st.body.mt5 && st.body.mt5.available);
+    } catch (e) { mt5 = false; }
+    if (mt5) {
+      restartStep('rsMt5', 'done');
+      restartMessage(`All good: back up in ${secs()}s (new process ${h.body.pid}). Reloading the dashboard…`, 'good');
+      setTimeout(() => location.reload(), 2500);
+      return;
+    }
+    mt5Since = mt5Since || Date.now();
+    if (Date.now() - mt5Since > 30000) {
+      // keep checking: once the user opens / logs in to MT5 this still goes green
+      if (!mt5Failed) {
+        mt5Failed = true;
+        restartStep('rsMt5', 'fail');
+        restartMessage('The service is back up, but MT5 is not connected. Open the MT5 (Exness) terminal and log in; this panel keeps checking.', 'bad');
+        showClose();
+      }
+      continue;
+    }
+    restartMessage(`Service is up; waiting for MT5… ${secs()}s`);
+  }
+}
+
+document.getElementById('btnRestart').addEventListener('click', restartServices);
+document.getElementById('restartClose').addEventListener('click', () => {
+  document.getElementById('restartOverlay').classList.remove('show');
+  restartRunning = false;
+});
+
 document.getElementById('btnRefresh').addEventListener('click', () => {
   const btn = document.getElementById('btnRefresh');
   if (btn.disabled) return;
@@ -6006,7 +6168,8 @@ function renderEngulfingTable(data) {
 
   summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
     `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> · ` +
-    `<span style="color:var(--yellow);font-weight:600">${data.waiting || 0} waiting for confirmation</span>`;
+    `<span style="color:var(--yellow);font-weight:600">${data.waiting || 0} waiting for confirmation</span>` +
+    ` <span style="color:var(--text-muted)">· updated ${new Date((data.cached_at || Date.now() / 1000) * 1000).toLocaleTimeString()}</span>`;
 }
 
 document.getElementById('engulfingRefreshBtn')?.addEventListener('click', loadEngulfing);
@@ -6366,6 +6529,18 @@ if (id50Btn) id50Btn.addEventListener('click', loadId50);
   socket.on('refresh-complete', (data) => {
     console.info('Service refresh complete; reloading dashboard data', data);
     fetchAllData().then(() => { render(); refreshCountdown = API_CONFIG.refreshInterval / 1000; });
+    // Scanner tabs only loaded when clicked, so an open tab kept showing old
+    // candles for hours. Reload whichever scanner is on screen.
+    const scannerLoaders = {
+      engulfing: typeof loadEngulfing === 'function' ? loadEngulfing : null,
+      tdi123: typeof loadTdi123 === 'function' ? loadTdi123 : null,
+      id50: typeof loadId50 === 'function' ? loadId50 : null,
+      vwap_mr: typeof loadVwapMr === 'function' ? loadVwapMr : null,
+      vwap_bounce: typeof loadVwapBounce === 'function' ? loadVwapBounce : null,
+      vwap9ema: typeof loadVwap9ema === 'function' ? loadVwap9ema : null,
+    };
+    const loader = (typeof currentMode !== 'undefined') ? scannerLoaders[currentMode] : null;
+    if (loader) loader();
   });
 })();
 </script>

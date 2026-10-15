@@ -290,12 +290,22 @@ def _pair_row(prev=BULL_PREV, cur=BULL_CUR):
     return e.analyze_pair("EUR/USD", _with_pattern(_pullback_lead(), prev, cur), h4_candles=UP_H4, d1_candles=UP_D1)
 
 
-def test_alerts_default_on_and_grade_a_only_in_config():
-    """User decision 2026-10-13: send grade A engulfing setups to Discord."""
+def test_alerts_default_on_for_grades_a_and_b_in_config():
+    """User decision 2026-10-14: send grade A and B engulfing setups to Discord."""
     import config
     src = open(config.__file__, encoding="utf-8").read()
     assert 'os.environ.get("ENGULF_ALERTS_ENABLED", "true")' in src
-    assert 'os.environ.get("ENGULF_GRADE_A_ONLY", "true")' in src
+    assert 'os.environ.get("ENGULF_GRADE_A_ONLY", "false")' in src
+
+
+def test_grade_b_alerts_when_a_only_is_off(monkeypatch):
+    sent = _alert_harness(monkeypatch, a_only=False)
+    alerts._engulf_last_alerted.clear()
+    row = _pair_row(prev=(1.1120, 1.1140, 1.1100, 1.1110))
+    assert row["grade"] == "B"
+    alerts.alert_engulfing_setup("EUR/USD", row)
+    assert len(sent) == 1 and "grade" not in sent[0]["title"].lower()
+    alerts._engulf_last_alerted.clear()
 
 
 def test_no_alert_when_disabled(monkeypatch):

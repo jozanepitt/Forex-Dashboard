@@ -26,6 +26,12 @@ function Write-Log($msg) {
 
 Write-Log "guardian loop started (pid $PID)"
 
+# The token check below runs `python -c "from config import ..."`, which only
+# works from the service folder. The Startup launcher starts this loop
+# somewhere else, so the import failed every loop and the bot stayed down from
+# 2026-10-01 to 2026-10-15.
+Set-Location $dir
+
 while ($true) {
     try {
         $running = Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" |
@@ -36,7 +42,11 @@ while ($true) {
             # Discord Developer Portal -- without this check the loop would
             # spawn a process that immediately exits, every 3 minutes, forever.
             # Reuses config.py's own env loading (never reads/prints the value).
+            # Continue, not Stop: under PowerShell 5.1 any stderr line from a
+            # native command otherwise throws and aborts this loop iteration.
+            $ErrorActionPreference = "Continue"
             & $py -c "from config import DISCORD_BOT_TOKEN; import sys; sys.exit(0 if DISCORD_BOT_TOKEN else 1)" 2>$null
+            $ErrorActionPreference = "Stop"
             if ($LASTEXITCODE -ne 0) {
                 Write-Log "DISCORD_BOT_TOKEN not set in .env -- skipping relaunch until it is added"
             } else {

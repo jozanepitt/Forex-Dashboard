@@ -202,7 +202,27 @@ def _live_symbols(runner: str, candles_by_pair: dict[str, dict],
     return live
 
 
+_refreshing = threading.Event()
+
+
+def is_refreshing() -> bool:
+    """True while refresh_all is fetching (the Restart button waits for it)."""
+    return _refreshing.is_set()
+
+
 def refresh_all():
+    import restart
+    if restart.is_pending():
+        log.info("refresh_all: skipped, a restart from the dashboard is under way")
+        return
+    _refreshing.set()
+    try:
+        _refresh_all_inner()
+    finally:
+        _refreshing.clear()
+
+
+def _refresh_all_inner():
     global _prev_kill_zone
     log.info("refresh_all: starting (%d pairs)", len(PRIORITY_PAIRS))
     t0 = time.time()

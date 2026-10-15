@@ -26,6 +26,7 @@ import vwap_mean_reversion_strategy
 import vwap9ema_strategy
 import vwap_bounce_strategy
 import fetcher
+import restart
 import scheduler
 from providers import forexfactory
 from config import (
@@ -87,7 +88,20 @@ def _on_disconnect():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return restart.health_info()
+
+
+@app.post("/admin/restart")
+def admin_restart():
+    if not restart.origin_allowed(request.headers.get("Origin"), request.headers.get("Referer")):
+        log.warning("restart refused: origin=%r referer=%r",
+                    request.headers.get("Origin"), request.headers.get("Referer"))
+        return jsonify({"ok": False, "error": "restart is only allowed from the dashboard page"}), 403
+    ok, msg = restart.request_restart(scheduler.is_refreshing)
+    log.info("restart requested from the dashboard: %s", msg)
+    return jsonify({"ok": ok, "message": msg, "pid": _os.getpid(),
+                    "started_at": restart.health_info()["started_at"],
+                    "waiting_for_refresh": scheduler.is_refreshing()}), (202 if ok else 409)
 
 
 @app.get("/news")

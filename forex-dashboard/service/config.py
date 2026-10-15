@@ -125,13 +125,14 @@ TDI123_WATCH_ALERTS_ENABLED = os.environ.get("TDI123_WATCH_ALERTS_ENABLED", "fal
 # Engulfing — trend-following engulfing-candle scanner (engulfing_strategy.py):
 # H1 entries with the H4 trend and H4 entries with the daily trend, on every
 # dashboard pair plus oil. Replaced BTMM 123 on 2026-10-13.
-# ALERTS default TRUE, grade A only (with the trend, closing beyond the previous
+# ALERTS default TRUE (grade A only at first, A and B since 2026-10-14; A = with the trend, closing beyond the previous
 # candle's wick, and made at a 20-candle swing extreme) — switched on at the
 # user's explicit request on 2026-10-13.
 # For the record: the walk-forward test showed no edge (with-trend, next open,
 # 2R target: H1 9,098 signals 32% wins -0.04R; grade A no better than B).
 ENGULF_ALERTS_ENABLED = os.environ.get("ENGULF_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
-ENGULF_GRADE_A_ONLY = os.environ.get("ENGULF_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+# Grades A and B are sent (user decision 2026-10-14); set "true" for A only.
+ENGULF_GRADE_A_ONLY = os.environ.get("ENGULF_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 ENGULF_NEWS_FILTER = os.environ.get("ENGULF_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
 # BTMM ID50 — M15 50-EMA-bounce retest scanner (design
