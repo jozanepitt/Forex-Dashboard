@@ -4,7 +4,7 @@ This is the research harness and the MetaTrader 5 execution bot for the scanners
 
 Read `BACKTEST_RESULTS.md` before pointing the bot at a strategy. The harness is allowed to conclude that a scanner has no edge after costs. If it does, leave `BOT_STRATEGY` empty.
 
-The run already in this branch (Dukascopy BID, 2023-01-02 through 2026-10-16, ten symbols, Exness Standard costs) did not find one. Every pooled strategy lost money out of sample after costs. The least negative was BTMM ID50 on M15, about −0.04R per trade, profit factor 0.88, over 1,261 out-of-sample trades. That is still a loss. A few symbol cells are positive; they were not a pre-registered test. Leave `BOT_STRATEGY` empty. Do not automate entries from these scanners on the back of this test.
+The run in this branch (Dukascopy BID, 2023-01-02 through 2026-10-16, ten symbols, Exness Standard costs, with the short side paying the spread on a target and a 3× spread during 21:00–22:00 UTC) did not find one. Every unfiltered pooled out-of-sample expectancy is negative, and so is every alert-gated one. The least negative unfiltered row is BTMM ID50 on M15: 1,265 out-of-sample trades, 65.9% wins, profit factor 0.70, −0.103R per trade, −0.237R if the spread is doubled, max drawdown 132R. In-sample was −0.088R. That is a loss. A few symbol cells are positive; they were not a separate test. Leave `BOT_STRATEGY` empty.
 
 ## Run the backtest
 
@@ -78,9 +78,9 @@ If the terminal is already logged in you can leave login, password, and server b
 |---|---|---|
 | Demo gate | live flags `false` | A real account is rejected. Demo and contest accounts run. |
 | `BOT_STRATEGY` empty | empty | Process exits without sending an order. |
-| Risk per trade | `0.5` percent of equity | Lots are floored to the broker's volume step using the symbol's tick value, so the size is never rounded up through the budget. Below the minimum lot, the trade is skipped. |
-| Max open positions | 3 | Counts every open position on the account, not only the bot's. |
-| Daily loss limit | 2 percent of the UTC-day starting balance | Realized plus floating. Once hit, no new trades until the next UTC day, even if the floating loss comes back. |
+| Risk per trade | `2` percent of equity | Hard ceiling is 2%. A higher `BOT_RISK_PCT` is cut to 2%. Lots are floored to the volume step. The stop distance includes the spread and slippage (and commission, which is $0 on Exness Standard), so a 3-pip stop is not sized as if the spread were free. Below the minimum lot, the trade is skipped. |
+| Max open positions | 3 | Counts every open position and every pending order on the account. Pending orders expire at the signal's own deadline, or after 8 hours. |
+| Daily loss limit | `6` percent of the UTC-day starting equity | Configurable from 2% to 6%. Default 6% so three full 2% losses halt the day. The baseline is equity, not balance. Realized plus floating. Once hit, no new trades until the next UTC day. |
 | Max trades per day | 5 | Entries with this bot's magic number since UTC midnight. |
 | Spread filter | 2× the assumed typical spread | Unknown symbols are skipped. The typicals live in `service/bot/costs.py`. |
 | Session filter | on, 07:00–20:00 UTC | Extra gate. Turn off with `BOT_SESSION_FILTER=false` if you are testing a strategy whose hours sit outside that. |

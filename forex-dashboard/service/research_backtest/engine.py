@@ -6,9 +6,20 @@ bar's own close. When one M1 bar touches both the stop and the target, the
 stop is filled. That is pessimistic and removes a common source of
 look-ahead inside a candle.
 
-Prices are Dukascopy BID. Buys pay the full Exness spread on entry; sells
-pay it when they buy back. Slippage is adverse on market entries and on
-stops, and is not credited on targets.
+Prices are Dukascopy BID. Buys pay the spread on entry (ask = bid + spread).
+Sells pay it when they buy back, including on a take-profit. Slippage is
+adverse on market entries and on stops, and is not credited on targets.
+
+A buy limit rests below the market and fills only when the ask trades the
+limit (bid low + spread <= limit). The fill price is the limit. A sell
+limit fills when the bid trades the limit. On a limit fill, the target is
+not allowed on that same minute: the high and low order inside the bar is
+unknown, so a same-bar target would assume the favorable path. The stop
+still counts on that minute.
+
+During 21:00-22:00 UTC the spread is tripled. That is a stand-in for the
+rollover widen, not a measured Exness quote. There is no swap and no
+news-time spread.
 """
 from __future__ import annotations
 
@@ -19,7 +30,7 @@ from typing import Callable, Optional
 import numpy as np
 
 import instruments
-from bot.costs import cost_model
+from bot.costs import ROLLOVER_HOUR_UTC, ROLLOVER_SPREAD_MULT, cost_model, spread_at
 from bot.signals import LOOKBACK, Signal, TF_SECONDS, v9_candidate_prefilter
 
 MAX_HOLD_SECS = 10 * 86400
@@ -43,6 +54,18 @@ def _pnl(side: str, entry_fill: float, exit_fill: float, risk: float, pip: float
     return pnl / risk, pnl / pip
 
 
+def _spreads(ts_slice: np.ndarray, base: float, stress: float) -> np.ndarray:
+    hours = (np.asarray(ts_slice, dtype=np.int64) % 86400) // 3600
+    roll = np.where(hours == ROLLOVER_HOUR_UTC, ROLLOVER_SPREAD_MULT, 1.0)
+    return float(base) * roll * float(stress)
+
+
+def _through(side: str, fill: float, sl: float, tp: float) -> bool:
+    if side == "BUY":
+        return fill <= sl or fill >= tp
+    return fill >= sl or fill <= tp
+
+
 def simulate(
     side: str,
     m1: dict[str, np.ndarray],
@@ -58,7 +81,12 @@ def simulate(
     time_stop_ts: Optional[int],
 ) -> Optional[dict]:
     """Simulate one trade. Returns None when the order never fills or the
-    geometry is unusable. ``r_wide`` repeats the same path at twice the spread.
+    geometry is unusable.
+
+    ``r_wide`` walks the same barrier path at twice the spread. A buy limit
+    still fills at its price in the base case; the wide column adds one
+    extra base spread to that entry so the stress has a cost. Rollover
+    widening applies on top of both.
     """
     ts = m1["ts"]
     if len(ts) == 0 or pip <= 0:
@@ -74,7 +102,7 @@ def simulate(
 
     op, hi, lo, cl = m1["open"], m1["high"], m1["low"], m1["close"]
 
-    def _exit_from(fill_i: int, entry_fill: float, spread_now: float) -> Optional[tuple]:
+    def _exit_from(fill_i: int, entry_fill: float, stress: float, tp_offset: int) -> Optional[tuple]:
         hard_dead = int(ts[fill_i]) + MAX_HOLD_SECS
         candidates = [hard_dead, int(ts[-1]) + 60]
         if time_stop_ts is not None:
@@ -85,14 +113,18 @@ def simulate(
         i_dead = min(i_dead, len(ts))
         seg_h = hi[fill_i:i_dead]
         seg_l = lo[fill_i:i_dead]
+        if len(seg_h) == 0:
+            return None
         if side == "BUY":
             sl_ix = np.flatnonzero(seg_l <= sl)
-            tp_ix = np.flatnonzero(seg_h >= tp)
+            tp_src = seg_h[tp_offset:] if tp_offset < len(seg_h) else seg_h[:0]
+            tp_ix = np.flatnonzero(tp_src >= tp)
         else:
             sl_ix = np.flatnonzero(seg_h >= sl)
-            tp_ix = np.flatnonzero(seg_l <= tp)
+            tp_src = seg_l[tp_offset:] if tp_offset < len(seg_l) else seg_l[:0]
+            tp_ix = np.flatnonzero(tp_src <= tp)
         i_sl = int(sl_ix[0]) if len(sl_ix) else None
-        i_tp = int(tp_ix[0]) if len(tp_ix) else None
+        i_tp = int(tp_offset + tp_ix[0]) if len(tp_ix) else None
         if i_sl is None and i_tp is None:
             if i_dead <= fill_i:
                 return None
@@ -117,56 +149,63 @@ def simulate(
             j = fill_i + i_tp
             outcome = "tp"
             raw_exit = float(tp)
-            gap = False
             barrier = "tp"
+        # Exit spread is the spread of the exit minute. A short always buys
+        # back at the ask, including when the target is hit.
+        sp_exit = float(spread_at(spread, int(ts[j]), stress))
         if barrier == "market":
-            exit_fill = (raw_exit - slip) if side == "BUY" else (raw_exit + spread_now + slip)
+            exit_fill = (raw_exit - slip) if side == "BUY" else (raw_exit + sp_exit + slip)
         elif barrier == "sl":
-            if side == "BUY":
-                exit_fill = raw_exit - slip
-            else:
-                exit_fill = raw_exit + spread_now + slip
+            exit_fill = (raw_exit - slip) if side == "BUY" else (raw_exit + sp_exit + slip)
         else:
-            exit_fill = raw_exit if side == "BUY" else raw_exit - spread_now
+            exit_fill = raw_exit if side == "BUY" else (raw_exit + sp_exit)
         return outcome, int(ts[j]), exit_fill, entry_fill
 
+    tp_offset = 0
     if entry_kind == "limit":
+        tp_offset = 1
         limit_end = valid_until if valid_until is not None else known_at + 6 * 3600
         i1 = int(np.searchsorted(ts, limit_end, side="left"))
         if i1 <= i0:
             return None
         if side == "BUY":
-            hits = np.flatnonzero(lo[i0:i1] <= entry)
-            entry_fill = entry + spread
-            entry_fill_wide = entry + spread * 2
+            bar_spread = _spreads(ts[i0:i1], spread, 1.0)
+            hits = np.flatnonzero(lo[i0:i1] + bar_spread <= entry + 1e-12)
+            entry_fill = float(entry)
+            # Same fill. The 2x column pays one extra base spread on top of the limit.
+            entry_fill_wide = float(entry) + float(spread)
         else:
             hits = np.flatnonzero(hi[i0:i1] >= entry)
-            entry_fill = entry
-            entry_fill_wide = entry
+            entry_fill = float(entry)
+            entry_fill_wide = float(entry)
         if len(hits) == 0:
             return None
         fill_i = i0 + int(hits[0])
-        if side == "BUY" and (entry_fill <= sl or entry_fill >= tp):
-            return None
-        if side == "SELL" and (entry_fill >= sl or entry_fill <= tp):
-            return None
     else:
         fill_i = i0
+        sp = spread_at(spread, int(ts[fill_i]), 1.0)
+        sp_w = spread_at(spread, int(ts[fill_i]), 2.0)
         if side == "BUY":
-            entry_fill = float(op[fill_i]) + spread + slip
-            entry_fill_wide = float(op[fill_i]) + spread * 2 + slip
+            entry_fill = float(op[fill_i]) + sp + slip
+            entry_fill_wide = float(op[fill_i]) + sp_w + slip
         else:
             entry_fill = float(op[fill_i]) - slip
             entry_fill_wide = float(op[fill_i]) - slip
-        if side == "BUY" and (entry_fill <= sl or entry_fill >= tp):
-            return None
-        if side == "SELL" and (entry_fill >= sl or entry_fill <= tp):
-            return None
-
-    base = _exit_from(fill_i, entry_fill, spread)
-    wide = _exit_from(fill_i, entry_fill_wide, spread * 2)
-    if base is None or wide is None:
+    if _through(side, entry_fill, sl, tp):
         return None
+
+    base = _exit_from(fill_i, entry_fill, 1.0, tp_offset)
+    if base is None:
+        return None
+    if _through(side, entry_fill_wide, sl, tp):
+        # The stressed entry is already through the stop. Book it as a stop.
+        sp_x = spread_at(spread, int(ts[fill_i]), 2.0)
+        exit_wide = (sl - slip) if side == "BUY" else (sl + sp_x + slip)
+        wide = ("sl", int(ts[fill_i]), exit_wide, entry_fill_wide)
+    else:
+        wide = _exit_from(fill_i, entry_fill_wide, 2.0, tp_offset)
+        if wide is None:
+            return None
     outcome, exit_ts, exit_fill, entry_fill = base
     _, _, exit_wide, entry_wide = wide
     r, pips = _pnl(side, entry_fill, exit_fill, risk, pip)

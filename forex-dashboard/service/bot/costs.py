@@ -45,6 +45,25 @@ _COSTS: dict[str, tuple[float, float]] = {
 }
 
 
+# Stand-in for the FX rollover hour. Not a recorded Exness schedule.
+# 21:00-22:00 UTC is the usual New York close in winter; in summer the
+# close is 22:00 UTC. One hour at 3x is a blunt allowance for that widen,
+# not a claim about either clock.
+ROLLOVER_HOUR_UTC = 21
+ROLLOVER_SPREAD_MULT = 3.0
+
+
+def spread_at(base_spread: float, ts: int, stress: float = 1.0) -> float:
+    """Spread for one fill. ``stress`` is 2 for the double-spread column.
+
+    The rollover multiplier applies only during ``ROLLOVER_HOUR_UTC``.
+    Slippage is not included here.
+    """
+    hour = (int(ts) % 86400) // 3600
+    roll = ROLLOVER_SPREAD_MULT if hour == ROLLOVER_HOUR_UTC else 1.0
+    return float(base_spread) * roll * float(stress)
+
+
 def cost_model(symbol: str) -> Optional[tuple[float, float]]:
     """Return (spread_price, slippage_price) or None if the symbol is unknown.
 

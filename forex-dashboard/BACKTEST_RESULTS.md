@@ -6,7 +6,7 @@ Walk-forward test of the scanners in this repo on Dukascopy BID data, with an Ex
 
 These are the rules the harness called. The fill is the next tradable price after the signal bar closes, not the signal bar's own close.
 
-- **Engulfing** (`engulfing_strategy.py`). The second candle's body covers the first. With the higher-timeframe trend it is a trade immediately; against the trend it waits for a second engulfing within 8 bars. Stop beyond the engulfing wick plus 0.1 ATR. Target is 2R. Native legs are H1 (trend from H4) and H4 (trend from daily). M1, M5, and M15 in this report are the same rules on a lower timeframe, not a separate system the dashboard runs. `engulfing_*_retrace50` is one pre-registered variant: a limit at the 50% retrace of the engulfing candle, valid for three bars. Live Discord grade gate is A and B.
+- **Engulfing** (`engulfing_strategy.py`). The second candle's body covers the first. With the higher-timeframe trend it is a trade immediately; against the trend it waits for a second engulfing within 8 bars. Stop beyond the engulfing wick plus 0.1 ATR. Target is 2R. Native legs are H1 (trend from H4) and H4 (trend from daily). M1, M5, and M15 in this report are the same rules on a lower timeframe, not a separate system the dashboard runs. `engulfing_*_retrace50` is one extra variant: a limit at the 50% retrace of the engulfing candle, valid for three bars. It is the only entry-style variant in the run, not a search. Live Discord grade gate is A and B.
 - **VWAP bounce** (`vwap_bounce_strategy.py`). M15. Session VWAP anchored at 00:00 UTC, 50-bar average of that VWAP sloping, price on the trend side. Trigger is a rejection that tags VWAP or a reclaim that holds the average. Stop beyond the pullback, at least 0.5 ATR. Target is the prior swing or 1.5R. Grade A needs relative tick-volume and a full body. The dashboard does not run this on M1 or M5; those rows are the same function on those bars.
 - **VWAP mean reversion** (`vwap_mean_reversion_strategy.py`). M15. Fade a move of at least 2 session-sigma when the Kaufman efficiency ratio says the day is not trending. Stop is the larger of the extension wick and 0.75 ATR. Target is the VWAP. Time stop is 20 bars. Live alerts are grade A with score at least 9. M5 is the same function, not a live timeframe.
 - **VWAP + 9 EMA** (`vwap9ema_strategy.py`). M5. During 09:00–23:00 UTC, the 9 EMA crossing the session VWAP. Stop just beyond the swing around the cross. Target 2R. There is no grade. An older, stricter version of this idea failed its own validation; this cross-only rule is a different rule and had not been backtested. M1 is the same cross on one-minute bars.
@@ -17,21 +17,21 @@ These are the rules the harness called. The fill is the next tradable price afte
 
 ## Method
 
-- **Prices.** Dukascopy BID M1, 2023-01-02 through 2026-10-17, resampled to M5, M15, H1, H4, and D1 on UTC boundaries. A higher-timeframe bar is used only after its last minute exists.
-- **Split.** In-sample: signals before 2025-04-01. Out-of-sample: signals from that date on. About 2.25 years in, 1.5 years out. No parameter was chosen on the out-of-sample window. The retrace-50% engulfing test was declared as a variant before the run; it is not a search.
-- **Costs.** Constant Exness Standard spreads and a small adverse slippage, commission $0. See the table below. A second column reruns the same exits at twice the spread and does not change which barrier was hit.
+- **Prices.** Dukascopy BID M1, 2023-01-02 through 2026-10-17, resampled to M5, M15, H1, H4, and D1 on UTC boundaries. A higher-timeframe bar is used once the next bucket has started, or once its own last minute exists. Friday's cash session ends before midnight, so the Friday daily bar and the 20:00 UTC H4 bar are the last print of that session, not a bar that runs to 23:59.
+- **Split.** In-sample: signals before 2025-04-01. Out-of-sample: signals from that date on. About 2.25 years in, 1.5 years out. Scanner parameters were not fitted on the out-of-sample window.
+- **Costs.** Exness Standard spreads from the table below, plus a small adverse slippage, commission $0. The spread is constant except during 21:00–22:00 UTC, where it is tripled as a stand-in for the rollover widen. That multiplier is not a recorded Exness schedule, and summer rollover is an hour later than winter, so one fixed hour does not match the broker's clock all year. There is no swap and no extra widening around news. A short pays the spread when it buys back, including on a take-profit. A buy limit fills only when the ask trades the limit, at the limit price. The 2× column walks the same barrier path at twice the spread (and twice the rollover widen) and adds one extra base spread to a buy-limit entry. It does not delete the trade.
 - **One position per symbol per strategy.** A new signal while a trade is open is ignored. The same TDI pattern, ID50 cross, VWAP-MR extension, or 9-EMA cross is not re-entered until the scanner goes quiet.
-- **Both-in-one-bar.** Stop fills before target.
+- **Both-in-one-bar.** Stop fills before target. A market order can reach its target on the entry minute, because the fill is the open and the open is first. A limit order cannot: the target is ignored on the fill minute, and the stop still counts.
 - **R.** P&L after the fill, divided by the distance from the scanner's entry to its stop.
 - **Sharpe-like.** Sum of R by exit date, including weekdays with no trade as zero, times sqrt(252). It is not a mark-to-market Sharpe.
-- **Robust.** Out-of-sample trades at least 80, expectancy above +0.05R, profit factor at least 1.15, in-sample expectancy also positive, expectancy still positive at twice the spread, and a majority of out-of-sample years with at least 15 trades also positive. Missing any one of those, the row is not robust.
+- **Robust.** These hurdles are the ones used for this report. They were committed together with the results, so this is not a pre-registered protocol. Out-of-sample trades at least 80, expectancy above +0.05R, profit factor at least 1.15, in-sample expectancy also positive, expectancy still positive at twice the spread, and a majority of out-of-sample years with at least 15 trades also positive. Missing any one of those, the row is not marked robust.
 - **VWAP+9EMA speed filter.** The cross is rare, and recomputing it on every bar is most of the runtime. A vectorized 9 EMA and session VWAP marks candidate bars (a real cross, or the two lines within 1e-8 of price). The real `analyze_pair` still runs on every candidate. A sample of bars the filter skips is checked against `analyze_pair`; if that sample contains a signal, the filter is turned off for that symbol and the scanner runs on every bar.
 
 Pooled pip averages mix euro-pips with gold pips. Use R for the pooled number. Per-symbol pips are in the symbol table.
 
 ## Spread and slippage assumptions
 
-Exness Standard, commission $0. Not a live quote. The backtest uses these constants on every fill.
+Exness Standard, commission $0. Not a live quote. These are the base spreads. During 21:00–22:00 UTC the backtest multiplies the spread by 3. There is no swap.
 
 | Symbol | Spread (pips) | Slippage (pips) |
 |---|---:|---:|
@@ -52,50 +52,50 @@ In-sample is before 2025-04-01. Out-of-sample is from that date through 2026-10-
 
 | Strategy | Split | Trades | Win rate | Profit factor | Exp (R) | Exp (pips) | Max DD (R) | Sharpe | Exp R at 2x spread | Robust |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| btmm_m15 | in-sample | 14258 | 41.2% | 0.78 | -0.163 | -1.25 | 2321.49 | -6.64 | -0.263 |  |
-| btmm_m15 | out-of-sample | 10982 | 40.2% | 0.76 | -0.179 | -1.16 | 1983.46 | -7.64 | -0.280 |  |
-| crt_1am | in-sample | 1553 | 28.3% | 0.74 | -0.204 | -7.32 | 341.03 | -3.24 | -0.246 |  |
-| crt_1am | out-of-sample | 998 | 29.4% | 0.77 | -0.172 | -14.62 | 179.10 | -2.72 | -0.214 |  |
-| crt_5am | in-sample | 54 | 29.6% | 0.75 | -0.201 | -1.12 | 15.62 | -0.55 | -0.276 |  |
-| crt_5am | out-of-sample | 52 | 32.7% | 0.88 | -0.092 | -5.19 | 14.82 | -0.33 | -0.151 |  |
-| engulfing_h1 | in-sample | 6870 | 33.4% | 0.85 | -0.120 | -0.84 | 835.54 | -3.32 | -0.198 |  |
-| engulfing_h1 | out-of-sample | 5107 | 31.6% | 0.76 | -0.192 | -3.15 | 992.00 | -5.51 | -0.277 |  |
-| engulfing_h1_retrace50 | in-sample | 6320 | 22.9% | 0.80 | -0.188 | -1.72 | 1199.15 | -4.03 | -0.328 |  |
-| engulfing_h1_retrace50 | out-of-sample | 4661 | 21.2% | 0.72 | -0.273 | -3.14 | 1288.31 | -6.62 | -0.424 |  |
-| engulfing_h4 | in-sample | 1758 | 33.2% | 0.89 | -0.080 | -3.21 | 151.81 | -1.28 | -0.120 |  |
-| engulfing_h4 | out-of-sample | 1340 | 31.3% | 0.81 | -0.142 | -3.76 | 216.14 | -2.24 | -0.187 |  |
-| engulfing_m1 | in-sample | 103215 | 33.4% | 0.60 | -0.414 | -1.75 | 42776.63 | -42.63 | -0.671 |  |
-| engulfing_m1 | out-of-sample | 73607 | 33.1% | 0.67 | -0.320 | -1.86 | 23537.19 | -35.00 | -0.518 |  |
-| engulfing_m15 | in-sample | 26325 | 32.3% | 0.71 | -0.260 | -2.18 | 6847.13 | -13.17 | -0.406 |  |
-| engulfing_m15 | out-of-sample | 18686 | 32.7% | 0.71 | -0.258 | -2.16 | 4829.22 | -12.94 | -0.409 |  |
-| engulfing_m15_retrace50 | in-sample | 24772 | 22.4% | 0.67 | -0.357 | -1.93 | 8836.55 | -14.66 | -0.606 |  |
-| engulfing_m15_retrace50 | out-of-sample | 17156 | 22.7% | 0.67 | -0.363 | -1.58 | 6225.72 | -13.78 | -0.617 |  |
-| engulfing_m5 | in-sample | 70410 | 32.2% | 0.63 | -0.369 | -1.96 | 25953.04 | -28.65 | -0.589 |  |
-| engulfing_m5 | out-of-sample | 48864 | 32.2% | 0.63 | -0.371 | -1.74 | 18135.01 | -27.57 | -0.595 |  |
-| id50_m15 | in-sample | 1822 | 70.6% | 0.88 | -0.038 | -2.43 | 84.77 | -1.10 | -0.057 |  |
-| id50_m15 | out-of-sample | 1261 | 69.9% | 0.88 | -0.041 | -2.12 | 56.20 | -1.38 | -0.064 |  |
-| id50_m5 | in-sample | 5096 | 70.0% | 0.81 | -0.066 | -1.96 | 341.17 | -3.83 | -0.091 |  |
-| id50_m5 | out-of-sample | 3525 | 70.1% | 0.85 | -0.052 | -0.20 | 191.87 | -2.93 | -0.078 |  |
-| tdi_h1 | in-sample | 1011 | 43.8% | 0.95 | -0.034 | 1.55 | 85.62 | -0.36 | -0.081 |  |
-| tdi_h1 | out-of-sample | 823 | 43.7% | 0.86 | -0.089 | 3.91 | 77.18 | -1.04 | -0.132 |  |
-| tdi_m15 | in-sample | 3673 | 40.3% | 0.88 | -0.091 | -0.94 | 363.08 | -1.56 | -0.172 |  |
-| tdi_m15 | out-of-sample | 2355 | 39.4% | 0.84 | -0.116 | -2.15 | 321.49 | -2.22 | -0.196 |  |
-| tdi_m5 | in-sample | 3331 | 41.0% | 0.83 | -0.127 | -1.61 | 436.12 | -2.81 | -0.211 |  |
-| tdi_m5 | out-of-sample | 2380 | 39.7% | 0.81 | -0.138 | -0.39 | 385.63 | -2.71 | -0.211 |  |
-| vwap9ema_m1 | in-sample | 7503 | 33.0% | 0.64 | -0.353 | -1.87 | 2660.07 | -9.22 | -0.566 |  |
-| vwap9ema_m1 | out-of-sample | 5315 | 32.3% | 0.66 | -0.317 | -2.17 | 1700.66 | -9.30 | -0.504 |  |
-| vwap9ema_m5 | in-sample | 10052 | 31.9% | 0.67 | -0.312 | -2.10 | 3155.89 | -9.78 | -0.489 |  |
-| vwap9ema_m5 | out-of-sample | 6911 | 31.4% | 0.64 | -0.344 | -3.21 | 2377.31 | -9.97 | -0.528 |  |
-| vwap_bounce_m1 | in-sample | 5381 | 33.5% | 0.62 | -0.390 | -1.62 | 2101.67 | -8.95 | -0.647 |  |
-| vwap_bounce_m1 | out-of-sample | 3698 | 34.2% | 0.71 | -0.265 | -2.20 | 1012.26 | -5.54 | -0.455 |  |
-| vwap_bounce_m15 | in-sample | 11324 | 35.0% | 0.77 | -0.184 | -1.55 | 2110.72 | -5.85 | -0.304 |  |
-| vwap_bounce_m15 | out-of-sample | 7650 | 35.1% | 0.78 | -0.178 | -0.30 | 1370.10 | -4.81 | -0.300 |  |
-| vwap_bounce_m5 | in-sample | 16044 | 32.3% | 0.68 | -0.307 | -1.76 | 4938.05 | -10.41 | -0.514 |  |
-| vwap_bounce_m5 | out-of-sample | 10549 | 32.2% | 0.67 | -0.312 | -1.44 | 3346.96 | -9.67 | -0.523 |  |
-| vwap_mr_m15 | in-sample | 17391 | 44.7% | 0.72 | -0.188 | -1.54 | 3278.81 | -9.27 | -0.306 |  |
-| vwap_mr_m15 | out-of-sample | 11441 | 44.5% | 0.75 | -0.168 | -1.82 | 1938.68 | -7.84 | -0.291 |  |
-| vwap_mr_m5 | in-sample | 14658 | 38.7% | 0.67 | -0.247 | -1.99 | 3621.45 | -11.41 | -0.395 |  |
-| vwap_mr_m5 | out-of-sample | 9137 | 39.0% | 0.72 | -0.201 | -1.78 | 1853.48 | -8.29 | -0.342 |  |
+| btmm_m15 | in-sample | 14251 | 39.2% | 0.69 | -0.234 | -2.10 | 3338.06 | -9.75 | -0.418 |  |
+| btmm_m15 | out-of-sample | 10954 | 37.9% | 0.67 | -0.248 | -2.06 | 2727.66 | -10.75 | -0.433 |  |
+| crt_1am | in-sample | 1520 | 27.4% | 0.71 | -0.223 | -7.90 | 357.53 | -3.63 | -0.286 |  |
+| crt_1am | out-of-sample | 982 | 28.9% | 0.76 | -0.182 | -14.84 | 188.11 | -2.96 | -0.247 |  |
+| crt_5am | in-sample | 51 | 27.5% | 0.67 | -0.258 | -1.94 | 18.93 | -0.74 | -0.361 |  |
+| crt_5am | out-of-sample | 50 | 32.0% | 0.85 | -0.110 | -5.52 | 13.68 | -0.41 | -0.217 |  |
+| engulfing_h1 | in-sample | 6905 | 33.3% | 0.79 | -0.166 | -1.43 | 1159.73 | -4.82 | -0.285 |  |
+| engulfing_h1 | out-of-sample | 5099 | 31.8% | 0.72 | -0.229 | -3.63 | 1175.67 | -6.69 | -0.356 |  |
+| engulfing_h1_retrace50 | in-sample | 6126 | 20.7% | 0.74 | -0.232 | -2.05 | 1439.34 | -5.46 | -0.413 |  |
+| engulfing_h1_retrace50 | out-of-sample | 4516 | 19.6% | 0.68 | -0.290 | -3.36 | 1320.94 | -7.61 | -0.481 |  |
+| engulfing_h4 | in-sample | 1825 | 34.4% | 0.90 | -0.068 | -2.54 | 152.95 | -1.07 | -0.125 |  |
+| engulfing_h4 | out-of-sample | 1350 | 31.3% | 0.78 | -0.167 | -7.43 | 250.29 | -2.62 | -0.228 |  |
+| engulfing_m1 | in-sample | 103083 | 33.4% | 0.48 | -0.549 | -2.31 | 56549.55 | -56.45 | -0.950 |  |
+| engulfing_m1 | out-of-sample | 73582 | 33.1% | 0.56 | -0.425 | -2.44 | 31277.60 | -46.75 | -0.730 |  |
+| engulfing_m15 | in-sample | 26365 | 32.2% | 0.62 | -0.345 | -2.81 | 9111.80 | -18.40 | -0.578 |  |
+| engulfing_m15 | out-of-sample | 18721 | 32.6% | 0.62 | -0.345 | -2.79 | 6451.54 | -18.24 | -0.586 |  |
+| engulfing_m15_retrace50 | in-sample | 23329 | 19.2% | 0.59 | -0.418 | -2.24 | 9759.83 | -19.00 | -0.749 |  |
+| engulfing_m15_retrace50 | out-of-sample | 16155 | 19.1% | 0.56 | -0.446 | -2.07 | 7197.58 | -18.60 | -0.784 |  |
+| engulfing_m5 | in-sample | 70370 | 32.2% | 0.52 | -0.486 | -2.58 | 34171.18 | -39.84 | -0.829 |  |
+| engulfing_m5 | out-of-sample | 48834 | 32.1% | 0.51 | -0.489 | -2.37 | 23871.13 | -38.40 | -0.838 |  |
+| id50_m15 | in-sample | 1823 | 66.9% | 0.73 | -0.088 | -3.80 | 165.93 | -2.98 | -0.210 |  |
+| id50_m15 | out-of-sample | 1265 | 65.9% | 0.70 | -0.103 | -3.64 | 131.99 | -3.55 | -0.237 |  |
+| id50_m5 | in-sample | 5100 | 63.4% | 0.60 | -0.139 | -3.20 | 709.92 | -8.73 | -0.313 |  |
+| id50_m5 | out-of-sample | 3518 | 63.4% | 0.61 | -0.136 | -1.55 | 483.62 | -8.52 | -0.334 |  |
+| tdi_h1 | in-sample | 1010 | 43.6% | 0.91 | -0.055 | 0.49 | 93.01 | -0.59 | -0.139 |  |
+| tdi_h1 | out-of-sample | 819 | 43.1% | 0.81 | -0.123 | 5.67 | 101.37 | -1.50 | -0.206 |  |
+| tdi_m15 | in-sample | 3675 | 39.6% | 0.79 | -0.156 | -1.80 | 590.33 | -2.83 | -0.311 |  |
+| tdi_m15 | out-of-sample | 2363 | 38.7% | 0.74 | -0.192 | -3.07 | 491.48 | -3.63 | -0.362 |  |
+| tdi_m5 | in-sample | 3339 | 40.4% | 0.74 | -0.189 | -2.36 | 639.35 | -4.26 | -0.341 |  |
+| tdi_m5 | out-of-sample | 2387 | 39.1% | 0.74 | -0.193 | -1.20 | 492.91 | -3.90 | -0.330 |  |
+| vwap9ema_m1 | in-sample | 7491 | 33.0% | 0.52 | -0.476 | -2.48 | 3575.38 | -12.27 | -0.824 |  |
+| vwap9ema_m1 | out-of-sample | 5312 | 32.2% | 0.56 | -0.419 | -2.77 | 2233.49 | -11.96 | -0.714 |  |
+| vwap9ema_m5 | in-sample | 10072 | 31.9% | 0.57 | -0.404 | -2.70 | 4087.05 | -13.02 | -0.680 |  |
+| vwap9ema_m5 | out-of-sample | 6915 | 31.4% | 0.54 | -0.449 | -3.88 | 3102.91 | -13.27 | -0.745 |  |
+| vwap_bounce_m1 | in-sample | 5376 | 33.5% | 0.51 | -0.510 | -2.16 | 2741.24 | -12.21 | -0.915 |  |
+| vwap_bounce_m1 | out-of-sample | 3694 | 34.1% | 0.60 | -0.372 | -2.78 | 1383.95 | -8.02 | -0.688 |  |
+| vwap_bounce_m15 | in-sample | 11356 | 35.0% | 0.70 | -0.248 | -2.17 | 2840.46 | -8.24 | -0.431 |  |
+| vwap_bounce_m15 | out-of-sample | 7692 | 35.1% | 0.71 | -0.244 | -0.94 | 1879.61 | -7.03 | -0.434 |  |
+| vwap_bounce_m5 | in-sample | 16046 | 32.3% | 0.58 | -0.403 | -2.38 | 6473.10 | -14.25 | -0.715 |  |
+| vwap_bounce_m5 | out-of-sample | 10577 | 32.1% | 0.57 | -0.412 | -2.16 | 4393.72 | -13.34 | -0.731 |  |
+| vwap_mr_m15 | in-sample | 17439 | 42.7% | 0.60 | -0.270 | -2.30 | 4710.13 | -13.67 | -0.495 |  |
+| vwap_mr_m15 | out-of-sample | 11481 | 42.8% | 0.63 | -0.256 | -2.58 | 2952.04 | -12.45 | -0.495 |  |
+| vwap_mr_m5 | in-sample | 14660 | 37.3% | 0.59 | -0.311 | -2.44 | 4560.25 | -14.55 | -0.542 |  |
+| vwap_mr_m5 | out-of-sample | 9152 | 38.0% | 0.64 | -0.259 | -2.19 | 2384.04 | -10.87 | -0.474 |  |
 
 ## Pooled out-of-sample, live alert gate only
 
@@ -103,27 +103,27 @@ Same trades, kept only when they match the scanner's default Discord gate (grade
 
 | Strategy | Trades | Win rate | Profit factor | Exp (R) | Exp (pips) | Max DD (R) | Sharpe | Exp R at 2x spread | Robust |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| btmm_m15 | 98 | 63.3% | 1.02 | +0.008 | -8.90 | 8.44 | 0.15 | -0.037 |  |
+| btmm_m15 | 95 | 63.2% | 0.88 | -0.044 | -10.25 | 10.33 | -0.30 | -0.155 |  |
 | crt_1am | 0 | — | — | — | — | — | — | — |  |
 | crt_5am | 0 | — | — | — | — | — | — | — |  |
-| engulfing_h1 | 5107 | 31.6% | 0.76 | -0.192 | -3.15 | 992.00 | -5.51 | -0.277 |  |
-| engulfing_h1_retrace50 | 4661 | 21.2% | 0.72 | -0.273 | -3.14 | 1288.31 | -6.62 | -0.424 |  |
-| engulfing_h4 | 1340 | 31.3% | 0.81 | -0.142 | -3.76 | 216.14 | -2.24 | -0.187 |  |
-| engulfing_m1 | 73607 | 33.1% | 0.67 | -0.320 | -1.86 | 23537.19 | -35.00 | -0.518 |  |
-| engulfing_m15 | 18686 | 32.7% | 0.71 | -0.258 | -2.16 | 4829.22 | -12.94 | -0.409 |  |
-| engulfing_m15_retrace50 | 17156 | 22.7% | 0.67 | -0.363 | -1.58 | 6225.72 | -13.78 | -0.617 |  |
-| engulfing_m5 | 48864 | 32.2% | 0.63 | -0.371 | -1.74 | 18135.01 | -27.57 | -0.595 |  |
-| id50_m15 | 3 | 33.3% | 0.55 | -0.328 | -68.39 | 2.17 | -0.40 | -0.357 |  |
-| id50_m5 | 4 | 50.0% | 1.44 | +0.236 | 25.19 | 1.19 | 0.27 | +0.143 |  |
-| tdi_h1 | 131 | 35.9% | 0.83 | -0.121 | -14.42 | 21.68 | -0.35 | -0.170 |  |
-| tdi_m15 | 347 | 34.3% | 0.81 | -0.150 | 5.11 | 78.88 | -1.24 | -0.227 |  |
-| tdi_m5 | 349 | 33.0% | 0.70 | -0.244 | 1.54 | 115.41 | -2.29 | -0.333 |  |
-| vwap9ema_m1 | 5315 | 32.3% | 0.66 | -0.317 | -2.17 | 1700.66 | -9.30 | -0.504 |  |
-| vwap9ema_m5 | 6911 | 31.4% | 0.64 | -0.344 | -3.21 | 2377.31 | -9.97 | -0.528 |  |
-| vwap_bounce_m1 | 613 | 38.5% | 0.70 | -0.266 | -3.70 | 180.70 | -3.35 | -0.452 |  |
-| vwap_bounce_m15 | 1194 | 38.8% | 0.83 | -0.123 | -0.25 | 166.82 | -1.90 | -0.211 |  |
-| vwap_bounce_m5 | 1261 | 35.2% | 0.65 | -0.307 | -3.22 | 400.75 | -4.36 | -0.483 |  |
-| vwap_mr_m15 | 41 | 51.2% | 0.76 | -0.113 | -31.24 | 14.18 | -0.53 | -0.146 |  |
+| engulfing_h1 | 5099 | 31.8% | 0.72 | -0.229 | -3.63 | 1175.67 | -6.69 | -0.356 |  |
+| engulfing_h1_retrace50 | 4516 | 19.6% | 0.68 | -0.290 | -3.36 | 1320.94 | -7.61 | -0.481 |  |
+| engulfing_h4 | 1350 | 31.3% | 0.78 | -0.167 | -7.43 | 250.29 | -2.62 | -0.228 |  |
+| engulfing_m1 | 73582 | 33.1% | 0.56 | -0.425 | -2.44 | 31277.60 | -46.75 | -0.730 |  |
+| engulfing_m15 | 18721 | 32.6% | 0.62 | -0.345 | -2.79 | 6451.54 | -18.24 | -0.586 |  |
+| engulfing_m15_retrace50 | 16155 | 19.1% | 0.56 | -0.446 | -2.07 | 7197.58 | -18.60 | -0.784 |  |
+| engulfing_m5 | 48834 | 32.1% | 0.51 | -0.489 | -2.37 | 23871.13 | -38.40 | -0.838 |  |
+| id50_m15 | 3 | 33.3% | 0.52 | -0.350 | -69.39 | 2.17 | -0.44 | -0.401 |  |
+| id50_m5 | 3 | 33.3% | 0.99 | -0.004 | 29.19 | 2.14 | -0.00 | -0.059 |  |
+| tdi_h1 | 135 | 34.1% | 0.73 | -0.202 | -15.92 | 29.39 | -0.75 | -0.283 |  |
+| tdi_m15 | 350 | 32.3% | 0.68 | -0.254 | 3.67 | 102.87 | -2.13 | -0.394 |  |
+| tdi_m5 | 350 | 31.7% | 0.62 | -0.313 | -0.19 | 135.96 | -2.93 | -0.453 |  |
+| vwap9ema_m1 | 5312 | 32.2% | 0.56 | -0.419 | -2.77 | 2233.49 | -11.96 | -0.714 |  |
+| vwap9ema_m5 | 6915 | 31.4% | 0.54 | -0.449 | -3.88 | 3102.91 | -13.27 | -0.745 |  |
+| vwap_bounce_m1 | 613 | 38.5% | 0.56 | -0.393 | -4.32 | 245.62 | -5.05 | -0.727 |  |
+| vwap_bounce_m15 | 1211 | 38.6% | 0.75 | -0.183 | -0.77 | 232.02 | -3.02 | -0.327 |  |
+| vwap_bounce_m5 | 1272 | 35.4% | 0.56 | -0.388 | -2.77 | 502.51 | -5.97 | -0.665 |  |
+| vwap_mr_m15 | 41 | 51.2% | 0.66 | -0.158 | -32.14 | 14.34 | -0.80 | -0.236 |  |
 | vwap_mr_m5 | 6 | 50.0% | 0.44 | -0.147 | 8.82 | 1.58 | -0.60 | -0.218 |  |
 
 ## Out-of-sample by symbol
@@ -132,65 +132,67 @@ Expectancy in R, then trade count. A blank cell means that symbol was not in tha
 
 | Strategy | EUR/USD | GBP/USD | USD/JPY | XAU/USD | USD/CHF | AUD/USD | USD/CAD | NZD/USD | EUR/JPY | GBP/JPY |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| btmm_m15 | -0.15 (n=1015) | -0.19 (n=1178) | -0.13 (n=1317) | +0.05 (n=1125) | -0.23 (n=855) | -0.17 (n=901) | -0.11 (n=957) | -0.17 (n=928) | -0.31 (n=1343) | -0.32 (n=1363) |
-| crt_1am | -0.12 (n=108) | -0.05 (n=90) | -0.31 (n=102) | -0.30 (n=101) | -0.03 (n=100) | -0.19 (n=96) | -0.17 (n=117) | -0.07 (n=100) | -0.15 (n=88) | -0.32 (n=96) |
-| crt_5am | -1.10 (n=5) | +0.04 (n=8) | -1.13 (n=1) | -0.53 (n=6) | -1.13 (n=4) | +1.95 (n=4) | +0.16 (n=10) | -0.38 (n=8) | -1.17 (n=3) | +2.13 (n=3) |
-| engulfing_h1 | -0.10 (n=534) | -0.23 (n=476) | -0.17 (n=494) | +0.03 (n=536) | -0.29 (n=518) | -0.34 (n=513) | -0.20 (n=526) | -0.22 (n=531) | -0.21 (n=495) | -0.21 (n=484) |
-| engulfing_h1_retrace50 | -0.19 (n=468) | -0.39 (n=463) | -0.19 (n=471) | +0.06 (n=472) | -0.44 (n=467) | -0.44 (n=474) | -0.30 (n=479) | -0.26 (n=484) | -0.34 (n=454) | -0.26 (n=429) |
-| engulfing_h4 | -0.01 (n=139) | +0.02 (n=122) | -0.08 (n=123) | -0.00 (n=132) | -0.09 (n=142) | -0.32 (n=134) | +0.04 (n=145) | -0.40 (n=156) | -0.17 (n=125) | -0.37 (n=122) |
-| engulfing_m1 | -0.38 (n=12194) | -0.48 (n=14397) | -0.40 (n=18190) | -0.16 (n=28826) | — | — | — | — | — | — |
-| engulfing_m15 | -0.21 (n=1789) | -0.25 (n=1814) | -0.15 (n=1917) | -0.03 (n=1991) | -0.34 (n=1848) | -0.29 (n=1826) | -0.29 (n=1738) | -0.38 (n=1830) | -0.28 (n=1967) | -0.38 (n=1966) |
-| engulfing_m15_retrace50 | -0.32 (n=1646) | -0.39 (n=1681) | -0.29 (n=1842) | -0.06 (n=1786) | -0.50 (n=1596) | -0.40 (n=1625) | -0.37 (n=1645) | -0.51 (n=1620) | -0.36 (n=1871) | -0.45 (n=1844) |
-| engulfing_m5 | -0.29 (n=4520) | -0.36 (n=4766) | -0.30 (n=5286) | -0.05 (n=5805) | -0.40 (n=4265) | -0.43 (n=4286) | -0.46 (n=4652) | -0.55 (n=4281) | -0.43 (n=5360) | -0.50 (n=5643) |
-| id50_m15 | -0.04 (n=140) | +0.07 (n=136) | +0.01 (n=118) | -0.04 (n=131) | -0.01 (n=120) | -0.03 (n=114) | -0.15 (n=111) | -0.16 (n=120) | +0.01 (n=135) | -0.09 (n=136) |
-| id50_m5 | -0.07 (n=357) | -0.04 (n=352) | -0.07 (n=348) | +0.02 (n=351) | -0.02 (n=369) | -0.07 (n=344) | -0.05 (n=306) | -0.14 (n=316) | -0.01 (n=364) | -0.08 (n=418) |
-| tdi_h1 | -0.03 (n=70) | +0.12 (n=88) | +0.21 (n=97) | +0.08 (n=91) | -0.15 (n=72) | -0.14 (n=64) | -0.51 (n=103) | -0.44 (n=80) | -0.06 (n=81) | +0.05 (n=77) |
-| tdi_m15 | -0.11 (n=206) | -0.01 (n=227) | -0.18 (n=289) | -0.21 (n=293) | +0.03 (n=184) | +0.07 (n=216) | -0.43 (n=204) | -0.18 (n=209) | +0.01 (n=260) | -0.12 (n=267) |
-| tdi_m5 | -0.21 (n=390) | -0.09 (n=528) | -0.23 (n=675) | -0.06 (n=787) | — | — | — | — | — | — |
-| vwap9ema_m1 | -0.31 (n=1077) | -0.49 (n=1242) | -0.33 (n=1185) | -0.19 (n=1811) | — | — | — | — | — | — |
-| vwap9ema_m5 | -0.27 (n=667) | -0.30 (n=715) | -0.35 (n=716) | -0.12 (n=705) | -0.34 (n=670) | -0.28 (n=621) | -0.37 (n=729) | -0.51 (n=610) | -0.36 (n=705) | -0.53 (n=773) |
-| vwap_bounce_m1 | -0.34 (n=695) | -0.46 (n=826) | -0.26 (n=986) | -0.10 (n=1191) | — | — | — | — | — | — |
-| vwap_bounce_m15 | -0.20 (n=791) | -0.19 (n=831) | -0.03 (n=745) | +0.04 (n=725) | -0.26 (n=780) | -0.25 (n=785) | -0.16 (n=804) | -0.29 (n=733) | -0.22 (n=717) | -0.20 (n=739) |
-| vwap_bounce_m5 | -0.26 (n=1114) | -0.37 (n=1149) | -0.15 (n=1048) | -0.02 (n=1079) | -0.43 (n=1084) | -0.44 (n=1089) | -0.35 (n=982) | -0.42 (n=1019) | -0.33 (n=1008) | -0.36 (n=977) |
-| vwap_mr_m15 | -0.12 (n=1298) | -0.16 (n=1394) | -0.12 (n=934) | -0.01 (n=891) | -0.23 (n=1288) | -0.18 (n=1054) | -0.21 (n=1442) | -0.31 (n=1013) | -0.12 (n=1000) | -0.18 (n=1127) |
-| vwap_mr_m5 | -0.24 (n=2510) | -0.27 (n=2752) | -0.21 (n=1902) | -0.06 (n=1973) | — | — | — | — | — | — |
+| btmm_m15 | -0.21 (n=1016) | -0.27 (n=1176) | -0.19 (n=1314) | +0.03 (n=1126) | -0.29 (n=843) | -0.24 (n=901) | -0.21 (n=956) | -0.27 (n=925) | -0.38 (n=1339) | -0.41 (n=1358) |
+| crt_1am | -0.11 (n=107) | -0.03 (n=89) | -0.32 (n=101) | -0.30 (n=101) | -0.08 (n=98) | -0.16 (n=94) | -0.19 (n=115) | -0.11 (n=97) | -0.19 (n=86) | -0.33 (n=94) |
+| crt_5am | -1.01 (n=5) | -0.29 (n=8) | -1.13 (n=1) | -0.51 (n=6) | -1.10 (n=4) | +1.97 (n=4) | +0.09 (n=10) | -0.07 (n=6) | -1.17 (n=3) | +1.87 (n=3) |
+| engulfing_h1 | -0.13 (n=535) | -0.25 (n=471) | -0.19 (n=486) | +0.02 (n=536) | -0.35 (n=520) | -0.38 (n=521) | -0.22 (n=526) | -0.32 (n=527) | -0.24 (n=498) | -0.22 (n=479) |
+| engulfing_h1_retrace50 | -0.27 (n=448) | -0.40 (n=444) | -0.22 (n=467) | +0.05 (n=472) | -0.44 (n=451) | -0.41 (n=461) | -0.32 (n=458) | -0.37 (n=462) | -0.33 (n=438) | -0.20 (n=415) |
+| engulfing_h4 | -0.06 (n=134) | -0.10 (n=131) | -0.07 (n=120) | -0.03 (n=136) | -0.18 (n=146) | -0.34 (n=132) | +0.01 (n=150) | -0.37 (n=161) | -0.18 (n=113) | -0.33 (n=127) |
+| engulfing_m1 | -0.52 (n=12195) | -0.66 (n=14368) | -0.51 (n=18193) | -0.21 (n=28826) | — | — | — | — | — | — |
+| engulfing_m15 | -0.29 (n=1794) | -0.33 (n=1820) | -0.20 (n=1922) | -0.05 (n=1992) | -0.45 (n=1858) | -0.40 (n=1836) | -0.39 (n=1740) | -0.54 (n=1832) | -0.36 (n=1965) | -0.46 (n=1962) |
+| engulfing_m15_retrace50 | -0.41 (n=1571) | -0.45 (n=1642) | -0.33 (n=1773) | -0.08 (n=1769) | -0.56 (n=1483) | -0.50 (n=1488) | -0.51 (n=1535) | -0.69 (n=1437) | -0.45 (n=1738) | -0.56 (n=1719) |
+| engulfing_m5 | -0.39 (n=4525) | -0.49 (n=4765) | -0.38 (n=5290) | -0.07 (n=5807) | -0.54 (n=4259) | -0.57 (n=4291) | -0.62 (n=4647) | -0.75 (n=4276) | -0.54 (n=5348) | -0.64 (n=5626) |
+| id50_m15 | -0.08 (n=141) | -0.00 (n=138) | -0.03 (n=122) | -0.05 (n=131) | -0.09 (n=115) | -0.10 (n=112) | -0.24 (n=110) | -0.29 (n=120) | -0.03 (n=138) | -0.15 (n=138) |
+| id50_m5 | -0.15 (n=361) | -0.12 (n=350) | -0.12 (n=346) | +0.00 (n=351) | -0.14 (n=374) | -0.16 (n=341) | -0.15 (n=307) | -0.29 (n=320) | -0.09 (n=363) | -0.17 (n=405) |
+| tdi_h1 | -0.05 (n=69) | +0.09 (n=87) | +0.18 (n=97) | +0.18 (n=93) | -0.19 (n=72) | -0.17 (n=64) | -0.60 (n=101) | -0.52 (n=79) | -0.13 (n=81) | -0.03 (n=76) |
+| tdi_m15 | -0.16 (n=206) | -0.09 (n=228) | -0.22 (n=292) | -0.21 (n=294) | -0.08 (n=186) | -0.06 (n=217) | -0.51 (n=206) | -0.31 (n=211) | -0.08 (n=257) | -0.20 (n=266) |
+| tdi_m5 | -0.26 (n=392) | -0.19 (n=529) | -0.30 (n=678) | -0.07 (n=788) | — | — | — | — | — | — |
+| vwap9ema_m1 | -0.43 (n=1077) | -0.65 (n=1239) | -0.44 (n=1185) | -0.24 (n=1811) | — | — | — | — | — | — |
+| vwap9ema_m5 | -0.35 (n=667) | -0.41 (n=717) | -0.42 (n=722) | -0.14 (n=705) | -0.45 (n=667) | -0.42 (n=621) | -0.49 (n=732) | -0.68 (n=612) | -0.49 (n=701) | -0.66 (n=771) |
+| vwap_bounce_m1 | -0.51 (n=693) | -0.65 (n=824) | -0.35 (n=986) | -0.12 (n=1191) | — | — | — | — | — | — |
+| vwap_bounce_m15 | -0.26 (n=790) | -0.27 (n=835) | -0.06 (n=748) | +0.03 (n=726) | -0.35 (n=786) | -0.31 (n=791) | -0.25 (n=808) | -0.42 (n=737) | -0.26 (n=725) | -0.27 (n=746) |
+| vwap_bounce_m5 | -0.36 (n=1117) | -0.48 (n=1151) | -0.20 (n=1050) | -0.03 (n=1085) | -0.55 (n=1077) | -0.54 (n=1102) | -0.51 (n=978) | -0.61 (n=1031) | -0.39 (n=1005) | -0.46 (n=981) |
+| vwap_mr_m15 | -0.19 (n=1299) | -0.23 (n=1399) | -0.17 (n=940) | -0.02 (n=906) | -0.34 (n=1287) | -0.27 (n=1058) | -0.33 (n=1448) | -0.45 (n=1013) | -0.20 (n=1001) | -0.28 (n=1130) |
+| vwap_mr_m5 | -0.31 (n=2516) | -0.36 (n=2758) | -0.25 (n=1906) | -0.07 (n=1972) | — | — | — | — | — | — |
 
 ## Year by year, out-of-sample expectancy (R)
 
 | Strategy | Years |
 |---|---|
-| btmm_m15 | 2025: -0.197 (n=5611), 2026: -0.161 (n=5371) |
-| crt_1am | 2025: -0.204 (n=509), 2026: -0.139 (n=489) |
-| crt_5am | 2025: +0.183 (n=24), 2026: -0.327 (n=28) |
-| engulfing_h1 | 2025: -0.178 (n=2532), 2026: -0.206 (n=2575) |
-| engulfing_h1_retrace50 | 2025: -0.263 (n=2279), 2026: -0.283 (n=2382) |
-| engulfing_h4 | 2025: -0.103 (n=655), 2026: -0.179 (n=685) |
-| engulfing_m1 | 2025: -0.317 (n=37775), 2026: -0.322 (n=35832) |
-| engulfing_m15 | 2025: -0.244 (n=9324), 2026: -0.273 (n=9362) |
-| engulfing_m15_retrace50 | 2025: -0.337 (n=8600), 2026: -0.389 (n=8556) |
-| engulfing_m5 | 2025: -0.360 (n=24245), 2026: -0.382 (n=24619) |
-| id50_m15 | 2025: -0.034 (n=623), 2026: -0.048 (n=638) |
-| id50_m5 | 2025: -0.046 (n=1729), 2026: -0.059 (n=1796) |
-| tdi_h1 | 2025: -0.090 (n=412), 2026: -0.088 (n=411) |
-| tdi_m15 | 2025: -0.101 (n=1212), 2026: -0.131 (n=1143) |
-| tdi_m5 | 2025: -0.210 (n=1304), 2026: -0.051 (n=1076) |
-| vwap9ema_m1 | 2025: -0.328 (n=2732), 2026: -0.307 (n=2583) |
-| vwap9ema_m5 | 2025: -0.344 (n=3420), 2026: -0.344 (n=3491) |
-| vwap_bounce_m1 | 2025: -0.249 (n=1941), 2026: -0.283 (n=1757) |
-| vwap_bounce_m15 | 2025: -0.182 (n=3748), 2026: -0.175 (n=3902) |
-| vwap_bounce_m5 | 2025: -0.286 (n=5150), 2026: -0.337 (n=5399) |
-| vwap_mr_m15 | 2025: -0.156 (n=5596), 2026: -0.180 (n=5845) |
-| vwap_mr_m5 | 2025: -0.187 (n=4520), 2026: -0.215 (n=4617) |
+| btmm_m15 | 2025: -0.263 (n=5608), 2026: -0.233 (n=5346) |
+| crt_1am | 2025: -0.215 (n=503), 2026: -0.148 (n=479) |
+| crt_5am | 2025: +0.226 (n=23), 2026: -0.396 (n=27) |
+| engulfing_h1 | 2025: -0.210 (n=2526), 2026: -0.248 (n=2573) |
+| engulfing_h1_retrace50 | 2025: -0.281 (n=2224), 2026: -0.299 (n=2292) |
+| engulfing_h4 | 2025: -0.136 (n=659), 2026: -0.196 (n=691) |
+| engulfing_m1 | 2025: -0.426 (n=37764), 2026: -0.424 (n=35818) |
+| engulfing_m15 | 2025: -0.326 (n=9344), 2026: -0.363 (n=9377) |
+| engulfing_m15_retrace50 | 2025: -0.411 (n=8127), 2026: -0.480 (n=8028) |
+| engulfing_m5 | 2025: -0.473 (n=24217), 2026: -0.505 (n=24617) |
+| id50_m15 | 2025: -0.101 (n=629), 2026: -0.104 (n=636) |
+| id50_m5 | 2025: -0.125 (n=1709), 2026: -0.147 (n=1809) |
+| tdi_h1 | 2025: -0.131 (n=409), 2026: -0.115 (n=410) |
+| tdi_m15 | 2025: -0.175 (n=1221), 2026: -0.210 (n=1142) |
+| tdi_m5 | 2025: -0.254 (n=1309), 2026: -0.118 (n=1078) |
+| vwap9ema_m1 | 2025: -0.426 (n=2731), 2026: -0.411 (n=2581) |
+| vwap9ema_m5 | 2025: -0.442 (n=3427), 2026: -0.455 (n=3488) |
+| vwap_bounce_m1 | 2025: -0.354 (n=1939), 2026: -0.392 (n=1755) |
+| vwap_bounce_m15 | 2025: -0.247 (n=3768), 2026: -0.240 (n=3924) |
+| vwap_bounce_m5 | 2025: -0.379 (n=5168), 2026: -0.443 (n=5409) |
+| vwap_mr_m15 | 2025: -0.237 (n=5626), 2026: -0.274 (n=5855) |
+| vwap_mr_m5 | 2025: -0.242 (n=4529), 2026: -0.276 (n=4623) |
 
 ## Verdict
 
-No strategy, on any timeframe tested, cleared the pre-set bar for a robust out-of-sample edge after costs. That bar was at least 80 out-of-sample trades, expectancy above +0.05R, profit factor at least 1.15, the same sign in-sample, still positive if the spread is doubled, and not a single lucky year.
-The highest pooled out-of-sample expectancy in this run was **id50_m15** at -0.041R over 1261 trades (profit factor 0.88, max drawdown 56.20R). A top rank on a list of losing or barely-positive rows is not an edge.
+No unfiltered row and no alert-gated row cleared every hurdle. The hurdles used here are at least 80 out-of-sample trades, expectancy above +0.05R, profit factor at least 1.15, in-sample expectancy also positive, expectancy still positive at twice the spread, and a majority of out-of-sample years with at least 15 trades also positive. They were committed with these results, not registered beforehand.
+Every unfiltered pooled out-of-sample expectancy in this run is negative.
+Every alert-gated out-of-sample expectancy in this run is negative or has no trades.
+The highest unfiltered pooled out-of-sample expectancy in this run was **id50_m15** at -0.103R over 1265 trades (profit factor 0.70, max drawdown 131.99R). Ranking the rows does not turn the top of a losing list into an edge.
 Charts: `service/research_backtest/artifacts/oos_expectancy.png` and `equity_oos_grid.png`, plus one equity file per strategy with at least five out-of-sample trades.
 
 ## What to run on the bot
 
-Nothing in this run is a candidate for automated orders. Leave `BOT_STRATEGY` empty. The pre-set bar was applied to each pooled strategy, not to individual symbols. A positive cell in the symbol table was not declared in advance. With this many cells, a few positive ones show up even when the rule has no edge. They are not a system to trade.
+Nothing in this run is a candidate for automated orders. Leave `BOT_STRATEGY` empty. The hurdles above were applied to each pooled strategy, not to individual symbols. A positive cell in the symbol table was not a separate test. With this many cells, a few positive ones show up even when the rule has no edge. They are not a system to trade.
 
 The live-alert column is the same trades after the scanner's default Discord gate. Where that column has only a handful of trades, the gate almost never fires, so that win rate is not a sample. CRT's alert column is empty because the harness decides at the end of the key window, and the grade/status gate used for Discord did not pass on those rows. The raw CRT rows are the result that counts, and they lost money after costs.
 

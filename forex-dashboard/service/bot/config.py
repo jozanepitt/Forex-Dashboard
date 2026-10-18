@@ -11,6 +11,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from bot.risk import DEFAULT_DAILY_LOSS_PCT, DEFAULT_RISK_PCT, bounded_daily_loss_pct, bounded_risk_pct
+
 SERVICE_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(SERVICE_ROOT / ".env")
 
@@ -79,9 +81,9 @@ def load_config() -> BotConfig:
         entry_mode=os.environ.get("BOT_ENTRY", "close").strip().lower(),
         symbols=symbols,
         grades=os.environ.get("BOT_GRADES", "alert").strip(),
-        risk_pct=_float("BOT_RISK_PCT", 0.5),
+        risk_pct=bounded_risk_pct(_float("BOT_RISK_PCT", DEFAULT_RISK_PCT)),
         max_open_positions=_int("BOT_MAX_OPEN_POSITIONS", 3),
-        daily_loss_pct=_float("BOT_DAILY_LOSS_PCT", 2.0),
+        daily_loss_pct=bounded_daily_loss_pct(_float("BOT_DAILY_LOSS_PCT", DEFAULT_DAILY_LOSS_PCT)),
         max_trades_per_day=_int("BOT_MAX_TRADES_PER_DAY", 5),
         max_spread_mult=_float("BOT_MAX_SPREAD_MULT", 2.0),
         session_filter=_flag("BOT_SESSION_FILTER", "true"),

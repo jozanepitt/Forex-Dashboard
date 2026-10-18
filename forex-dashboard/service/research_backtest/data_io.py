@@ -41,10 +41,17 @@ def resample(m1: dict[str, np.ndarray], tf: str) -> dict[str, np.ndarray]:
     starts = np.concatenate(([0], change))
     ends = np.concatenate((change, [len(ts)]))
     last_ts = ts[ends - 1]
-    # A bucket counts only when its own final minute printed. Reduce on the
-    # unfiltered starts first so a trailing partial hour is not folded into
-    # the previous hour.
-    complete = last_ts + 60 >= bucket[starts] + secs
+    # A bucket is closed when a later bucket has started, or when its own
+    # final minute printed. FX Friday stops around 22:00 UTC, so a Friday
+    # daily bar and the 20:00 H4 bar never contain 23:59. Requiring that
+    # minute dropped every Friday. Once Sunday's session prints, Friday is
+    # over and its last trade is the close. The trailing bucket of the file
+    # is kept only when its final minute is present, so a partial hour is
+    # not folded into the previous one.
+    has_successor = np.ones(len(starts), dtype=bool)
+    has_successor[-1] = False
+    final_minute = last_ts + 60 >= bucket[starts] + secs
+    complete = has_successor | final_minute
     high = np.maximum.reduceat(m1["high"], starts)
     low = np.minimum.reduceat(m1["low"], starts)
     vol = np.add.reduceat(m1["volume"], starts)

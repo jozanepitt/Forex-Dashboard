@@ -9,6 +9,63 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Optional
+
+
+# Hard ceilings. load_config and these functions both apply them, so a
+# hand-built RiskConfig cannot outrun the cap either.
+MAX_RISK_PCT = 2.0
+DEFAULT_RISK_PCT = 2.0
+MIN_DAILY_LOSS_PCT = 2.0
+MAX_DAILY_LOSS_PCT = 6.0
+DEFAULT_DAILY_LOSS_PCT = 6.0
+PENDING_TTL_SECS = 8 * 3600
+
+
+def bounded_risk_pct(risk_pct: float) -> float:
+    """Risk per trade cannot exceed 2%. A smaller setting is left alone."""
+    try:
+        value = float(risk_pct)
+    except (TypeError, ValueError):
+        return 0.0
+    if value <= 0:
+        return 0.0
+    return min(value, MAX_RISK_PCT)
+
+
+def bounded_daily_loss_pct(pct: float) -> float:
+    """Daily loss stays inside 2% to 6% of the day's starting equity."""
+    try:
+        value = float(pct)
+    except (TypeError, ValueError):
+        return DEFAULT_DAILY_LOSS_PCT
+    return min(MAX_DAILY_LOSS_PCT, max(MIN_DAILY_LOSS_PCT, value))
+
+
+def exposure_slots(open_positions: int, pending_orders: int) -> int:
+    """Resting orders use a slot. A pending buy is not free capacity."""
+    return max(0, int(open_positions)) + max(0, int(pending_orders))
+
+
+def pending_expiration(now_ts: int, valid_until_ts: Optional[int]) -> int:
+    """Unix time when a resting order should die.
+
+    The signal's own validity wins when it is still in the future.
+    Otherwise the order lives ``PENDING_TTL_SECS`` (8 hours).
+    """
+    if valid_until_ts is not None and int(valid_until_ts) > int(now_ts):
+        return int(valid_until_ts)
+    return int(now_ts) + PENDING_TTL_SECS
+
+
+def day_anchor_equity(equity: float) -> float:
+    """The daily-loss baseline is equity at the first look of the UTC day.
+
+    Balance ignores open profit and loss, so a day that starts underwater
+    would measure the next loss from a higher number than the account can
+    actually spend.
+    """
+    return float(equity)
 
 
 def lots_from_risk(
@@ -20,19 +77,29 @@ def lots_from_risk(
     volume_min: float,
     volume_max: float,
     volume_step: float,
+    extra_price: float = 0.0,
+    commission_per_lot: float = 0.0,
 ) -> float:
     """Lots so a stop-out loses about ``equity * risk_pct / 100``.
 
     ``tick_value`` is account-currency P&L for a one-tick move on 1.0 lot.
+    ``extra_price`` is spread plus slippage, added to the stop distance,
+    because a buy filled on the ask and stopped on the bid loses that
+    much more than the scanner's entry-to-stop gap. ``commission_per_lot``
+    is account currency for a round turn on 1.0 lot (0 on Exness Standard).
+
     Returns 0 when the size would be below the broker minimum (the trade is
-    skipped rather than rounded up through the risk budget).
+    skipped rather than rounded up through the risk budget). Risk above 2%
+    is cut to 2% here, not only in the env parser.
     """
+    risk_pct = bounded_risk_pct(risk_pct)
     if equity <= 0 or risk_pct <= 0 or sl_distance <= 0:
         return 0.0
     if tick_size <= 0 or tick_value <= 0 or volume_step <= 0:
         return 0.0
+    distance = sl_distance + max(float(extra_price), 0.0)
     risk_amount = equity * (risk_pct / 100.0)
-    loss_per_lot = (sl_distance / tick_size) * tick_value
+    loss_per_lot = (distance / tick_size) * tick_value + max(float(commission_per_lot), 0.0)
     if loss_per_lot <= 0:
         return 0.0
     raw = risk_amount / loss_per_lot
@@ -85,10 +152,14 @@ class RiskSnapshot:
 
 @dataclass
 class RiskConfig:
-    risk_pct: float = 0.5
+    risk_pct: float = DEFAULT_RISK_PCT
     max_open_positions: int = 3
-    daily_loss_pct: float = 2.0
+    daily_loss_pct: float = DEFAULT_DAILY_LOSS_PCT
     max_trades_per_day: int = 5
+
+    def __post_init__(self) -> None:
+        self.risk_pct = bounded_risk_pct(self.risk_pct)
+        self.daily_loss_pct = bounded_daily_loss_pct(self.daily_loss_pct)
 
 
 def utc_day(ts: int) -> str:

@@ -228,11 +228,17 @@ def extract_btmm(symbol: str, window: list[dict], tf: str) -> Optional[Signal]:
     known = window[-1]["ts_utc"] + TF_SECONDS[tf]
     key = str(setup.get("key") or "setup")
     try:
-        away = abs(float(entry) - window[-1]["close"])
-        risk = abs(float(entry) - float(sl))
+        entry_f = float(entry)
+        close = float(window[-1]["close"])
+        away = abs(entry_f - close)
+        risk = abs(entry_f - float(sl))
     except (TypeError, ValueError):
         return None
-    kind = "limit" if risk > 0 and away > 0.25 * risk else "market"
+    # A limit rests on the far side of the close. A buy printed above the
+    # close is a stop, and the old abs() check sent it as a buy limit, which
+    # then filled because the bid was already under that price.
+    resting = (side == "BUY" and entry_f <= close) or (side == "SELL" and entry_f >= close)
+    kind = "limit" if resting and risk > 0 and away > 0.25 * risk else "market"
     valid = known + 8 * 3600 if kind == "limit" else None
     return _base(
         "btmm", side, "A+" if key == "aplus" else key,

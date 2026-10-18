@@ -78,6 +78,71 @@ def test_signal_is_not_filled_on_a_bar_that_opened_before_it_was_known():
     assert trade["outcome"] != "tp"
 
 
+def test_sell_take_profit_pays_the_spread():
+    # Short from 1.1000, target 1.0980. Buying back at the bid target would
+    # credit the spread. The fill is the target plus the spread.
+    m1 = _m1([
+        (60, 1.1000, 1.1004, 1.0996, 1.1002),
+        (120, 1.0990, 1.0994, 1.0978, 1.0982),
+    ])
+    trade = simulate(
+        "SELL", m1, known_at=60, entry=1.1000, sl=1.1010, tp=1.0980,
+        spread=0.00011, slip=0.0, pip=0.0001, entry_kind="market",
+        valid_until=None, time_stop_ts=None,
+    )
+    assert trade["outcome"] == "tp"
+    assert abs(trade["exit_fill"] - (1.0980 + 0.00011)) < 1e-9
+    assert trade["r_wide"] < trade["r"]
+
+
+def test_buy_limit_waits_for_the_ask_and_fills_at_the_limit():
+    # Spread 1 pip. Bar 60's bid low is 0.5 pip under the limit, so the ask
+    # has not reached it. Bar 120's bid low is 2 pips under, so the ask has.
+    m1 = _m1([
+        (60, 1.1004, 1.1006, 1.09995, 1.1002),
+        (120, 1.1002, 1.1004, 1.09980, 1.1000),
+        (180, 1.1000, 1.1045, 1.0999, 1.1040),
+    ])
+    trade = simulate(
+        "BUY", m1, known_at=60, entry=1.1000, sl=1.0980, tp=1.1040,
+        spread=0.00010, slip=0.0, pip=0.0001, entry_kind="limit",
+        valid_until=300, time_stop_ts=None,
+    )
+    assert trade is not None
+    assert trade["entry_ts"] == 120
+    assert abs(trade["entry_fill"] - 1.1000) < 1e-9
+    assert trade["outcome"] == "tp"
+
+
+def test_limit_target_is_not_taken_on_the_fill_minute():
+    # The fill minute trades through the target. A limit does not get that
+    # target, because the path inside the minute is unknown.
+    m1 = _m1([
+        (60, 1.1015, 1.1020, 1.09970, 1.1005),
+    ])
+    trade = simulate(
+        "BUY", m1, known_at=60, entry=1.1000, sl=1.0970, tp=1.1010,
+        spread=0.00020, slip=0.0, pip=0.0001, entry_kind="limit",
+        valid_until=120, time_stop_ts=None,
+    )
+    assert trade is not None
+    assert trade["outcome"] != "tp"
+
+
+def test_rollover_hour_triples_the_entry_spread():
+    t = 21 * 3600
+    m1 = _m1([
+        (t, 1.1000, 1.1002, 1.0998, 1.1001),
+        (t + 60, 1.1001, 1.1030, 1.1000, 1.1025),
+    ])
+    trade = simulate(
+        "BUY", m1, known_at=t, entry=1.1000, sl=1.0980, tp=1.1020,
+        spread=0.00010, slip=0.0, pip=0.0001, entry_kind="market",
+        valid_until=None, time_stop_ts=None,
+    )
+    assert abs(trade["entry_fill"] - 1.1003) < 1e-9
+
+
 def test_resample_does_not_fold_a_partial_hour_into_the_previous_one():
     # 60 minutes of hour 0 (complete) plus 10 minutes of hour 1 (partial).
     rows = []
@@ -90,6 +155,27 @@ def test_resample_does_not_fold_a_partial_hour_into_the_previous_one():
     assert out["ts"][0] == 0
     assert out["high"][0] == 1.2
     assert out["close"][0] == 1.1
+
+
+def test_friday_session_bar_is_kept_once_the_next_session_prints():
+    from datetime import datetime, timezone
+    day = int(datetime(2024, 1, 5, tzinfo=timezone.utc).timestamp())
+    assert day % 86400 == 0
+    rows = []
+    for i in range(22 * 60):
+        rows.append((day + i * 60, 1.0, 1.1, 0.9, 1.05))
+    # Friday 20:00 H4 as well: the loop already covers 20:00-21:59.
+    sunday = day + 2 * 86400 + 22 * 3600
+    for i in range(5):
+        rows.append((sunday + i * 60, 1.2, 1.3, 1.15, 1.25))
+    daily = resample(_m1(rows), "D1")
+    assert day in set(int(t) for t in daily["ts"])
+    kept = int(np.flatnonzero(daily["ts"] == day)[0])
+    assert daily["close"][kept] == 1.05
+    sunday_bucket = (sunday // 86400) * 86400
+    assert sunday_bucket not in set(int(t) for t in daily["ts"])
+    h4 = resample(_m1(rows), "H4")
+    assert (day + 20 * 3600) in set(int(t) for t in h4["ts"])
 
 
 def test_v9_prefilter_keeps_a_cross_the_scanner_takes():

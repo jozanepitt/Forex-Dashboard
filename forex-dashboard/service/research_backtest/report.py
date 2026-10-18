@@ -27,7 +27,7 @@ STRATEGY_NOTES = """
 
 These are the rules the harness called. The fill is the next tradable price after the signal bar closes, not the signal bar's own close.
 
-- **Engulfing** (`engulfing_strategy.py`). The second candle's body covers the first. With the higher-timeframe trend it is a trade immediately; against the trend it waits for a second engulfing within 8 bars. Stop beyond the engulfing wick plus 0.1 ATR. Target is 2R. Native legs are H1 (trend from H4) and H4 (trend from daily). M1, M5, and M15 in this report are the same rules on a lower timeframe, not a separate system the dashboard runs. `engulfing_*_retrace50` is one pre-registered variant: a limit at the 50% retrace of the engulfing candle, valid for three bars. Live Discord grade gate is A and B.
+- **Engulfing** (`engulfing_strategy.py`). The second candle's body covers the first. With the higher-timeframe trend it is a trade immediately; against the trend it waits for a second engulfing within 8 bars. Stop beyond the engulfing wick plus 0.1 ATR. Target is 2R. Native legs are H1 (trend from H4) and H4 (trend from daily). M1, M5, and M15 in this report are the same rules on a lower timeframe, not a separate system the dashboard runs. `engulfing_*_retrace50` is one extra variant: a limit at the 50% retrace of the engulfing candle, valid for three bars. It is the only entry-style variant in the run, not a search. Live Discord grade gate is A and B.
 - **VWAP bounce** (`vwap_bounce_strategy.py`). M15. Session VWAP anchored at 00:00 UTC, 50-bar average of that VWAP sloping, price on the trend side. Trigger is a rejection that tags VWAP or a reclaim that holds the average. Stop beyond the pullback, at least 0.5 ATR. Target is the prior swing or 1.5R. Grade A needs relative tick-volume and a full body. The dashboard does not run this on M1 or M5; those rows are the same function on those bars.
 - **VWAP mean reversion** (`vwap_mean_reversion_strategy.py`). M15. Fade a move of at least 2 session-sigma when the Kaufman efficiency ratio says the day is not trending. Stop is the larger of the extension wick and 0.75 ATR. Target is the VWAP. Time stop is 20 bars. Live alerts are grade A with score at least 9. M5 is the same function, not a live timeframe.
 - **VWAP + 9 EMA** (`vwap9ema_strategy.py`). M5. During 09:00–23:00 UTC, the 9 EMA crossing the session VWAP. Stop just beyond the swing around the cross. Target 2R. There is no grade. An older, stricter version of this idea failed its own validation; this cross-only rule is a different rule and had not been backtested. M1 is the same cross on one-minute bars.
@@ -38,14 +38,14 @@ These are the rules the harness called. The fill is the next tradable price afte
 
 ## Method
 
-- **Prices.** Dukascopy BID M1, 2023-01-02 through 2026-10-17, resampled to M5, M15, H1, H4, and D1 on UTC boundaries. A higher-timeframe bar is used only after its last minute exists.
-- **Split.** In-sample: signals before 2025-04-01. Out-of-sample: signals from that date on. About 2.25 years in, 1.5 years out. No parameter was chosen on the out-of-sample window. The retrace-50% engulfing test was declared as a variant before the run; it is not a search.
-- **Costs.** Constant Exness Standard spreads and a small adverse slippage, commission $0. See the table below. A second column reruns the same exits at twice the spread and does not change which barrier was hit.
+- **Prices.** Dukascopy BID M1, 2023-01-02 through 2026-10-17, resampled to M5, M15, H1, H4, and D1 on UTC boundaries. A higher-timeframe bar is used once the next bucket has started, or once its own last minute exists. Friday's cash session ends before midnight, so the Friday daily bar and the 20:00 UTC H4 bar are the last print of that session, not a bar that runs to 23:59.
+- **Split.** In-sample: signals before 2025-04-01. Out-of-sample: signals from that date on. About 2.25 years in, 1.5 years out. Scanner parameters were not fitted on the out-of-sample window.
+- **Costs.** Exness Standard spreads from the table below, plus a small adverse slippage, commission $0. The spread is constant except during 21:00–22:00 UTC, where it is tripled as a stand-in for the rollover widen. That multiplier is not a recorded Exness schedule, and summer rollover is an hour later than winter, so one fixed hour does not match the broker's clock all year. There is no swap and no extra widening around news. A short pays the spread when it buys back, including on a take-profit. A buy limit fills only when the ask trades the limit, at the limit price. The 2× column walks the same barrier path at twice the spread (and twice the rollover widen) and adds one extra base spread to a buy-limit entry. It does not delete the trade.
 - **One position per symbol per strategy.** A new signal while a trade is open is ignored. The same TDI pattern, ID50 cross, VWAP-MR extension, or 9-EMA cross is not re-entered until the scanner goes quiet.
-- **Both-in-one-bar.** Stop fills before target.
+- **Both-in-one-bar.** Stop fills before target. A market order can reach its target on the entry minute, because the fill is the open and the open is first. A limit order cannot: the target is ignored on the fill minute, and the stop still counts.
 - **R.** P&L after the fill, divided by the distance from the scanner's entry to its stop.
 - **Sharpe-like.** Sum of R by exit date, including weekdays with no trade as zero, times sqrt(252). It is not a mark-to-market Sharpe.
-- **Robust.** Out-of-sample trades at least 80, expectancy above +0.05R, profit factor at least 1.15, in-sample expectancy also positive, expectancy still positive at twice the spread, and a majority of out-of-sample years with at least 15 trades also positive. Missing any one of those, the row is not robust.
+- **Robust.** These hurdles are the ones used for this report. They were committed together with the results, so this is not a pre-registered protocol. Out-of-sample trades at least 80, expectancy above +0.05R, profit factor at least 1.15, in-sample expectancy also positive, expectancy still positive at twice the spread, and a majority of out-of-sample years with at least 15 trades also positive. Missing any one of those, the row is not marked robust.
 - **VWAP+9EMA speed filter.** The cross is rare, and recomputing it on every bar is most of the runtime. A vectorized 9 EMA and session VWAP marks candidate bars (a real cross, or the two lines within 1e-8 of price). The real `analyze_pair` still runs on every candidate. A sample of bars the filter skips is checked against `analyze_pair`; if that sample contains a signal, the filter is turned off for that symbol and the scanner runs on every bar.
 
 Pooled pip averages mix euro-pips with gold pips. Use R for the pooled number. Per-symbol pips are in the symbol table.
@@ -243,7 +243,8 @@ def _markdown(summary: dict) -> str:
         "",
         "## Spread and slippage assumptions",
         "",
-        "Exness Standard, commission $0. Not a live quote. The backtest uses these constants on every fill.",
+        "Exness Standard, commission $0. Not a live quote. These are the base spreads. "
+        "During 21:00–22:00 UTC the backtest multiplies the spread by 3. There is no swap.",
         "",
         "| Symbol | Spread (pips) | Slippage (pips) |",
         "|---|---:|---:|",
@@ -321,32 +322,64 @@ def _markdown(summary: dict) -> str:
         reverse=True,
     )
     lines += ["", "## Verdict", ""]
+    hurdles = (
+        "The hurdles used here are at least 80 out-of-sample trades, expectancy above +0.05R, "
+        "profit factor at least 1.15, in-sample expectancy also positive, expectancy still "
+        "positive at twice the spread, and a majority of out-of-sample years with at least "
+        "15 trades also positive. They were committed with these results, not registered beforehand."
+    )
     if robust or robust_alert:
         lines.append(
-            "Rows that cleared every pre-set hurdle: "
-            + ", ".join(robust or ["none on the unfiltered signal"])
+            "Unfiltered rows that cleared every hurdle: "
+            + ", ".join(robust or ["none"])
             + ". Alert-gate rows that cleared them: "
             + ", ".join(robust_alert or ["none"])
-            + "."
+            + ". " + hurdles
         )
     else:
         lines.append(
-            "No strategy, on any timeframe tested, cleared the pre-set bar for a robust "
-            "out-of-sample edge after costs. That bar was at least 80 out-of-sample trades, "
-            "expectancy above +0.05R, profit factor at least 1.15, the same sign in-sample, "
-            "still positive if the spread is doubled, and not a single lucky year."
+            "No unfiltered row and no alert-gated row cleared every hurdle. " + hurdles
         )
+    unfiltered_pos = [
+        r for r in summary["rows"]
+        if r["oos"]["trades"] and (r["oos"]["expectancy_r"] or 0) > 0
+    ]
+    alert_pos = [
+        r for r in summary["rows"]
+        if r["oos_alert"]["trades"] and (r["oos_alert"]["expectancy_r"] or 0) > 0
+    ]
+    if unfiltered_pos:
+        bits = [
+            f"{r['strategy']} {_fmt_r(r['oos']['expectancy_r'])}R over {r['oos']['trades']} trades"
+            for r in unfiltered_pos
+        ]
+        lines.append("Unfiltered pooled out-of-sample rows with a positive expectancy: " + "; ".join(bits) + ".")
+    else:
+        lines.append("Every unfiltered pooled out-of-sample expectancy in this run is negative.")
+    if alert_pos:
+        bits = [
+            f"{r['strategy']} {_fmt_r(r['oos_alert']['expectancy_r'])}R over {r['oos_alert']['trades']} trades"
+            for r in alert_pos
+        ]
+        lines.append(
+            "The alert-gated table is a separate cut, and it is not all negative: "
+            + "; ".join(bits)
+            + ". A positive expectancy on a handful of trades, or one that fails the other hurdles, "
+            "is not an edge."
+        )
+    else:
+        lines.append("Every alert-gated out-of-sample expectancy in this run is negative or has no trades.")
     if ranked:
         best = ranked[0]
         exp = best["oos"]["expectancy_r"]
         dd = best["oos"]["max_drawdown_r"]
         dd_txt = "—" if dd is None else f"{dd:.2f}"
         lines.append(
-            f"The highest pooled out-of-sample expectancy in this run was **{best['strategy']}** "
+            f"The highest unfiltered pooled out-of-sample expectancy in this run was **{best['strategy']}** "
             f"at {_fmt_r(exp)}R over {best['oos']['trades']} trades "
             f"(profit factor {_fmt_pf(best['oos']['profit_factor'])}, "
             f"max drawdown {dd_txt}R). "
-            "A top rank on a list of losing or barely-positive rows is not an edge."
+            "Ranking the rows does not turn the top of a losing list into an edge."
         )
     lines.append(
         "Charts: `service/research_backtest/artifacts/oos_expectancy.png` and "
@@ -357,8 +390,8 @@ def _markdown(summary: dict) -> str:
         "## What to run on the bot",
         "",
         "Nothing in this run is a candidate for automated orders. Leave `BOT_STRATEGY` empty. "
-        "The pre-set bar was applied to each pooled strategy, not to individual symbols. "
-        "A positive cell in the symbol table was not declared in advance. With this many cells, "
+        "The hurdles above were applied to each pooled strategy, not to individual symbols. "
+        "A positive cell in the symbol table was not a separate test. With this many cells, "
         "a few positive ones show up even when the rule has no edge. They are not a system to trade.",
         "",
         "The live-alert column is the same trades after the scanner's default Discord gate. "

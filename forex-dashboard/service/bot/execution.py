@@ -169,8 +169,18 @@ class MT5Gateway:
                 entries += 1
         return pnl, entries
 
+    def pending_orders(self) -> list[dict]:
+        rows = self.mt5.orders_get() or []
+        return [{
+            "ticket": int(o.ticket),
+            "symbol": o.symbol,
+            "magic": int(o.magic),
+            "volume": float(o.volume_current),
+        } for o in rows]
+
     def send(self, broker: str, side: str, lots: float, sl: float, tp: float,
-             spec: dict, limit_price: Optional[float] = None) -> dict:
+             spec: dict, limit_price: Optional[float] = None,
+             expiration: Optional[int] = None) -> dict:
         mt5 = self.mt5
         price = limit_price if limit_price is not None else (spec["ask"] if side == "BUY" else spec["bid"])
         if price is None:
@@ -196,6 +206,9 @@ class MT5Gateway:
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": _filling(mt5, spec["filling_mode"]),
         }
+        if expiration is not None and limit_price is not None:
+            request["type_time"] = getattr(mt5, "ORDER_TIME_SPECIFIED", 2)
+            request["expiration"] = int(expiration)
         result = mt5.order_send(request)
         if result is None:
             return {"ok": False, "retcode": None, "comment": str(mt5.last_error())}
@@ -252,6 +265,27 @@ class MT5Gateway:
             if result is not None and int(result.retcode) == getattr(mt5, "TRADE_RETCODE_DONE", 10009):
                 closed += 1
         return closed
+
+    def cancel_pending(self) -> int:
+        """Cancel this bot's resting orders. Used with the kill-close flag."""
+        mt5 = self.mt5
+        cancelled = 0
+        for order in self.pending_orders():
+            if order["magic"] != self.cfg.magic:
+                continue
+            request = {
+                "action": mt5.TRADE_ACTION_REMOVE,
+                "order": order["ticket"],
+                "magic": int(self.cfg.magic),
+                "comment": "dash-bot-kill",
+            }
+            result = mt5.order_send(request)
+            if result is not None and int(result.retcode) in (
+                getattr(mt5, "TRADE_RETCODE_DONE", 10009),
+                getattr(mt5, "TRADE_RETCODE_PLACED", 10008),
+            ):
+                cancelled += 1
+        return cancelled
 
 
 def _filling(mt5, filling_mode: int) -> int:

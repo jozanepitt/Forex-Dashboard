@@ -1,6 +1,7 @@
 """Trade statistics. R is P&L divided by the strategy's planned stop distance,
-after the fill model. A robust result has to clear every hurdle below on
-out-of-sample trades; the hurdles were set before the run.
+after the fill model. A row is marked robust only when it clears every
+hurdle below. Those hurdles were chosen for this report and committed with
+the results; they are not a pre-registered protocol.
 """
 from __future__ import annotations
 

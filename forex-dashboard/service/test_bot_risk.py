@@ -3,8 +3,11 @@ from bot.filters import in_session, news_blocks
 from bot.risk import (
     RiskConfig,
     RiskSnapshot,
+    day_anchor_equity,
     evaluate_risk,
+    exposure_slots,
     lots_from_risk,
+    pending_expiration,
     spread_allows,
     trading_mode_allowed,
 )
@@ -106,6 +109,86 @@ def test_kill_switch_blocks_new_trades():
     cfg = RiskConfig(0.5, 3, 2.0, 5)
     ok, reason, _ = evaluate_risk(cfg, _snap(kill_switch=True))
     assert not ok and "kill" in reason
+
+
+def test_risk_above_two_percent_is_cut_to_two():
+    # 20 pip stop, $200 loss per lot. 2% of 10_000 is $200, so 1.00 lot.
+    # A requested 5% would have been 2.50 lots.
+    hot = lots_from_risk(
+        10_000, 5.0, 0.0020, 0.00001, 1.0, 0.01, 100, 0.01,
+    )
+    capped = lots_from_risk(
+        10_000, 2.0, 0.0020, 0.00001, 1.0, 0.01, 100, 0.01,
+    )
+    assert hot == capped == 1.0
+    assert RiskConfig(risk_pct=5).risk_pct == 2.0
+
+
+def test_daily_loss_stays_inside_two_to_six_percent():
+    loose = RiskConfig(daily_loss_pct=10)
+    assert loose.daily_loss_pct == 6.0
+    ok, _, _ = evaluate_risk(loose, _snap(floating=-599))
+    assert ok
+    ok, reason, _ = evaluate_risk(loose, _snap(floating=-600))
+    assert not ok and "daily" in reason
+    tight = RiskConfig(daily_loss_pct=0.5)
+    assert tight.daily_loss_pct == 2.0
+    ok, _, _ = evaluate_risk(tight, _snap(floating=-100))
+    assert ok
+
+
+def test_three_pip_stop_includes_spread_and_commission():
+    # 3 pips = 0.00030. Spread 1.1 + slip 0.2 = 0.00013. Distance 0.00043.
+    # $1 per 0.00001 tick => $43 per lot. 0.5% of 10_000 = $50. Lots = 1.16.
+    lots = lots_from_risk(
+        10_000, 0.5, 0.00030, 0.00001, 1.0, 0.01, 100, 0.01,
+        extra_price=0.00013,
+    )
+    assert lots == 1.16
+    naive = lots_from_risk(
+        10_000, 0.5, 0.00030, 0.00001, 1.0, 0.01, 100, 0.01,
+    )
+    assert naive == 1.66
+    # The old size loses 1.66 lots * $43 = $71, about 40% over the $50 budget.
+    assert naive * 43 > 50 * 1.4
+    # $10 round-turn commission on top of the 20-pip stop ($200) => $210/lot.
+    # $50 / 210 = 0.238, floored to 0.23.
+    with_commission = lots_from_risk(
+        10_000, 0.5, 0.0020, 0.00001, 1.0, 0.01, 100, 0.01,
+        commission_per_lot=10.0,
+    )
+    assert with_commission == 0.23
+
+
+def test_pending_orders_use_a_slot_and_expire():
+    assert exposure_slots(2, 1) == 3
+    cfg = RiskConfig(0.5, 3, 2.0, 5)
+    ok, reason, _ = evaluate_risk(cfg, _snap(open_positions=exposure_slots(2, 1)))
+    assert not ok and "positions" in reason
+    assert pending_expiration(1_000, 5_000) == 5_000
+    assert pending_expiration(1_000, 500) == 1_000 + 8 * 3600
+    assert pending_expiration(1_000, None) == 1_000 + 8 * 3600
+
+
+def test_day_anchor_is_equity_not_balance():
+    assert day_anchor_equity(9_800) == 9_800
+
+
+def test_config_ceilings_and_defaults(monkeypatch):
+    from bot.config import load_config
+    monkeypatch.setenv("BOT_RISK_PCT", "5")
+    monkeypatch.setenv("BOT_DAILY_LOSS_PCT", "10")
+    cfg = load_config()
+    assert cfg.risk_pct == 2.0
+    assert cfg.daily_loss_pct == 6.0
+    monkeypatch.setenv("BOT_DAILY_LOSS_PCT", "1")
+    cfg = load_config()
+    assert cfg.daily_loss_pct == 2.0
+    monkeypatch.delenv("BOT_RISK_PCT", raising=False)
+    monkeypatch.delenv("BOT_DAILY_LOSS_PCT", raising=False)
+    cfg = load_config()
+    assert cfg.risk_pct == 2.0
+    assert cfg.daily_loss_pct == 6.0
 
 
 def test_spread_filter_and_session_and_news():

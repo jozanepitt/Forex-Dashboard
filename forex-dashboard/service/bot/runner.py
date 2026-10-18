@@ -12,10 +12,13 @@ import time
 from datetime import datetime, timezone
 
 from bot.config import BotConfig, load_config
-from bot.costs import spread_price
+from bot.costs import cost_model, spread_price
 from bot.execution import MT5Gateway
 from bot.filters import in_session, news_blocks
-from bot.risk import RiskConfig, RiskSnapshot, evaluate_risk, lots_from_risk, trading_mode_allowed, utc_day
+from bot.risk import (
+    RiskConfig, RiskSnapshot, day_anchor_equity, evaluate_risk, exposure_slots,
+    lots_from_risk, pending_expiration, trading_mode_allowed, utc_day,
+)
 from bot.signals import LOOKBACK, current_signal
 
 log = logging.getLogger("bot")
@@ -82,21 +85,23 @@ def run_once(cfg: BotConfig, gateway: MT5Gateway, state: dict) -> dict:
     account = gateway.account()
     if state.get("day") != today or not state.get("day_start_equity"):
         state["day"] = today
-        state["day_start_equity"] = account["balance"]
+        state["day_start_equity"] = day_anchor_equity(account["equity"])
         state["halted_day"] = "" if state.get("halted_day") != today else state.get("halted_day", "")
-        log.info("UTC day %s starting balance %.2f", today, account["balance"])
+        log.info("UTC day %s starting equity %.2f", today, state["day_start_equity"])
 
     if cfg.kill_tripped():
         _log_event(cfg, {"event": "kill_switch"})
         if cfg.kill_close:
             closed = gateway.close_all()
-            log.warning("kill switch closed %s bot positions", closed)
+            cancelled = gateway.cancel_pending()
+            log.warning("kill switch closed %s bot positions and cancelled %s pending orders", closed, cancelled)
         else:
             log.warning("kill switch set: no new trades")
         state["halted_day"] = state.get("halted_day") or ""
         return state
 
     positions = gateway.positions()
+    pendings = gateway.pending_orders()
     floating = sum(p["profit"] + p["swap"] for p in positions)
     realized, entries = gateway.realized_today(now_ts)
     snap = RiskSnapshot(
@@ -105,7 +110,7 @@ def run_once(cfg: BotConfig, gateway: MT5Gateway, state: dict) -> dict:
         day_start_equity=float(state["day_start_equity"]),
         realized_today=realized,
         floating=floating,
-        open_positions=len(positions),
+        open_positions=exposure_slots(len(positions), len(pendings)),
         trades_today=entries,
         kill_switch=False,
         halted_day=state.get("halted_day") or "",
@@ -128,7 +133,7 @@ def run_once(cfg: BotConfig, gateway: MT5Gateway, state: dict) -> dict:
             log.warning("news feed failed (%s); skipping new entries this pass", exc)
             return state
 
-    held_symbols = {p["symbol"] for p in positions}
+    held_symbols = {p["symbol"] for p in positions} | {p["symbol"] for p in pendings}
     dedup = set(state.get("dedup") or [])
     tfs = _timeframes(cfg.strategy, cfg.timeframe)
 
@@ -172,17 +177,30 @@ def run_once(cfg: BotConfig, gateway: MT5Gateway, state: dict) -> dict:
         if sig.dedup_key in dedup:
             continue
         sl_distance = abs(sig.entry - sig.sl)
+        model = cost_model(symbol)
+        typical = model[0] if model else 0.0
+        slip = model[1] if model else 0.0
+        live_spread = float(spec["spread_price"] or 0.0)
+        # Size on the worse of the live quote and the assumed typical, plus
+        # slippage. Commission is 0 on Exness Standard; the argument is here
+        # so a commission account cannot forget it.
         lots = lots_from_risk(
             account["equity"], cfg.risk_pct, sl_distance,
             spec["tick_size"], spec["tick_value"],
             spec["volume_min"], spec["volume_max"], spec["volume_step"],
+            extra_price=max(live_spread, typical) + slip,
+            commission_per_lot=0.0,
         )
         if lots <= 0:
             _log_event(cfg, {"event": "skip", "symbol": symbol, "reason": "size below minimum",
                              "equity": account["equity"], "sl_distance": sl_distance})
             continue
         limit = sig.entry if sig.entry_kind == "limit" else None
-        result = gateway.send(spec["broker"], sig.side, lots, sig.sl, sig.tp, spec, limit_price=limit)
+        expiration = pending_expiration(now_ts, sig.valid_until_ts) if limit is not None else None
+        result = gateway.send(
+            spec["broker"], sig.side, lots, sig.sl, sig.tp, spec,
+            limit_price=limit, expiration=expiration,
+        )
         _log_event(cfg, {
             "event": "order",
             "symbol": symbol,
