@@ -1,0 +1,88 @@
+{
+  "start": "2023-01-02T00:00:00+00:00",
+  "end": "2026-10-17T00:00:00+00:00",
+  "offer_side": "BID",
+  "interval": "M1",
+  "symbols": [
+    {
+      "symbol": "AUD/USD",
+      "rows": 1408405,
+      "start": "2023-01-02T00:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "EUR/JPY",
+      "rows": 1412300,
+      "start": "2023-01-02T00:03:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "EUR/USD",
+      "rows": 1411286,
+      "start": "2023-01-02T00:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "GBP/JPY",
+      "rows": 1411679,
+      "start": "2023-01-02T00:01:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "GBP/USD",
+      "rows": 1410625,
+      "start": "2023-01-02T00:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "NZD/USD",
+      "rows": 1406288,
+      "start": "2023-01-02T00:16:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "USD/CAD",
+      "rows": 1408300,
+      "start": "2023-01-02T00:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "USD/CHF",
+      "rows": 1407039,
+      "start": "2023-01-02T00:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "USD/JPY",
+      "rows": 1412394,
+      "start": "2023-01-02T00:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    },
+    {
+      "symbol": "XAU/USD",
+      "rows": 1344957,
+      "start": "2023-01-02T23:00:00+00:00",
+      "end": "2026-10-16T20:59:00+00:00",
+      "bid": true,
+      "source": "dukascopy freeserv chart/json3 BID M1"
+    }
+  ]
+}
