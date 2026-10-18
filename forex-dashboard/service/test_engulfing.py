@@ -447,3 +447,53 @@ def test_first_engulfing_too_long_ago_does_not_confirm():
 
 def test_confirm_lookback_matches_the_card():
     assert e.CONFIRM_LOOKBACK == 8
+
+
+# ── manipulation-candle checklist (info only, from the 4H sweep & engulf videos) ──
+# Backtested 2026-10-18 as a gate: no edge on its own (-0.1 to -0.2R net), and
+# grade A already sweeps in 99% of cases. So it is reported, never graded.
+
+def test_manipulation_checklist_on_a_sweep_and_body_engulf():
+    bars = _with_pattern(_pullback_lead(), BULL_PREV, BULL_CUR)
+    m = e.manipulation_checklist(bars, "bullish")
+    assert m["sweep"] is True                      # low 1.1104 under the previous low 1.1108
+    assert m["swept_level"] == 1.1108
+    assert m["body_engulf"] is True                # close 1.1132 above the previous body top 1.1120
+    assert m["day_extreme"] is True                # the wick is the low of the UTC day so far
+    assert m["session"] == "Asian"                 # candle opens 01:15 UTC
+    assert m["all"] is True
+
+
+def test_manipulation_checklist_without_a_sweep_or_day_low():
+    no_sweep_cur = (1.1110, 1.1136, 1.1109, 1.1132)   # low stays above the previous low
+    m = e.manipulation_checklist(_with_pattern(_lead_in(), BULL_PREV, no_sweep_cur), "bullish")
+    assert m["sweep"] is False and m["day_extreme"] is False and m["all"] is False
+    assert m["body_engulf"] is True
+
+
+def test_manipulation_checklist_bearish_mirror():
+    m = e.manipulation_checklist(_with_pattern(_lead_in(), BEAR_PREV, BEAR_CUR), "bearish")
+    assert m["sweep"] is True and m["swept_level"] == 1.1122
+    assert m["body_engulf"] is True                # close 1.1098 below the previous body bottom 1.1110
+
+
+def test_session_labels():
+    h = lambda hour: e._session_name(T0 - T0 % 86400 + hour * 3600)
+    assert (h(3), h(8), h(14), h(22)) == ("Asian", "London", "New York", "Asian")
+
+
+def test_signal_rows_carry_the_checklist_but_grade_ignores_it():
+    a = e.analyze_timeframe("EUR/USD", _with_pattern(_pullback_lead(), BULL_PREV, BULL_CUR), UP_H4, timeframe="H1")
+    assert a["grade"] == "A" and a["manipulation"]["all"] is True
+    no_sweep_cur = (1.1110, 1.1136, 1.1109, 1.1132)
+    b = e.analyze_timeframe("EUR/USD", _with_pattern(_pullback_lead(), BULL_PREV, no_sweep_cur), UP_H4, timeframe="H1")
+    assert b["manipulation"]["sweep"] is False
+    assert b["grade"] == "B" and b["at_extreme"] is False   # the previous candle made the low: existing swing rule decides
+
+
+def test_discord_embed_shows_the_checklist(monkeypatch):
+    sent = _alert_harness(monkeypatch)
+    alerts.alert_engulfing_setup("EUR/USD", _pair_row())
+    field = next(f for f in sent[0]["fields"] if f["name"].startswith("Manipulation candle"))
+    assert "Swept previous low" in field["value"] and "1.1108" in field["value"]
+    assert "body" in field["value"] and "low of day" in field["value"]

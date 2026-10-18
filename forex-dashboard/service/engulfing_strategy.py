@@ -139,6 +139,42 @@ def _in_session(ts_utc: int) -> bool:
     return SESSION_START_UTC <= hour < SESSION_END_UTC
 
 
+def _session_name(ts_utc: int) -> str:
+    """Session a candle opens in (UTC): London 07-12, New York 12-21, else Asian."""
+    hour = datetime.fromtimestamp(ts_utc, tz=timezone.utc).hour
+    if 7 <= hour < 12:
+        return "London"
+    if 12 <= hour < 21:
+        return "New York"
+    return "Asian"
+
+
+def manipulation_checklist(bars: list[dict], kind: str) -> dict:
+    """The 4H "manipulation candle" checks from the user's sweep & engulf
+    videos (2026-10-18), for the newest candle: did it sweep the previous
+    candle's low (buy) / high (sell), close beyond the previous BODY, and is
+    its wick the low / high of the UTC day so far? Plus the session it opened in.
+
+    INFORMATION ONLY - never graded. As a gate it tested negative (-0.1 to
+    -0.2R net over 29 instruments), and grade A already sweeps 99% of the time."""
+    prev, cur = bars[-2], bars[-1]
+    day = cur["ts_utc"] // 86400
+    today = [b for b in bars if b["ts_utc"] // 86400 == day]
+    if kind == "bullish":
+        swept_level = prev["low"]
+        sweep = cur["low"] < swept_level
+        body_engulf = cur["close"] > max(prev["open"], prev["close"])
+        day_extreme = cur["low"] <= min(b["low"] for b in today)
+    else:
+        swept_level = prev["high"]
+        sweep = cur["high"] > swept_level
+        body_engulf = cur["close"] < min(prev["open"], prev["close"])
+        day_extreme = cur["high"] >= max(b["high"] for b in today)
+    return {"sweep": sweep, "swept_level": swept_level, "body_engulf": body_engulf,
+            "day_extreme": day_extreme, "session": _session_name(cur["ts_utc"]),
+            "all": sweep and body_engulf and day_extreme}
+
+
 def _earlier_engulfing(bars: list[dict], kind: str, atr: float) -> bool:
     """Rule 5, as the rule card draws it: the newest candle is the SECOND
     engulfing of this kind, close to the first.
@@ -261,6 +297,10 @@ def analyze_timeframe(symbol: str, bars: list[dict], h4_candles: Optional[list[d
     htf_eng = recent_htf_engulfing(h4_candles, kind)
     if htf_eng:
         notes.append(f"the {htf_label} printed an engulfing the same way in its last 3 candles")
+    manip = manipulation_checklist(bars, kind)
+    if manip["all"]:
+        notes.append(f"manipulation candle: swept the previous {'low' if s == 1 else 'high'}, "
+                     f"closed beyond its body, {'low' if s == 1 else 'high'} of day ({manip['session']})")
     if not in_session:
         notes.append("outside London/NY hours")
     notes.append("UNVALIDATED - no edge in the walk-forward test")
@@ -269,7 +309,7 @@ def analyze_timeframe(symbol: str, bars: list[dict], h4_candles: Optional[list[d
         "setup": "BUY" if s == 1 else "SELL", "grade": grade, "score": score, "state": "SIGNAL",
         "with_trend": with_trend, "confirmed_counter": confirmed_counter, "full_engulf": full,
         "strength": strength, "at_extreme": extreme,
-        "htf_engulfing": htf_eng,
+        "htf_engulfing": htf_eng, "manipulation": manip,
         "entry": entry, "entry_25": retrace(0.25), "entry_50": retrace(0.50),
         "sl": sl, "tp1": tp1, "rr1": TARGET_RR,
         "sl_pips": round(risk / pip, 1), "body_atr": round(body / atr, 2) if atr else None,

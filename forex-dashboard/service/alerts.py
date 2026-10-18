@@ -1666,6 +1666,18 @@ def _alert_engulfing_leg(pair: str, row: dict):
         ],
         "footer": {"text": f"Engulfing {tf} (unvalidated) · {_now_utc_str()} ({_now_sast_str()} SAST)"},
     }
+    manip = row.get("manipulation")
+    if manip:
+        side = "low" if setup == "BUY" else "high"
+        tick = lambda ok: "✅" if ok else "❌"
+        embed["fields"].append({
+            "name": "Manipulation candle (info only, not graded)",
+            "value": (f"{tick(manip.get('sweep'))} Swept previous {side} `{_fmt_price(manip.get('swept_level'), pair)}`\n"
+                      f"{tick(manip.get('body_engulf'))} Closed beyond previous body\n"
+                      f"{tick(manip.get('day_extreme'))} Wick is the {side} of day\n"
+                      f"🕐 {manip.get('session', '?')} session candle"),
+            "inline": False,
+        })
     if _post_discord(embed):
         _mark_sent(pair, rule)
         if sig_ts is not None:

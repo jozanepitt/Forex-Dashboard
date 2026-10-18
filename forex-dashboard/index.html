@@ -948,9 +948,10 @@ td.mono{font-family:var(--font-mono)}
           <th>Stop pips</th>
           <th>Close</th>
           <th>Swing</th>
+          <th title="Manipulation candle (info only): S = swept the previous candle's low/high, B = closed beyond the previous body, D = wick is the low/high of the day">Manipulation</th>
         </tr>
       </thead>
-      <tbody id="engulfingTableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="engulfingTableBody"><tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>Engulfing:</b> two candles of opposite colour where the second's body completely covers the first's.
@@ -959,6 +960,7 @@ td.mono{font-family:var(--font-mono)}
       or 25% / 50% back into the engulfing candle. <b>Rule 5</b> — an engulfing against the trend shows as
       <i>Wait</i> until a second one confirms it close by (within 8 candles, before price has run off or
       taken out the first one); it then shows as a <i>reversal</i> signal, so its direction is the opposite of the Trend column. Grade A = with the trend, a strong close (beyond the previous candle's wick) and made at the 20-candle low or high; grade B = any other with-trend setup, or a confirmed reversal. Grades A and B are sent to Discord. Target is 2× the risk.
+      <b>Manipulation</b> (information only, does not change the grade) — the 4H sweep &amp; engulf checks: <b>S</b> the candle swept the previous candle's low (buy) / high (sell), <b>B</b> it closed beyond the previous candle's body, <b>D</b> its wick is the low / high of the UTC day so far; plus the session it opened in (London 07–12, New York 12–21, else Asian, UTC). Hover for the swept level.
     </div>
   </div>
 
@@ -6141,6 +6143,17 @@ function renderEngulfingTable(data) {
     return `<span style="color:${c}">${t}</span>`;
   };
   const px = (v, sym) => v != null ? _crtFmtPrice(v, sym) : '—';
+  // Manipulation-candle checklist from the sweep & engulf videos: information only, never graded.
+  const manipCell = (p) => {
+    const m = p.manipulation;
+    if (!m) return '—';
+    const side = p.setup === 'SELL' ? 'high' : 'low';
+    const mark = (ok, letter) => `<span style="color:${ok ? 'var(--green)' : 'var(--text-muted)'}">${letter}${ok ? '✓' : '✗'}</span>`;
+    const tip = `Swept previous ${side} ${px(m.swept_level, p.symbol)}: ${m.sweep ? 'yes' : 'no'} · ` +
+                `closed beyond previous body: ${m.body_engulf ? 'yes' : 'no'} · ${side} of day: ${m.day_extreme ? 'yes' : 'no'} · ${m.session} session`;
+    return `<span title="${tip}">${mark(m.sweep, 'S')} ${mark(m.body_engulf, 'B')} ${mark(m.day_extreme, 'D')} ` +
+           `<span style="color:var(--text-muted)">· ${m.session}</span></span>`;
+  };
 
   const rows = rowsData.map(p => {
     let [c, label] = stateMap[p.state] || ['var(--text-muted)', p.state || '—'];
@@ -6162,9 +6175,10 @@ function renderEngulfingTable(data) {
       <td>${p.sl_pips != null ? p.sl_pips : '—'}</td>
       <td>${p.strength ? p.strength.replace('_', ' ') : '—'}</td>
       <td>${p.at_extreme == null ? '—' : (p.at_extreme ? '<span style="color:var(--green)">yes</span>' : 'no')}</td>
+      <td>${manipCell(p)}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="14" style="text-align:center;padding:24px">No data.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="15" style="text-align:center;padding:24px">No data.</td></tr>';
 
   summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
     `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> · ` +
