@@ -345,6 +345,7 @@ td.mono{font-family:var(--font-mono)}
 .trend-footer{padding:14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;margin-top:14px;font-size:.78rem;color:var(--text-secondary);line-height:1.6}
 /* Journal */
 .mode-tab[data-mode="engulfing"].active{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)}
+.mode-tab[data-mode="sweep"].active{background:rgba(45,212,191,.12);color:#2dd4bf;border:1px solid rgba(45,212,191,.3)}
 .mode-tab[data-mode="tdi123"].active{background:rgba(236,72,153,.12);color:#ec4899;border:1px solid rgba(236,72,153,.3)}
 .mode-tab[data-mode="journal"].active{background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3)}
 .mode-tab[data-mode="backtest"].active{background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
@@ -465,6 +466,7 @@ td.mono{font-family:var(--font-mono)}
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="vwap_bounce">🪃 VWAP Bounce</button>
   <button class="mode-tab" data-mode="engulfing">🕯 Engulfing</button>
+  <button class="mode-tab" data-mode="sweep">🧲 Sweep</button>
   <button class="mode-tab" data-mode="tdi123">🎯 TDI 123</button>
   <button class="mode-tab" data-mode="id50">🎯 ID50 M15</button>
   <button class="mode-tab" data-mode="journal">📒 Journal</button>
@@ -810,6 +812,7 @@ td.mono{font-family:var(--font-mono)}
         <tr>
           <th>Pair</th>
           <th>Setup</th>
+          <th>Grade</th>
           <th>Entry</th>
           <th>Stop</th>
           <th>Target</th>
@@ -819,7 +822,7 @@ td.mono{font-family:var(--font-mono)}
           <th>Session</th>
         </tr>
       </thead>
-      <tbody id="vwap9emaTableBody"><tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="vwap9emaTableBody"><tr><td colspan="10"style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>VWAP+9EMA (cross-only, ema=9, rr=2.0):</b> fires purely on the 9 EMA crossing the
@@ -831,6 +834,10 @@ td.mono{font-family:var(--font-mono)}
       The VWAP and ±1σ/±2σ standard-deviation band columns are shown for your own reference
       only — session-anchored, (H+L+C)/3 source, same as the VWAP line itself — and play no
       part in the BUY/SELL signal.
+      <br><b>Grade A</b> (the only grade sent to Discord) = no opposite cross on the pair in the previous 2 hours,
+      stop no wider than 1.5× the M15 ATR, and on the right side of the H1 200 EMA; Discord also skips it within
+      60 minutes of high-impact news. Every other cross is <b>grade B</b> (shown here only). Hover a row for what an
+      A was missing.
       <br><b>⚠ This exact rule has never been backtested</b> — it replaces the earlier
       "vp-climax" variant (which failed its own honest backtest, 0/48) with a completely
       different, simpler rule, not a re-tuned version of it. Zero historical validation on
@@ -921,6 +928,45 @@ td.mono{font-family:var(--font-mono)}
       targets the VWAP itself, TP2 the opposite band overshoot. Setups are flagged stale once past their time-stop.
       Adapted from a US-equity research spec — unvalidated for forex, no independent backtest — paper-trade before
       risking capital.
+    </div>
+  </div>
+
+  <!-- ── Sweep (LuxAlgo stop-run dot + close back inside, M15) ─────────────── -->
+  <div class="table-container" id="sweepContainer" style="display:none">
+    <div class="trend-controls">
+      <button class="trend-refresh-btn" id="sweepRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta">M15 · stop-run dots (swing high/low taken on 2× volume) · session VWAP ±2σ (17:00 New York anchor) · forex, metals, indices, crypto, oil, EUR/CAD</div>
+    </div>
+    <div class="trend-summary" id="sweepSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Setup</th>
+          <th>Grade</th>
+          <th>State</th>
+          <th>Swept</th>
+          <th>Entry</th>
+          <th>Stop</th>
+          <th>Target 1</th>
+          <th>R:R</th>
+          <th>Target 2</th>
+          <th>VWAP</th>
+          <th>Band</th>
+          <th>H1 trend</th>
+          <th>Volume</th>
+        </tr>
+      </thead>
+      <tbody id="sweepTableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>Sweep:</b> a dot means stops beyond a 20-bar swing high or low were taken on a volume surge (2× the 20-bar average).
+      The dot alone is not a trade. <b>Signal</b> = the next candle closes back inside the swept level: sell after a swept high, buy after a swept low.
+      <b>Waiting</b> = dot just printed, waiting for that close. <b>Breakout</b> = price kept closing beyond the level, so no trade.
+      Entry is the confirmation close; stop just beyond the sweep wick; target 1 is the session VWAP, or a volume POC / IFVG if one is closer; target 2 is the far band.
+      Grade A = the sweep reached the outer band, the H1 200 EMA agrees, and target 1 is at least 1.5× the stop. Grade B = valid and at least 1×, missing one of those
+      (forex pairs need the band for B, since their volume is tick volume). Grades A and B are sent to Discord.
+      Re-created from the LuxAlgo Order Flow VWAP Deviation description, so dots can differ slightly from TradingView. Not backtested.
     </div>
   </div>
 
@@ -5246,7 +5292,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'engulfing' || mode === 'tdi123' || mode === 'vwap9ema' || mode === 'id50' || mode === 'vwap_bounce';
+    const isScanner = mode === 'vwap_mr' || mode === 'engulfing' || mode === 'tdi123' || mode === 'vwap9ema' || mode === 'id50' || mode === 'vwap_bounce' || mode === 'sweep';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -5288,6 +5334,8 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
     if (id50Container)    id50Container.style.display    = (mode === 'id50')      ? 'block' : 'none';
     if (vwap9emaContainer) vwap9emaContainer.style.display = (mode === 'vwap9ema') ? 'block' : 'none';
+    const sweepContainer = document.getElementById('sweepContainer');
+    if (sweepContainer) sweepContainer.style.display = (mode === 'sweep') ? 'block' : 'none';
 
     // Load content for the active mode
     if (mode === 'indicator') render();           // BTMM dashboard
@@ -5298,6 +5346,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'id50')      loadId50();
     if (mode === 'vwap9ema')  loadVwap9ema();
     if (mode === 'vwap_bounce') loadVwapBounce();
+    if (mode === 'sweep')     loadSweep();
   });
 });
 
@@ -5992,6 +6041,7 @@ function renderVwap9emaTable(data) {
     return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
       <td><b>${p.symbol}</b></td>
       <td>${_crtSetupCell(p)}</td>
+      <td>${(p.grade === 'A' || p.grade === 'B') ? _crtGradeCell(p.grade) : '—'}</td>
       <td>${p.entry != null ? _crtFmtPrice(p.entry, p.symbol) : '—'}</td>
       <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
       <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
@@ -6001,7 +6051,7 @@ function renderVwap9emaTable(data) {
       <td>${sessionCell}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center;padding:24px">No data.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="10" style="text-align:center;padding:24px">No data.</td></tr>';
 
   const stale = (data.stale_pairs && data.stale_pairs.length)
     ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
@@ -6091,6 +6141,78 @@ function renderVwapBounceTable(data) {
 }
 
 document.getElementById('vwapBounceRefreshBtn')?.addEventListener('click', loadVwapBounce);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Sweep (stop-run dot + close back inside, M15) — loader + renderer
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function loadSweep() {
+  const tbody   = document.getElementById('sweepTableBody');
+  const summary = document.getElementById('sweepSummary');
+  const btn     = document.getElementById('sweepRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Scanning…';
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const resp = await fetch(`${baseUrl}/sweep`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    renderSweepTable(await resp.json());
+  } catch (err) {
+    console.error('Sweep load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load Sweep scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderSweepTable(data) {
+  const tbody   = document.getElementById('sweepTableBody');
+  const summary = document.getElementById('sweepSummary');
+  const stateRank = {SIGNAL: 0, 'WAIT-CLOSE': 1, BREAKOUT: 2, EXPIRED: 3, 'NO-SWEEP': 4, 'NO-DATA': 5, ERROR: 6};
+  const gradeRank = {A: 0, B: 1, C: 2};
+  const pairs = (data.pairs || []).slice().sort((a, b) =>
+    (stateRank[a.state] ?? 9) - (stateRank[b.state] ?? 9) || (gradeRank[a.grade] ?? 9) - (gradeRank[b.grade] ?? 9));
+  const stateCell = p => {
+    const m = {SIGNAL: ['var(--green)', 'Signal — enter'], 'WAIT-CLOSE': ['var(--yellow)', 'Swept — wait for close'],
+               BREAKOUT: ['var(--text-muted)', 'Breakout — no trade'], EXPIRED: ['var(--text-muted)', 'Entry passed'],
+               'NO-SWEEP': ['var(--text-muted)', 'No sweep'], 'NO-DATA': ['var(--text-muted)', 'No data'], ERROR: ['var(--red)', 'Error']};
+    const [c, label] = m[p.state] || ['var(--text-muted)', p.state || '—'];
+    return `<span style="color:${c}">${label}</span>`;
+  };
+  const f = (v, s) => v != null ? _crtFmtPrice(v, s) : '—';
+  const rows = pairs.map(p => {
+    const swept = p.sweep_side ? `${p.sweep_side === 'high' ? 'High ▲' : 'Low ▼'} ${f(p.level, p.symbol)}` : '—';
+    const band = p.at_band == null ? '—' : (p.at_band ? '<span style="color:var(--green)">outer band</span>' : 'inside');
+    const trend = p.h1_trend ? `${p.h1_trend}${p.with_trend === false ? ' (against)' : ''}` : '—';
+    const vol = p.vol_ratio != null ? `${p.vol_ratio}×${p.tick_volume ? ' tick' : ''}` : '—';
+    return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
+      <td><b>${p.symbol}</b></td>
+      <td>${p.state === 'SIGNAL' ? _crtSetupCell(p) : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td>${p.state === 'SIGNAL' ? _crtGradeCell(p.grade) : '—'}</td>
+      <td>${stateCell(p)}</td>
+      <td>${swept}</td>
+      <td>${f(p.entry, p.symbol)}</td>
+      <td>${f(p.sl, p.symbol)}${p.sl_pips != null ? ` <span style="color:var(--text-muted)">(${p.sl_pips})</span>` : ''}</td>
+      <td>${f(p.tp1, p.symbol)}${p.tp1_kind ? ` <span style="color:var(--text-muted)">${p.tp1_kind}</span>` : ''}</td>
+      <td>${p.rr1 != null ? '1:' + p.rr1.toFixed(1) : '—'}</td>
+      <td>${f(p.tp2, p.symbol)}</td>
+      <td>${f(p.vwap, p.symbol)}</td>
+      <td>${band}</td>
+      <td>${trend}</td>
+      <td>${vol}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="14" style="text-align:center;padding:24px">No data.</td></tr>';
+  const stale = (data.stale_pairs && data.stale_pairs.length)
+    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale (${data.stale_pairs.join(', ')})</span>` : '';
+  const upd = data.cached_at ? ` · updated ${new Date(data.cached_at * 1000).toLocaleTimeString()}` : '';
+  summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
+    `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span> · ` +
+    `<span style="color:var(--yellow)">${data.waiting || 0} waiting for close</span>${stale}${upd}`;
+}
+
+document.getElementById('sweepRefreshBtn')?.addEventListener('click', loadSweep);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Engulfing (trend-following engulfing candle) — loader + renderer
@@ -6552,6 +6674,7 @@ if (id50Btn) id50Btn.addEventListener('click', loadId50);
       vwap_mr: typeof loadVwapMr === 'function' ? loadVwapMr : null,
       vwap_bounce: typeof loadVwapBounce === 'function' ? loadVwapBounce : null,
       vwap9ema: typeof loadVwap9ema === 'function' ? loadVwap9ema : null,
+      sweep: typeof loadSweep === 'function' ? loadSweep : null,
     };
     const loader = (typeof currentMode !== 'undefined') ? scannerLoaders[currentMode] : null;
     if (loader) loader();

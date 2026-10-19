@@ -46,6 +46,7 @@ RUNNERS = [
      ["alert_id50_setup", "alert_id50_watch"]),
     ("_run_crt_5am_alerts", "crt_strategy", "analyze_universe_5am", ["alert_crt_5am_setup"]),
     ("_run_vwap_bounce_alerts", "vwap_bounce_strategy", "analyze_universe", ["alert_vwap_bounce_setup"]),
+    ("_run_sweep_alerts", "sweep_strategy", "analyze_universe", ["alert_sweep_setup"]),
 ]
 
 

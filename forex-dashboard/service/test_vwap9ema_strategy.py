@@ -97,7 +97,8 @@ def test_buy_signal_on_cross_above():
     assert abs(row["sl"] - stop) < 1e-9
     assert abs(row["tp1"] - (row["entry"] + m.RR * (row["entry"] - stop))) < 1e-9
     assert row["cross_ts"] == candles[20]["ts_utc"]
-    assert row["grade"] == "UNVALIDATED"
+    assert row["grade"] == "B"                    # no H1 data -> the trend check fails
+    assert row["validated"] is False
     assert "crossed above" in row["notes"].lower()
 
 
@@ -110,8 +111,46 @@ def test_sell_signal_on_cross_below():
     stop = swing + m.STOP_BUFFER * (swing - row["entry"])
     assert abs(row["sl"] - stop) < 1e-9
     assert abs(row["tp1"] - (row["entry"] - m.RR * (stop - row["entry"]))) < 1e-9
-    assert row["grade"] == "UNVALIDATED"
+    assert row["grade"] == "B"
     assert "crossed below" in row["notes"].lower()
+
+
+# ── grades (user request 2026-10-19) ──────────────────────────────────────────
+
+def _flat_crosses(n=40):
+    """e9 and vwap series with no crosses: e9 above vwap throughout."""
+    return [1.0] * n, [0.9] * n
+
+
+def test_grade_a_needs_no_flip_tight_stop_and_the_h1_trend():
+    e9, vwap = _flat_crosses()
+    grade, misses = m.grade_signal(1, 35, e9, vwap, risk=0.001, rr=2.0, atr=0.001, trend="bullish")
+    assert grade == "A" and misses == []
+
+
+def test_opposite_cross_in_the_last_two_hours_is_grade_b():
+    e9, vwap = _flat_crosses()
+    e9[20], e9[21] = 0.8, 1.0                    # a bearish cross at 20 (e9 drops below vwap) ...
+    grade, misses = m.grade_signal(1, 35, e9, vwap, risk=0.001, rr=2.0, atr=0.001, trend="bullish")
+    assert grade == "B" and any("flip" in x for x in misses)
+    # ... but one older than 24 bars no longer counts
+    grade, _ = m.grade_signal(1, 50, e9 + [1.0] * 20, vwap + [0.9] * 20,
+                              risk=0.001, rr=2.0, atr=0.001, trend="bullish")
+    assert grade == "A"
+
+
+def test_wide_stop_or_wrong_trend_is_grade_b():
+    e9, vwap = _flat_crosses()
+    assert m.grade_signal(1, 35, e9, vwap, risk=0.002, rr=2.0, atr=0.001, trend="bullish")[0] == "B"
+    assert m.grade_signal(1, 35, e9, vwap, risk=0.001, rr=2.0, atr=0.001, trend="bearish")[0] == "B"
+    assert m.grade_signal(1, 35, e9, vwap, risk=0.001, rr=2.0, atr=None, trend="bullish")[0] == "B"
+
+
+def test_h1_trend_uses_the_200_ema():
+    up = [{"close": 1.0 + 0.001 * k} for k in range(250)]
+    assert m._h1_trend(up) == "bullish"
+    assert m._h1_trend(list(reversed(up))) == "bearish"
+    assert m._h1_trend(up[:150]) is None
 
 
 def test_no_signal_on_flat_series():

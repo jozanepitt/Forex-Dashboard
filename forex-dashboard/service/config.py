@@ -192,10 +192,20 @@ VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in (
 # honest backtest (0/48, see docs/superpowers/specs/2026-09-13-vwap9ema-mt5-
 # validation-design.md). Built anyway per explicit user decision for manual
 # trading with their own judgment (see docs/superpowers/specs/2026-09-14-
-# vwap9ema-live-replaces-1am-crt-design.md). No grade-only flag: there are no
-# grade tiers to filter by. No watch-alerts: deliberately not adding "still
-# forming" noise to a strategy with zero validated edge.
+# vwap9ema-live-replaces-1am-crt-design.md). No watch-alerts: deliberately not
+# adding "still forming" noise to a strategy with zero validated edge.
 VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+# Grades added 2026-10-19 at the user's request after the feed flooded with
+# flip-flopping, post-news alerts: only grade A goes to Discord by default
+# (see vwap9ema_strategy.grade_signal). News is checked at the alert layer.
+VWAP9EMA_GRADE_A_ONLY = os.environ.get("VWAP9EMA_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
+VWAP9EMA_NEWS_FILTER = os.environ.get("VWAP9EMA_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+
+# Sweep (LuxAlgo Order Flow VWAP Deviation stop-run dots, M15) — UNVALIDATED.
+# User decision 2026-10-19: grades A and B go to Discord; tighten to A later.
+SWEEP_ALERTS_ENABLED = os.environ.get("SWEEP_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+SWEEP_GRADE_A_ONLY = os.environ.get("SWEEP_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+SWEEP_NEWS_FILTER = os.environ.get("SWEEP_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
 # VWAP Bounce (M15) — trend-continuation entries off the session VWAP with the
 # 50-bar MVWAP as the trend filter. UNVALIDATED (rules come from chart review,

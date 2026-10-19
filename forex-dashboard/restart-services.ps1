@@ -22,8 +22,13 @@ $py = "C:\Users\jzpit\AppData\Local\Programs\Python\Python312\python.exe"
 $log = Join-Path $dir "guardian.log"
 
 function Write-Log($msg) {
+    # The freshly started guardian writes to the same file; retry instead of
+    # silently losing the line when the file is briefly locked.
     $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    Add-Content -Path $log -Value "$ts  restart: $msg" -Encoding utf8
+    foreach ($try in 1..10) {
+        try { Add-Content -Path $log -Value "$ts  restart: $msg" -Encoding utf8 -ErrorAction Stop; return }
+        catch { Start-Sleep -Milliseconds 200 }
+    }
 }
 
 function Get-Procs($exeFilter, $pattern) {

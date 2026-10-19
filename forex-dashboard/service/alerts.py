@@ -21,7 +21,8 @@ from config import (
     BTMM_ID50_GRADE_A_ONLY, BTMM_ID50_WATCH_ALERTS_ENABLED,
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
-    VWAP9EMA_ALERTS_ENABLED,
+    VWAP9EMA_ALERTS_ENABLED, VWAP9EMA_GRADE_A_ONLY, VWAP9EMA_NEWS_FILTER,
+    SWEEP_ALERTS_ENABLED, SWEEP_GRADE_A_ONLY, SWEEP_NEWS_FILTER,
     VWAP_BOUNCE_ALERTS_ENABLED, VWAP_BOUNCE_GRADE_A_ONLY, VWAP_BOUNCE_NEWS_FILTER,
 )
 from providers import forexfactory
@@ -1493,9 +1494,24 @@ def alert_vwap9ema_setup(pair: str, row: dict):
         log.debug("VWAP9EMA SUPPRESSED %s: incomplete trade plan", pair)
         return
 
+    grade = row.get("grade")
+    if grade != "A" and (VWAP9EMA_GRADE_A_ONLY or grade != "B"):
+        log.debug("VWAP9EMA FILTERED %s: grade %s", pair, grade)
+        return
+
     if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
         log.warning("VWAP9EMA alert BLOCKED for %s: bad R:R", pair)
         return
+
+    if VWAP9EMA_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("VWAP9EMA news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            log.info("VWAP9EMA SUPPRESSED %s: high-impact news within 60m", pair)
+            return
 
     rule = f"vwap9ema_{setup.lower()}"
     if _is_throttled(pair, rule):
@@ -1518,6 +1534,7 @@ def alert_vwap9ema_setup(pair: str, row: dict):
         "color": colour,
         "fields": [
             {"name": "Setup", "value": f"**{setup}**", "inline": True},
+            {"name": "Grade", "value": f"**{grade}**", "inline": True},
             {"name": "Entry", "value": f"`{_fmt_price(entry, pair)}`" if entry is not None else "—", "inline": True},
             {"name": "Stop Loss", "value": f"`{_fmt_price(sl, pair)}`" if sl is not None else "—", "inline": True},
             {"name": "Target", "value": f"`{_fmt_price(tp1, pair)}`" if tp1 is not None else "—", "inline": True},
@@ -1527,7 +1544,7 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     }
     if _post_discord(embed):
         _mark_sent(pair, rule)
-        log.info("VWAP9EMA alert sent: %s %s (UNVALIDATED strategy)", pair, setup)
+        log.info("VWAP9EMA alert sent: %s %s grade %s (UNVALIDATED strategy)", pair, setup, grade)
 
 
 def alert_vwap_bounce_setup(pair: str, row: dict):
@@ -1683,3 +1700,74 @@ def _alert_engulfing_leg(pair: str, row: dict):
         if sig_ts is not None:
             _engulf_last_alerted[(pair, tf)] = sig_ts
         log.info("ENGULF alert sent: %s [%s] %s grade %s (UNVALIDATED strategy)", pair, tf, setup, grade)
+
+
+# ── Sweep (LuxAlgo stop-run dot + close back inside) ─────────────────────────
+
+# pair -> timestamp of the confirmation candle last alerted (one alert per sweep).
+_sweep_last_alerted: dict[str, int] = {}
+
+
+def alert_sweep_setup(pair: str, row: dict):
+    """Fire for a confirmed sweep (sweep_strategy.py): grades A and B unless
+    SWEEP_GRADE_A_ONLY. UNVALIDATED strategy — every embed says so."""
+    if not SWEEP_ALERTS_ENABLED:
+        return
+    setup = row.get("setup")
+    if setup not in ("BUY", "SELL") or row.get("state") != "SIGNAL":
+        return
+    grade = row.get("grade")
+    if grade != "A" and (SWEEP_GRADE_A_ONLY or grade != "B"):
+        return
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+    if not (entry and sl and tp1):
+        return
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.info("SWEEP SUPPRESSED %s: R:R below 0.8", pair)
+        return
+    if SWEEP_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("SWEEP news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            log.info("SWEEP SUPPRESSED %s: high-impact news within 60m", pair)
+            return
+
+    sig_ts = row.get("signal_ts")
+    if sig_ts is not None and _sweep_last_alerted.get(pair) == sig_ts:
+        return
+    rule = f"sweep_{setup.lower()}_{grade}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    swept = "high (buy stops)" if row.get("sweep_side") == "high" else "low (sell stops)"
+    tp2 = row.get("tp2")
+    embed = {
+        "title": f"{arrow} {pair} — Sweep [M15] {setup}",
+        "description": row.get("notes") or "",
+        "color": _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"],
+        "fields": [
+            {"name": "Direction", "value": f"**{setup}**", "inline": True},
+            {"name": "Grade", "value": f"**{grade}**", "inline": True},
+            {"name": "Swept", "value": f"{swept} `{_fmt_price(row.get('level'), pair)}`", "inline": True},
+            {"name": "🎯 Entry (close back inside)", "value": f"`{_fmt_price(entry, pair)}`", "inline": True},
+            {"name": "🛑 Stop (beyond sweep wick)", "value": f"`{_fmt_price(sl, pair)}`  (−{row.get('sl_pips', 0)} pips)", "inline": True},
+            {"name": f"✅ Target 1 ({row.get('tp1_kind', 'VWAP')})",
+             "value": f"`{_fmt_price(tp1, pair)}`  (1 : {row.get('rr1', 0):.1f})", "inline": True},
+            {"name": "Target 2 (far band)", "value": f"`{_fmt_price(tp2, pair)}`" if tp2 else "—", "inline": True},
+            {"name": "Session VWAP", "value": f"`{_fmt_price(row.get('vwap'), pair)}`", "inline": True},
+            {"name": "Volume", "value": (f"{row.get('vol_ratio')}× average"
+                                         + (" (tick volume)" if row.get("tick_volume") else "")
+                                         if row.get("vol_ratio") else "n/a"), "inline": True},
+        ],
+        "footer": {"text": f"Sweep M15 (unvalidated) · take part at target 1, stop to break-even · "
+                           f"{_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        if sig_ts is not None:
+            _sweep_last_alerted[pair] = sig_ts
+        log.info("SWEEP alert sent: %s %s grade %s (UNVALIDATED strategy)", pair, setup, grade)

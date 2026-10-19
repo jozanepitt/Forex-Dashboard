@@ -11,10 +11,14 @@ backtested at all — it is not a re-tuned or lighter version of the old
 rule, it's a different rule entirely.
 
 Built for manual trading with the user's own judgment, not an automated
-trusted signal. There are deliberately NO grade tiers -- every row is
-either a real signal or NO-TRADE, and `grade` is always the literal string
-"UNVALIDATED" so the dashboard/alert layers can never accidentally render
-this as if it were a proven Grade-A signal like the other strategies.
+trusted signal. Since 2026-10-19 every signal carries a grade (user request,
+after the feed flooded with flip-flopping and post-news alerts):
+  A = no opposite cross on the same pair in the previous 2 hours, stop no
+      wider than 1.5x the M15 ATR, target at least 1.5x the stop (always true:
+      the target is fixed at 2R), and on the right side of the H1 200 EMA.
+  B = any other signal.
+Only A goes to Discord by default; the news check lives in the alert layer.
+The grade is a filter, not evidence of an edge: still UNVALIDATED.
 """
 from __future__ import annotations
 
@@ -74,6 +78,56 @@ SESSION_END_UTC = 23
 # cycle, so each scan must look at every bar that closed since the last one.
 CROSS_LOOKBACK_BARS = 3
 MIN_BARS = 12  # matches backtest_mt5.run_day()'s own floor (n<12 -> return []); below this the EMA hasn't converged
+H1_FETCH_LIMIT = 300
+FLIP_LOOKBACK_BARS = 24      # 2 hours of M5: an opposite cross inside this window = flip-flopping
+MAX_STOP_ATR = 1.5           # stop distance cap, in M15 ATR(14)
+MIN_RR_A = 1.5
+TREND_EMA = 200
+
+
+def _m15_atr(m5_candles: list[dict], n: int = 14) -> float | None:
+    """ATR(14) of the M15 bars built from the M5 series."""
+    groups: dict[int, list[dict]] = {}
+    for c in m5_candles:
+        groups.setdefault(c["ts_utc"] // 900, []).append(c)
+    m15 = [{"high": max(x["high"] for x in g), "low": min(x["low"] for x in g), "close": g[-1]["close"]}
+           for _, g in sorted(groups.items())]
+    if len(m15) < n + 1:
+        return None
+    trs = [max(b["high"] - b["low"], abs(b["high"] - a["close"]), abs(b["low"] - a["close"]))
+           for a, b in zip(m15, m15[1:])]
+    atr = sum(trs[:n]) / n
+    for tr in trs[n:]:
+        atr = (atr * (n - 1) + tr) / n
+    return atr
+
+
+def _h1_trend(h1_candles: list[dict] | None) -> str | None:
+    closes = [c["close"] for c in (h1_candles or [])]
+    if len(closes) < TREND_EMA:
+        return None
+    e = ema(closes, TREND_EMA)[-1]
+    return "bullish" if closes[-1] > e else "bearish"
+
+
+def grade_signal(sig: int, i: int, e9: list[float], vwap: list[float], risk: float,
+                 rr: float, atr: float | None, trend: str | None) -> tuple[str, list[str]]:
+    """Grade A or B for a cross at index i, plus the reasons A was missed."""
+    misses = []
+    for k in range(max(1, i - FLIP_LOOKBACK_BARS), i):
+        up = e9[k - 1] <= vwap[k - 1] and e9[k] > vwap[k]
+        down = e9[k - 1] >= vwap[k - 1] and e9[k] < vwap[k]
+        if (sig == 1 and down) or (sig == -1 and up):
+            misses.append("opposite cross in the last 2h (flip-flop)")
+            break
+    if atr is None or risk > MAX_STOP_ATR * atr:
+        misses.append(f"stop wider than {MAX_STOP_ATR}x M15 ATR" if atr else "no M15 ATR")
+    if rr < MIN_RR_A:
+        misses.append(f"target under {MIN_RR_A}x the stop")
+    want = "bullish" if sig == 1 else "bearish"
+    if trend != want:
+        misses.append(f"against the H1 200 EMA ({trend or 'no H1 data'})")
+    return ("A" if not misses else "B"), misses
 
 
 def _in_session(ts_utc: int) -> bool:
@@ -109,14 +163,14 @@ def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:
     return [c for c in m5_candles if c["ts_utc"] >= day_start]
 
 
-def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
+def analyze_pair(symbol: str, m5_candles: list[dict], h1_candles: list[dict] | None = None) -> dict:
     """VWAP+9EMA signal: the 9 EMA crossing the session VWAP on the M5 chart
     within the last CROSS_LOOKBACK_BARS closed bars, nothing else. Entry is
     the newest bar's close. Bullish cross (9EMA moves from at-or-below
     VWAP to above it) -> BUY; bearish cross -> SELL. The 9EMA runs over the
     FULL fetched M5 history (chart-true, never day-reset); the VWAP is
     anchored at the current forex day (00:00 UTC)."""
-    out: dict = {"symbol": symbol, "setup": "NO-TRADE", "grade": "UNVALIDATED"}
+    out: dict = {"symbol": symbol, "setup": "NO-TRADE", "grade": "NO-TRADE", "validated": False}
 
     if not m5_candles or not _in_session(m5_candles[-1]["ts_utc"]):
         out["in_active_session"] = False
@@ -215,13 +269,15 @@ def analyze_pair(symbol: str, m5_candles: list[dict]) -> dict:
         return out
     target = entry + sig * RR * risk
 
+    grade, misses = grade_signal(sig, i, e9, vwap, risk, RR, _m15_atr(m5_candles), _h1_trend(h1_candles))
     out.update({
         "setup": "BUY" if sig == 1 else "SELL",
+        "grade": grade, "grade_misses": misses,
         "entry": entry, "sl": stop, "tp1": target,
         "cross_ts": bars[i]["ts_utc"], "bars_since_cross": last - i,
         "notes": (f"9EMA crossed {'above' if sig == 1 else 'below'} VWAP. "
-                  f"UNVALIDATED strategy (no backtest at all) -- check volume "
-                  f"yourself before trading."),
+                  + (f"Grade B: {'; '.join(misses)}. " if misses else "Grade A. ")
+                  + "UNVALIDATED strategy -- check volume yourself before trading."),
     })
     return out
 
@@ -230,7 +286,7 @@ def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
     pairs = []
     for symbol, tf in candles_by_pair.items():
         m5 = tf.get("m5") or []
-        pairs.append(analyze_pair(symbol, m5))
+        pairs.append(analyze_pair(symbol, m5, tf.get("1h")))
     buys = sum(1 for p in pairs if p["setup"] == "BUY")
     sells = sum(1 for p in pairs if p["setup"] == "SELL")
     return {"pairs": pairs, "buys": buys, "sells": sells}

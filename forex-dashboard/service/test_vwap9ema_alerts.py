@@ -17,10 +17,16 @@ import pytest
 import alerts
 
 
+@pytest.fixture(autouse=True)
+def _no_news(monkeypatch):
+    """Keep the real economic calendar out of these tests."""
+    monkeypatch.setattr(alerts.forexfactory, "currencies_in_window", lambda *a, **k: set())
+
+
 def _good_row(setup="BUY"):
     return {
         "symbol": "USTEC", "setup": setup,
-        "entry": 100.00, "sl": 99.00, "tp1": 102.00,
+        "entry": 100.00, "sl": 99.00, "tp1": 102.00, "grade": "A",
         "notes": "test row",
     }
 
@@ -80,6 +86,41 @@ def test_alert_vwap9ema_setup_shows_bands_when_present(monkeypatch):
     assert "99.9" in bands_field["value"] and "101.1" in bands_field["value"]
 
 
+def _recorder(monkeypatch):
+    posted = []
+    monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
+    monkeypatch.setattr(alerts, "_is_throttled", lambda pair, rule: False)
+    monkeypatch.setattr(alerts, "VWAP9EMA_ALERTS_ENABLED", True)
+    return posted
+
+
+def test_grade_b_is_not_sent_by_default(monkeypatch):
+    """User decision 2026-10-19: only grade A goes to Discord."""
+    posted = _recorder(monkeypatch)
+    monkeypatch.setattr(alerts, "VWAP9EMA_GRADE_A_ONLY", True)
+    alerts.alert_vwap9ema_setup("USTEC", {**_good_row(), "grade": "B"})
+    assert posted == []
+    alerts.alert_vwap9ema_setup("USTEC", _good_row())
+    assert len(posted) == 1
+    assert any(f["name"] == "Grade" and "A" in f["value"] for f in posted[0]["fields"])
+
+
+def test_grade_b_is_sent_when_a_only_is_switched_off(monkeypatch):
+    posted = _recorder(monkeypatch)
+    monkeypatch.setattr(alerts, "VWAP9EMA_GRADE_A_ONLY", False)
+    alerts.alert_vwap9ema_setup("USTEC", {**_good_row(), "grade": "B"})
+    assert len(posted) == 1
+
+
+def test_news_blocks_the_alert(monkeypatch):
+    """The 14:49 post-CPI burst: high-impact USD news within the hour."""
+    posted = _recorder(monkeypatch)
+    monkeypatch.setattr(alerts, "VWAP9EMA_NEWS_FILTER", True)
+    monkeypatch.setattr(alerts.forexfactory, "currencies_in_window", lambda *a, **k: {"USD"})
+    alerts.alert_vwap9ema_setup("EUR/USD", _good_row())
+    assert posted == []
+
+
 def test_alert_vwap9ema_setup_rejects_bad_rr(monkeypatch):
     posted = []
     monkeypatch.setattr(alerts, "_post_discord", lambda embed: (posted.append(embed) or True))
@@ -136,6 +177,8 @@ def test_alert_path_vwap_is_anchored_at_midnight_not_the_last_100_bars(monkeypat
                        "low": p - 0.0002, "close": p, "volume": 100.0})
 
     def fake_read_candles(symbol, interval, limit=800):
+        if interval == "1h":                       # H1 only feeds the grade's trend check
+            return []
         assert interval == "5min"
         return series[-limit:]
 

@@ -25,6 +25,7 @@ import tdi_cycle_123
 import vwap_mean_reversion_strategy
 import vwap9ema_strategy
 import vwap_bounce_strategy
+import sweep_strategy
 import fetcher
 import restart
 import scheduler
@@ -171,7 +172,8 @@ def vwap9ema():
     stale_set: set[str] = set()
     for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
         bars, stale = fetcher.get_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT)
-        candles_by_pair[sym] = {"m5": bars}
+        candles_by_pair[sym] = {"m5": bars,
+                                "1h": cache.read_candles(sym, "1h", limit=vwap9ema_strategy.H1_FETCH_LIMIT)}
         if stale:
             stale_set.add(sym)
 
@@ -205,6 +207,27 @@ def vwap_bounce():
     result["cached_at"] = int(now)
     _VWAP_BOUNCE_CACHE["payload"] = result
     _VWAP_BOUNCE_CACHE["ts"] = now
+    return jsonify(result)
+
+
+_SWEEP_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_SWEEP_TTL_SECS = 60
+
+
+@app.get("/sweep")
+def sweep():
+    """Sweep scanner (M15 stop-run dot + close back inside), cache-only.
+    UNVALIDATED — see sweep_strategy.py's module docstring."""
+    import time as _t
+
+    now = _t.time()
+    if _SWEEP_CACHE["payload"] is not None and (now - _SWEEP_CACHE["ts"]) < _SWEEP_TTL_SECS:
+        return jsonify(_SWEEP_CACHE["payload"])
+    result = sweep_strategy.scan_cached(
+        lambda sym, interval, limit: cache.read_candles(sym, interval, limit=limit), now)
+    result["cached_at"] = int(now)
+    _SWEEP_CACHE["payload"] = result
+    _SWEEP_CACHE["ts"] = now
     return jsonify(result)
 
 

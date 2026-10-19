@@ -254,6 +254,17 @@ def _refresh_all_inner():
         except Exception as e:
             log.warning("Engulfing extra fetch failed for %s: %s", sym, e)
 
+    # Symbols only the Sweep scanner adds (oil also needs M15; EUR/CAD needs M15 + H1).
+    import sweep_strategy
+    for sym in sweep_strategy.EXTRA_SYMBOLS:
+        time.sleep(FANOUT_DELAY_SECS)
+        try:
+            _fetch_guarded(sym, "15min", limit=sweep_strategy.M15_LIMIT)
+            if sym not in engulfing_strategy.EXTRA_SYMBOLS:
+                _fetch_guarded(sym, "1h", limit=sweep_strategy.H1_LIMIT)
+        except Exception as e:
+            log.warning("Sweep extra fetch failed for %s: %s", sym, e)
+
     # Fetch M5 candles for the VWAP+9EMA universe (full PRIORITY_PAIRS list --
     # paced same as the main fetch loop above so this doesn't hammer MT5).
     # No other live strategy uses M5; every other fetch above is M15/1h/4h/1day.
@@ -328,6 +339,12 @@ def _refresh_all_inner():
         _run_vwap9ema_alerts()
     except Exception as e:
         log.warning("VWAP9EMA alerts failed: %s", e)
+
+    # Run the Sweep (M15 stop-run dot) scanner + Discord alerts (grades A and B)
+    try:
+        _run_sweep_alerts()
+    except Exception as e:
+        log.warning("Sweep alerts failed: %s", e)
 
     # Notify dashboard subscribers via WebSocket (listener registered by app.main).
     _notify_refresh(updated)
@@ -452,6 +469,7 @@ def _run_vwap9ema_alerts():
     for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
         candles_by_pair[sym] = {
             "m5": cache.read_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT),
+            "1h": cache.read_candles(sym, "1h", limit=vwap9ema_strategy.H1_FETCH_LIMIT),
         }
     live = _live_symbols("VWAP9EMA", candles_by_pair, [("m5", "5min")])
     result = vwap9ema_strategy.analyze_universe(candles_by_pair)
@@ -462,6 +480,24 @@ def _run_vwap9ema_alerts():
             alerts.alert_vwap9ema_setup(row["symbol"], row)
         except Exception as e:
             log.debug("VWAP9EMA alert eval failed for %s: %s", row.get("symbol"), e)
+
+
+def _run_sweep_alerts():
+    """Run the Sweep scanner on the cache and alert confirmed setups."""
+    import cache
+    import sweep_strategy
+
+    candles_by_pair = sweep_strategy.read_bundle(
+        lambda sym, interval, limit: cache.read_candles(sym, interval, limit=limit))
+    live = _live_symbols("SWEEP", candles_by_pair, [("m15", "15min")])
+    result = sweep_strategy.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
+        try:
+            alerts.alert_sweep_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("SWEEP alert eval failed for %s: %s", row.get("symbol"), e)
 
 
 def _run_tdi123_alerts():

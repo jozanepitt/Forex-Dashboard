@@ -58,6 +58,7 @@ SYMBOL_SPECS: dict[str, dict] = {
     "AUD/CAD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
     "AUD/CHF": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
     "AUD/NZD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),  # tight range pair
+    "EUR/CAD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=12),  # Sweep scanner only; not in PRIORITY_PAIRS
     # ── JPY pairs (3-digit, pip = 0.01) ──
     "USD/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
     "EUR/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
