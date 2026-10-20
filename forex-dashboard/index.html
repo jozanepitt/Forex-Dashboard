@@ -955,9 +955,10 @@ td.mono{font-family:var(--font-mono)}
           <th>Band</th>
           <th>H1 trend</th>
           <th>Volume</th>
+          <th title="T = CVD turned with the trade on the confirmation candle · D = CVD divergence on the sweep (bad) · then the Volume Strength Compass reading of the sweep and confirmation candles">Order flow</th>
         </tr>
       </thead>
-      <tbody id="sweepTableBody"><tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="sweepTableBody"><tr><td colspan="15"style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
       <b>Sweep:</b> a dot means stops beyond a 20-bar swing high or low were taken on a volume surge (2× the 20-bar average).
@@ -965,7 +966,11 @@ td.mono{font-family:var(--font-mono)}
       <b>Waiting</b> = dot just printed, waiting for that close. <b>Breakout</b> = price kept closing beyond the level, so no trade.
       Entry is the confirmation close; stop just beyond the sweep wick; target 1 is the session VWAP, or a volume POC / IFVG if one is closer; target 2 is the far band.
       Grade A = the sweep reached the outer band, the H1 200 EMA agrees, and target 1 is at least 1.5× the stop. Grade B = valid and at least 1×, missing one of those
-      (forex pairs need the band for B, since their volume is tick volume). Grades A and B are sent to Discord.
+      (forex pairs need the band for B, since their volume is tick volume) and order flow must confirm. Grades A and B are sent to Discord.
+      <b>Order flow</b> — CVD (20-bar, volume split by where each candle closes) must turn with the trade on the confirmation candle,
+      and the sweep must <i>not</i> be a CVD divergence: the replay showed sweeps where traders piled in hard (then got trapped) work far better.
+      The column also shows the Volume Strength Compass reading (ABSORB / BULL VOL / BEAR VOL / LOW) of the sweep and confirmation candles, for information.
+      The close back inside may come up to 4 candles after the dot.
       Re-created from the LuxAlgo Order Flow VWAP Deviation description, so dots can differ slightly from TradingView. Not backtested.
     </div>
   </div>
@@ -6160,7 +6165,7 @@ async function loadSweep() {
   } catch (err) {
     console.error('Sweep load failed', err);
     summary.innerHTML = `<span style="color:var(--red)">Failed to load Sweep scanner: ${err.message}</span>`;
-    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -6186,6 +6191,12 @@ function renderSweepTable(data) {
     const band = p.at_band == null ? '—' : (p.at_band ? '<span style="color:var(--green)">outer band</span>' : 'inside');
     const trend = p.h1_trend ? `${p.h1_trend}${p.with_trend === false ? ' (against)' : ''}` : '—';
     const vol = p.vol_ratio != null ? `${p.vol_ratio}×${p.tick_volume ? ' tick' : ''}` : '—';
+    const ck = p.checks;
+    const flow = ck
+      ? `<span style="color:${p.order_flow ? 'var(--green)' : 'var(--red)'}">${p.order_flow ? '✓' : '✗'}</span> ` +
+        `T${ck.cvd_turn ? '✓' : '✗'} D${ck.cvd_divergence ? '✗' : '✓'} ` +
+        `<span style="color:var(--text-muted)">${ck.compass_dot} → ${ck.compass_conf}</span>`
+      : '—';
     return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
       <td><b>${p.symbol}</b></td>
       <td>${p.state === 'SIGNAL' ? _crtSetupCell(p) : '<span style="color:var(--text-muted)">—</span>'}</td>
@@ -6201,9 +6212,10 @@ function renderSweepTable(data) {
       <td>${band}</td>
       <td>${trend}</td>
       <td>${vol}</td>
+      <td>${flow}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="14" style="text-align:center;padding:24px">No data.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="15" style="text-align:center;padding:24px">No data.</td></tr>';
   const stale = (data.stale_pairs && data.stale_pairs.length)
     ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale (${data.stale_pairs.join(', ')})</span>` : '';
   const upd = data.cached_at ? ` · updated ${new Date(data.cached_at * 1000).toLocaleTimeString()}` : '';

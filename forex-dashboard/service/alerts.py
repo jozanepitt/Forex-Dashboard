@@ -1763,9 +1763,21 @@ def alert_sweep_setup(pair: str, row: dict):
                                          + (" (tick volume)" if row.get("tick_volume") else "")
                                          if row.get("vol_ratio") else "n/a"), "inline": True},
         ],
-        "footer": {"text": f"Sweep M15 (unvalidated) · take part at target 1, stop to break-even · "
-                           f"{_now_utc_str()} ({_now_sast_str()} SAST)"},
     }
+    checks = row.get("checks") or {}
+    if checks:
+        tick = lambda ok: "✅" if ok else "❌"
+        embed["fields"].append({
+            "name": "Order flow (Compass / CVD)",
+            "value": (f"{tick(checks.get('cvd_turn'))} CVD turned with the trade\n"
+                      f"{tick(not checks.get('cvd_divergence'))} No CVD divergence (chasers trapped)\n"
+                      f"Sweep candle: {checks.get('compass_dot', '?')} · confirm candle: "
+                      f"{checks.get('compass_conf', '?')} (RVOL {checks.get('rvol_conf', '?')})"),
+            "inline": False,
+        })
+    embed["footer"] = {
+        "text": f"Sweep M15 (unvalidated) · take part at target 1, stop to break-even · "
+                f"{_now_utc_str()} ({_now_sast_str()} SAST)"}
     if _post_discord(embed):
         _mark_sent(pair, rule)
         if sig_ts is not None:

@@ -23,8 +23,13 @@ the opposite band.
 Grades:
   A  = sweep reached the outer band + H1 trend (200 EMA) agrees + target 1 is
        at least 1.5x the stop.
-  B  = valid, target 1 at least 1x the stop, missing one of the A conditions.
-       FX pairs only carry tick volume, so for them B still needs the band.
+  B  = valid, target 1 at least 1x the stop, missing one of the A conditions,
+       AND order flow confirms (CVD turned with the trade, no CVD divergence
+       on the sweep; added 2026-10-20 from a replay of the user's Volume
+       Strength Compass / CVD checks). FX pairs only carry tick volume, so for
+       them B still needs the band.
+Every signal also carries the six Compass / CVD checks (row["checks"]) for
+display; only the order-flow pair changes the grade.
   C  = everything else (shown, never alerted).
 UNVALIDATED: not backtested at the time of writing.
 """
@@ -52,7 +57,15 @@ PROFILE_ROWS = 70
 IFVG_FILTER = 1.2       # "IFVG Volatility Filter": gap must be >= this x ATR(14)
 MAX_IFVGS = 3
 ATR_LEN = 14
-CONFIRM_BARS = 2        # the close back inside must come within this many bars of the dot
+CONFIRM_BARS = 4        # the close back inside must come within this many bars of the dot
+                        # (was 2; missed the UKOIL low on 2026-10-20 by one candle)
+# Volume Strength Compass / CVD confluences (user's indicators, 2026-10-20)
+COMPASS_RVOL = 1.5      # heavy volume
+WEAK_RVOL = 0.5         # "Low Volume"
+ABSORB_BODY = 0.40      # heavy volume with a body this small = absorption
+STRONG_BODY = 0.55      # heavy volume with a body this big = real buying / selling
+CVD_PERIOD = 20
+CVD_EXTREME_LOOKBACK = 50
 SIGNAL_MAX_AGE = 1      # a confirmed setup stays a SIGNAL for this many bars after confirmation
 STOP_BUFFER_ATR = 0.1
 EMA_TREND = 200
@@ -121,6 +134,81 @@ def ema_last(values: list[float], n: int) -> Optional[float]:
     return e
 
 
+def rvol_at(bars: list[dict], i: int, n: int = VOL_LEN) -> Optional[float]:
+    """Volume of bar i over the average of the n bars before it (the Volume
+    Strength Compass's RVOL)."""
+    if i < n:
+        return None
+    base = sum(_vol(b) for b in bars[i - n:i]) / n
+    return _vol(bars[i]) / base if base else None
+
+
+def body_pct(b: dict) -> float:
+    rng = b["high"] - b["low"]
+    return abs(b["close"] - b["open"]) / rng if rng > 0 else 0.0
+
+
+def compass_state(bars: list[dict], i: int) -> str:
+    """The Volume Strength Compass reading for bar i: ABSORB = heavy volume
+    but a small body (effort, no result); BULL VOL / BEAR VOL = heavy volume
+    with a real body; LOW = under half the usual volume."""
+    rv = rvol_at(bars, i)
+    if rv is None:
+        return "N/A"
+    if rv < WEAK_RVOL:
+        return "LOW"
+    if rv >= COMPASS_RVOL:
+        if body_pct(bars[i]) <= ABSORB_BODY:
+            return "ABSORB"
+        if body_pct(bars[i]) >= STRONG_BODY:
+            return "BULL VOL" if bars[i]["close"] > bars[i]["open"] else "BEAR VOL"
+    return "NORMAL"
+
+
+def cvd_series(bars: list[dict], period: int = CVD_PERIOD) -> list[float]:
+    """Rolling cumulative volume delta over `period` bars, like the chart's
+    "CVD (CURRENT | Period 20 | Smooth None)". With tick volume only, each
+    bar's delta is its volume split by where it closed in its range:
+    a close on the high counts as all buying, on the low as all selling."""
+    deltas = []
+    for b in bars:
+        rng = b["high"] - b["low"]
+        clv = ((b["close"] - b["low"]) - (b["high"] - b["close"])) / rng if rng > 0 else 0.0
+        deltas.append(_vol(b) * clv)
+    out, run = [], 0.0
+    for i, d in enumerate(deltas):
+        run += d
+        if i >= period:
+            run -= deltas[i - period]
+        out.append(run)
+    return out
+
+
+def volume_checks(bars: list[dict], dot: dict, conf: int, sell: bool) -> dict:
+    """The six Compass / CVD confluences for a confirmed sweep."""
+    i = dot["i"]
+    cvd = cvd_series(bars)
+    dot_bar, conf_bar = bars[i], bars[conf]
+    conf_dir_ok = (conf_bar["close"] < conf_bar["open"]) if sell else (conf_bar["close"] > conf_bar["open"])
+    rv_conf = rvol_at(bars, conf)
+    piv = dot.get("pivot_i")
+    window = cvd[max(0, i - CVD_EXTREME_LOOKBACK):i + 1]
+    sweep_cvd = max(cvd[i:conf + 1]) if sell else min(cvd[i:conf + 1])
+    return {
+        "absorb": body_pct(dot_bar) <= ABSORB_BODY,
+        "conf_volume": bool(rv_conf is not None and rv_conf >= COMPASS_RVOL
+                            and body_pct(conf_bar) >= STRONG_BODY and conf_dir_ok),
+        "cvd_divergence": bool(piv is not None and ((cvd[i] < cvd[piv]) if sell else (cvd[i] > cvd[piv]))),
+        "cvd_turn": (cvd[conf] < cvd[conf - 1]) if sell else (cvd[conf] > cvd[conf - 1]),
+        "cvd_extreme": (sweep_cvd >= max(window)) if sell else (sweep_cvd <= min(window)),
+        "weak_reclaim": bool(rv_conf is not None and rv_conf < WEAK_RVOL),
+        "compass_dot": compass_state(bars, i),
+        "compass_conf": compass_state(bars, conf),
+        "rvol_conf": round(rv_conf, 2) if rv_conf is not None else None,
+        "cvd": round(cvd[conf], 1),
+    }
+
+
 def find_dots(bars: list[dict]) -> list[dict]:
     """Every stop-run dot in the series. A pivot at p is known only at
     p + PIVOT_LEN, so a line is live from then until price trades through it."""
@@ -152,11 +240,13 @@ def find_dots(bars: list[dict]) -> list[dict]:
         if crossed_hi:
             lines_hi = [ln for ln in lines_hi if ln not in crossed_hi]
             if surge:
-                dots.append({"i": i, "side": "high", "level": max(l for _, l in crossed_hi), "vol_ratio": ratio})
+                p_i, lvl = max(crossed_hi, key=lambda ln: ln[1])
+                dots.append({"i": i, "side": "high", "level": lvl, "pivot_i": p_i, "vol_ratio": ratio})
         if crossed_lo:
             lines_lo = [ln for ln in lines_lo if ln not in crossed_lo]
             if surge:
-                dots.append({"i": i, "side": "low", "level": min(l for _, l in crossed_lo), "vol_ratio": ratio})
+                p_i, lvl = min(crossed_lo, key=lambda ln: ln[1])
+                dots.append({"i": i, "side": "low", "level": lvl, "pivot_i": p_i, "vol_ratio": ratio})
     return dots
 
 
@@ -295,7 +385,8 @@ def analyze_pair(symbol: str, m15: list[dict], h1: Optional[list[dict]] = None) 
     at_band = (m15[i]["high"] >= v + BAND_MULT * sd[i]) if sell else (m15[i]["low"] <= v - BAND_MULT * sd[i])
     with_trend = trend == ("bearish" if sell else "bullish")
     row.update(entry=entry, sl=sl, signal_ts=m15[conf]["ts_utc"], at_band=at_band,
-               with_trend=with_trend, sl_pips=round(risk / pip, 1), setup="SELL" if sell else "BUY")
+               with_trend=with_trend, sl_pips=round(risk / pip, 1), setup="SELL" if sell else "BUY",
+               checks=volume_checks(m15, dot, conf, sell), bars_to_confirm=conf - i)
 
     if not candidates or risk <= 0:
         row.update(grade="C", state="SIGNAL", tp1=None, rr1=None,
@@ -308,9 +399,16 @@ def analyze_pair(symbol: str, m15: list[dict], h1: Optional[list[dict]] = None) 
         tp2 = None
 
     misses = [not at_band, not with_trend, rr1 < RR_A]
+    checks = row["checks"]
+    # "Order flow confirms": CVD turned with the trade on the confirmation
+    # candle AND the sweep push was NOT a CVD divergence (the traders who chased
+    # the sweep really piled in, so they are trapped). Picked from a replay of
+    # the six Compass/CVD checks on 2026-10-20: B setups with it +0.43R (n=105),
+    # without it -0.17R (n=160), gross. In-sample, so treat as provisional.
+    order_flow = checks["cvd_turn"] and not checks["cvd_divergence"]
     if not any(misses):
         grade = "A"
-    elif rr1 >= RR_B and sum(misses) == 1 and (at_band or not tick_volume):
+    elif rr1 >= RR_B and sum(misses) == 1 and (at_band or not tick_volume) and order_flow:
         grade = "B"
     else:
         grade = "C"
@@ -319,9 +417,12 @@ def analyze_pair(symbol: str, m15: list[dict], h1: Optional[list[dict]] = None) 
     why.append("swept beyond the outer band" if at_band else "sweep inside the bands")
     why.append(f"H1 trend {trend or 'unknown'} ({'with' if with_trend else 'against'} the trade)")
     why.append(f"target 1 = {tp1_kind}, 1:{rr1:.1f}")
+    why.append("order flow confirms (CVD turned, no divergence)" if order_flow
+               else "order flow does not confirm")
     if tick_volume:
         why.append("tick volume only (FX)")
     row.update(grade=grade, state="SIGNAL", tp1=tp1, tp1_kind=tp1_kind, tp2=tp2, rr1=round(rr1, 2),
+               order_flow=order_flow,
                notes=f"Stops {'above' if sell else 'below'} {_fmt(level, symbol)} taken, closed back inside. "
                      + "; ".join(why) + ". UNVALIDATED - not backtested.")
     return row

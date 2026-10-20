@@ -105,9 +105,58 @@ def test_dot_on_the_newest_candle_waits_for_the_close():
 
 
 def test_closing_beyond_the_level_is_a_breakout_not_a_trade():
-    hold = [_bar(72, 1.1003, 1.1010, 1.1002, 1.1008)]
+    hold = [_bar(72 + k, 1.1003, 1.1010, 1.1002, 1.1008) for k in range(s.CONFIRM_BARS - 1)]
     row = s.analyze_pair("EUR/USD", _sell_sweep(confirm_close=1.1005, extra=hold), DOWN_H1)
     assert row["state"] == "BREAKOUT" and row["setup"] == "NO-TRADE"
+    # one candle fewer and the scanner is still waiting for the close back inside
+    row = s.analyze_pair("EUR/USD", _sell_sweep(confirm_close=1.1005, extra=hold[:-1]), DOWN_H1)
+    assert row["state"] == "WAIT-CLOSE"
+
+
+def test_a_close_back_inside_up_to_four_candles_later_still_counts():
+    """The UKOIL low on 2026-10-20 reclaimed the swept level three candles after the dot."""
+    hold = [_bar(72, 1.1003, 1.1010, 1.1002, 1.1006), _bar(73, 1.1006, 1.1008, 1.0990, 1.0992)]
+    row = s.analyze_pair("EUR/USD", _sell_sweep(confirm_close=1.1004, extra=hold), DOWN_H1)
+    assert row["state"] == "SIGNAL" and row["bars_to_confirm"] == 3
+
+
+def test_volume_checks_are_attached_to_a_signal():
+    row = s.analyze_pair("EUR/USD", _sell_sweep(), DOWN_H1)
+    c = row["checks"]
+    assert set(c) >= {"absorb", "conf_volume", "cvd_divergence", "cvd_turn", "cvd_extreme", "weak_reclaim"}
+    assert c["compass_dot"] in ("ABSORB", "BULL VOL", "BEAR VOL", "NORMAL", "LOW")
+
+
+def test_b_needs_order_flow_to_confirm(monkeypatch):
+    """Replay 2026-10-20: B with CVD turned + no divergence +0.43R, without -0.17R."""
+    row = s.analyze_pair("EUR/USD", _sell_sweep(), UP_H1)
+    assert row["grade"] == "B" and row["order_flow"] is True
+    real = s.volume_checks
+    monkeypatch.setattr(s, "volume_checks", lambda *a: {**real(*a), "cvd_divergence": True})
+    assert s.analyze_pair("EUR/USD", _sell_sweep(), UP_H1)["grade"] == "C"
+    monkeypatch.setattr(s, "volume_checks", lambda *a: {**real(*a), "cvd_turn": False})
+    assert s.analyze_pair("EUR/USD", _sell_sweep(), UP_H1)["grade"] == "C"
+    # grade A does not depend on it
+    a = s.analyze_pair("EUR/USD", _sell_sweep(), DOWN_H1)
+    assert a["grade"] == "A"
+
+
+def test_compass_states():
+    base = [_bar(i, 1.0, 1.001, 0.999, 1.0) for i in range(25)]
+    absorb = base + [_bar(25, 1.0, 1.003, 0.999, 1.0005, v=300.0)]      # 3x volume, 12% body
+    bear = base + [_bar(25, 1.002, 1.0021, 0.998, 0.9982, v=300.0)]     # 3x volume, ~93% body down
+    low = base + [_bar(25, 1.0, 1.001, 0.999, 1.0, v=30.0)]
+    assert s.compass_state(absorb, 25) == "ABSORB"
+    assert s.compass_state(bear, 25) == "BEAR VOL"
+    assert s.compass_state(low, 25) == "LOW"
+
+
+def test_cvd_counts_closes_near_the_high_as_buying():
+    bars = [_bar(i, 1.0, 1.01, 1.0, 1.01) for i in range(5)]           # every bar closes on its high
+    cvd = s.cvd_series(bars, period=3)
+    assert cvd[-1] == pytest.approx(300.0)                              # rolling 3 bars x 100 volume
+    sells = [_bar(i, 1.01, 1.01, 1.0, 1.0) for i in range(5)]
+    assert s.cvd_series(sells, period=3)[-1] == pytest.approx(-300.0)
 
 
 def test_against_the_h1_trend_drops_to_b():
@@ -168,6 +217,8 @@ def test_grades_a_and_b_are_sent_c_is_not(sent):
     alerts.alert_sweep_setup("EUR/USD", _row("C"))
     assert len(sent) == 2
     assert "Sweep" in sent[0]["title"] and "unvalidated" in sent[0]["footer"]["text"].lower()
+    flow = next(f for f in sent[0]["fields"] if f["name"].startswith("Order flow"))
+    assert "CVD turned" in flow["value"]
 
 
 def test_a_only_switch_drops_b(sent, monkeypatch):
