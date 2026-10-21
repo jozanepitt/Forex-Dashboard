@@ -142,8 +142,10 @@ def _run_one(pair: str, m15_bars: list[dict], h1_bars: list[dict],
         entry_window = m15_bars[max(0, i - WARMUP_BARS):i + 1]
         h1_window = h1_bars[max(0, h1_i - WARMUP_H1_BARS):h1_i]
 
-        row = btmm_id50.analyze_pair(pair, entry_window,
-                                     h1_candles=h1_window or None, params=params)
+        # The legacy scored pipeline this backtester was built for (the live
+        # scanner moved to the checklist model on 2026-10-21).
+        row = btmm_id50._analyze_id50(pair, entry_window,
+                                      h1_candles=h1_window or None, params=params)
         setup = row.get("setup")
         if setup not in ("BUY", "SELL"):
             continue

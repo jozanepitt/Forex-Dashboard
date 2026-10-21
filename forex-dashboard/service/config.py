@@ -140,6 +140,10 @@ ENGULF_NEWS_FILTER = os.environ.get("ENGULF_NEWS_FILTER", "true").lower() in ("1
 # BTMM123's default-off discipline: dashboard-visible/Discord-silent until a
 # walk-forward backtest shows an edge (same rationale as BTMM 123 above).
 BTMM_ID50_ALERTS_ENABLED = os.environ.get("BTMM_ID50_ALERTS_ENABLED", "false").lower() in ("1", "true", "yes")
+# The checklist model (2026-10-21 rebuild) stays off Discord until live
+# results back it up (user decision), even where BTMM_ID50_ALERTS_ENABLED is
+# already on. Set to "true" to send its A setups (B too if GRADE_A_ONLY=false).
+BTMM_ID50_CHECKLIST_DISCORD = os.environ.get("BTMM_ID50_CHECKLIST_DISCORD", "false").lower() in ("1", "true", "yes")
 BTMM_ID50_SESSION_FILTER = os.environ.get("BTMM_ID50_SESSION_FILTER", "true").lower() in ("1", "true", "yes")
 BTMM_ID50_NEWS_FILTER = os.environ.get("BTMM_ID50_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 # Grade gate — same convention as BTMM123/TDI123: default true keeps ONLY the

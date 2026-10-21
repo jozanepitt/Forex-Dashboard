@@ -320,7 +320,7 @@ def test_cross_points_bracket():
 def test_analyze_pair_insufficient_data_is_no_trade():
     bars = [{"ts_utc": i * 900, "open": 1.1000, "high": 1.1001,
              "low": 1.0999, "close": 1.1000} for i in range(10)]
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["setup"] == "NO-TRADE"
     assert row["grade"] == "NO-DATA"
     assert row["score"] == 0
@@ -330,7 +330,7 @@ def test_analyze_pair_flat_series_has_no_trade():
     bars = [{"ts_utc": i * 900, "open": 1.1000 + 0.00001 * (i % 2),
              "high": 1.10005, "low": 1.09995,
              "close": 1.1000 + 0.00001 * (i % 2)} for i in range(260)]
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["setup"] == "NO-TRADE"
     assert row["grade"] == "NO-TRADE"
     assert row["score"] == 0
@@ -442,7 +442,7 @@ def _build_bullish_id50_series() -> list[dict]:
 
 def test_analyze_pair_detects_bullish_id50():
     bars = _build_bullish_id50_series()
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["setup"] == "BUY"
     assert row["grade"] in ("A", "A+", "B", "C")
     assert row["score"] >= 12
@@ -476,7 +476,7 @@ def test_analyze_pair_second_retest_is_no_trade():
     bars = bars[:-3]
     bars.extend([close_through, resolve])
     bars.extend(tail)
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["setup"] == "NO-TRADE", row
 
 
@@ -669,7 +669,9 @@ def _real_buy_fresh_cross_bars():
     return bars
 
 
-def test_analyze_universe_excludes_real_buy_from_watches():
+def test_analyze_universe_excludes_real_buy_from_watches(monkeypatch):
+    # legacy pipeline: this test is about watch-row exclusion, not the entry model
+    monkeypatch.setattr(m, "analyze_pair", lambda s, b, h=None, **k: m._analyze_id50(s, b, h))
     """W4 end-to-end: a pair whose pipeline row is a REAL BUY (fresh cross,
     full ID50 sequence, score 16) must be absent from `watches`. This locks
     the dedupe contract via the real universe wiring, not `_watch_row` in
@@ -742,7 +744,7 @@ def test_fresh_cross_before_50_200_cross_is_buy_not_mismatch():
     e200 = m.calc_ema(closes, 200)[-1]
     assert e50 < e200                           # scenario sanity: 50 still below 200
     assert closes[-1] > e50                     # price rejected back above the 50
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["setup"] == "BUY", row.get("reason")
 
 
@@ -750,7 +752,7 @@ def test_fresh_cross_capped_at_B_not_A():
     """Part 3 (grade cap): the pre-50/200-cross setup can never be A/A+; it is
     capped at B, and the scoring note records the un-aligned state."""
     bars = _fresh_cross_below_200_series()
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["grade"] in ("B", "C")           # never A/A+ before the 50/200 cross
     assert "not yet aligned" in row["notes"]
 
@@ -761,7 +763,7 @@ def test_aligned_setup_keeps_alignment_bonus_and_is_not_capped():
     bars = _build_bullish_id50_series()
     closes = [b["close"] for b in bars]
     assert m.calc_e50(closes) > m.calc_ema(closes, 200)[-1]   # aligned scenario
-    row = m.analyze_pair("EUR/USD", bars)
+    row = m._analyze_id50("EUR/USD", bars)
     assert row["setup"] == "BUY"
     assert "e50/e200 aligned" in row["notes"]
     assert "not yet aligned" not in row["notes"]

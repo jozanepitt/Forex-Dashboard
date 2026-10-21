@@ -1020,10 +1020,10 @@ td.mono{font-family:var(--font-mono)}
     <div class="trend-controls">
       <div class="trend-control-group" style="min-width:260px">
         <label>🎯 ID50 — M15 50-EMA Bounce</label>
-        <div id="id50StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">13/50 EMA cross → move-away → pullback to 50 EMA · H1 bias · session + tight-range gates · 50-EMA trap entry</div>
+        <div id="id50StatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">13/50 EMA cross → 20–50 pip move away → pullback to the 50 EMA → entry candle back under/over the 13 · M15 and H1</div>
       </div>
       <button class="trend-refresh-btn" id="id50RefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta" id="id50Meta">26-pt scale · A+ ≥ 22 / A ≥ 19 / B ≥ 15 / C ≥ 12 · hard rules H1–H8 · emerald #34d399</div>
+      <div class="trend-meta" id="id50Meta">Your ID50 checklist · A = all 3 extras (20–50 pip move, trap, RSI midline) · B = valid setup missing one · dashboard only, not sent to Discord</div>
     </div>
     <div class="trend-summary" id="id50Summary">Click <b>Refresh Scanner</b> to compute.</div>
     <div style="margin:14px 0 6px;padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px">
@@ -1045,7 +1045,7 @@ td.mono{font-family:var(--font-mono)}
           <th>Setup</th>
           <th>Price</th>
           <th>Move-Away</th>
-          <th>Retest</th>
+          <th>Entry candle</th>
           <th>Trap</th>
           <th>H1 Bias</th>
           <th>Session</th>
@@ -1061,11 +1061,14 @@ td.mono{font-family:var(--font-mono)}
       <tbody id="id50TableBody"><tr><td colspan="15" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>ID50 (M15):</b> impulse leg confirmed by a fresh 13/50 EMA cross (H2), which must push price meaningfully away from the 50 EMA (H5)
-      before a pullback retests it (H6) and an engulfing/rejection trap bar (H7) confirms the bounce back into the H1 bias leg.
-      H1 bias is advisory (+2 aligned / −2 countered); captive filters are session, EMAs stacked (price → e50 → e200), pips-location,
-      and R:R room to the measured-move peak. Grades: A+ ≥ 22, A ≥ 19, B ≥ 15 on a 26-pt scale; stale cross, poor pivot location
-      and R:R &lt; 1.0 cap A/B to C. Discord alerts are behind <code>BTMM_ID50_ALERTS_ENABLED</code> (off by default).
+      <b>ID50 (your checklist, rebuilt 21 Oct):</b> the 13 EMA crosses the 50 (within 40 candles) → price moves at least <b>20 pips</b> away from the 50 EMA
+      (gold, indices, crypto: the same share of their average daily range) → price pulls back to the 50 → the <b>first</b> candle that closes back
+      under (sell) / over (buy) both the 13 and the 50 is the entry, if it is an RR, star, COW, engulfing, hammer / shooting star or shift candle.
+      <b>Stop:</b> the bounce candle's high (sell) / low (buy) + 5 pips. <b>TP1:</b> the move-away swing. <b>TP2:</b> 2R.
+      <b>Grade A</b> also needs all three: the move was 20–50 pips, the pullback closed no more than ¼ ATR past the 50 (a trap, not a break),
+      and the TDI RSI line came back to its middle (45–55) and turned. <b>Grade B</b> = valid but missing one of those. Score = extras passed out of 3.
+      H1 rows (50/50 1hr) use the same rules. Not backtested as a winner (replay: about break-even before spread), so it stays off Discord
+      (<code>BTMM_ID50_CHECKLIST_DISCORD</code>). Hover a row for its reasons.
     </div>
   </div>
 
@@ -6379,22 +6382,27 @@ function renderId50Table(data) {
 
   const priceCell = (o) => (o.current_price != null ? `<span class="mono">${_crtFmtPrice(o.current_price, o.symbol)}</span>` : '<span style="color:var(--text-muted)">—</span>');
 
-  const trapCell = (o) => (o.trap && o.trap.trap
-    ? '<span style="color:var(--green);font-size:.78rem">✅ trap</span>'
-    : '<span style="color:var(--text-muted)">—</span>');
+  const trapCell = (o) => {
+    if (!o.trap || o.setup === 'NO-TRADE') return '<span style="color:var(--text-muted)">—</span>';
+    return o.trap.trap
+      ? `<span style="color:var(--green);font-size:.78rem">✓ ${(o.trap.past_atr || 0).toFixed(2)} ATR</span>`
+      : `<span style="color:var(--yellow);font-size:.78rem">${(o.trap.past_atr || 0).toFixed(2)} ATR past</span>`;
+  };
 
+  // Retest column: the entry candle that closed back beyond the 13 and 50,
+  // plus whether the TDI RSI line bounced off its midline.
   const retestCell = (o) => {
-    const r = o.retest || {};
-    return r.ok
-      ? `<span style="color:var(--green);font-size:.78rem">✓ ${(r.retrace_pct * 100).toFixed(0)}%</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
+    if (o.setup === 'NO-TRADE') return '<span style="color:var(--text-muted)">—</span>';
+    const ec = (o.entry_candle || {}).reason || '?';
+    const rsi = (o.tdi || {}).ok ? ' · RSI 50 ✓' : ' · RSI ✗';
+    return `<span style="font-size:.74rem">${ec}${rsi}</span>`;
   };
 
   const mvCell = (o) => {
     const mv = o.move_away || {};
-    return mv.ok
-      ? `<span style="color:var(--green);font-size:.72rem">✓ ${(mv.magnitude_atr || 0).toFixed(1)}×ATR</span>`
-      : '<span style="color:var(--text-muted)">—</span>';
+    if (o.setup === 'NO-TRADE' || mv.pips == null) return '<span style="color:var(--text-muted)">—</span>';
+    const c = mv.in_window ? 'var(--green)' : 'var(--yellow)';
+    return `<span style="color:${c};font-size:.74rem">${mv.pips} pips</span>`;
   };
 
   const htfCell = (o) => {
@@ -6415,7 +6423,7 @@ function renderId50Table(data) {
       : o.grade === 'A' ? 'background:rgba(34,197,94,.06)'
       : o.grade === 'B' ? 'background:rgba(79,195,247,.04)' : '';
     return `<tr style="${rowStyle}" title="${(o.notes || o.reason || '').replace(/"/g, '&quot;')}">
-      <td><b>${o.symbol}</b></td>
+      <td><b>${o.symbol}</b>${o.timeframe === 'H1' ? ' <span style="font-size:.68rem;color:var(--cyan)">H1</span>' : ''}</td>
       <td>${_crtSetupCell(o)}</td>
       <td>${priceCell(o)}</td>
       <td>${mvCell(o)}</td>
@@ -6427,7 +6435,7 @@ function renderId50Table(data) {
       <td>${t.sl     != null ? `<span class="mono">${_crtFmtPrice(t.sl, o.symbol)}</span><br><span style="font-size:.65rem;color:var(--text-muted)">${t.sl_pips || '?'} pips</span>` : '—'}</td>
       <td>${t.tp1    != null ? `<span class="mono">${_crtFmtPrice(t.tp1, o.symbol)}</span>` : '—'}</td>
       <td>${t.tp2    != null ? `<span class="mono">${_crtFmtPrice(t.tp2, o.symbol)}</span>` : '—'}</td>
-      <td><span class="mono">${o.score || 0}</span><span style="font-size:.65rem;color:var(--text-muted)">/26</span></td>
+      <td><span class="mono">${o.score || 0}</span><span style="font-size:.65rem;color:var(--text-muted)">/${o.score_max || 3}</span></td>
       <td>${_id50GradeCell(o.grade)}</td>
       <td><button class="tdi123-detail-btn" data-id50-sym="${o.symbol}">📈 View</button></td>
     </tr>`;

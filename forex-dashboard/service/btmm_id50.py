@@ -38,7 +38,7 @@ from typing import Optional
 import instruments
 from btmm_core import (
     calc_ema, detect_nameable_candle, detect_rsi_signal_cross,
-    detect_stop_hunt, detect_asian_range, calc_tdi, _last_ema_cross,
+    detect_stop_hunt, detect_asian_range, calc_tdi, _last_ema_cross, _rsi, _sma,
 )
 from config import PRIORITY_PAIRS
 from tdi_cycle_123 import (
@@ -629,14 +629,203 @@ def _analyze_id50(symbol: str, m15_candles: list[dict],
     }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Checklist model (live since 2026-10-21) — the user's ID50 checklist, rebuilt
+# after a replay showed the scored pipeline above never graded A/B (1 A, 1 B,
+# 900 C in 90 days) and rejected textbook setups (CAD/JPY 2026-10-21: an
+# engulfing off the 50 failed the pin-bar "trap" rule and the "any earlier
+# touch = second retest" rule). _analyze_id50 is kept for btmm_id50_backtest.
+# ──────────────────────────────────────────────────────────────────────────────
+
+CL_CROSS_MAX_BARS = 40       # the 13/50 cross must be at most this old
+CL_PULL_BARS = 8             # the 50 EMA must have been touched within this many bars
+CL_MOVE_MIN_PIPS = 20.0      # forex move away from the 50 EMA (user: 20-50 pips)
+CL_MOVE_MAX_PIPS = 50.0
+CL_STOP_PIPS = 5.0           # stop = bounce candle high/low + 5 pips (user rule)
+# Non-forex: the same push, scaled by the instrument's average daily range.
+# Calibrated 2026-10-21 on the median forex ADR (56 pips): 20 pips = 0.357
+# ADR, 50 pips = 0.892 ADR, 5 pips = 0.089 ADR.
+CL_MOVE_MIN_ADR, CL_MOVE_MAX_ADR, CL_STOP_ADR = 0.357, 0.892, 0.089
+CL_TRAP_ATR = 0.25           # pullback closes past the 50 up to this still count as a trap
+CL_MIDLINE = (45.0, 55.0)    # TDI RSI line must come back to its middle on the pullback
+CL_SHIFT_BODY = 0.6          # shift candle: body >= 60% of range and range >= 1 ATR
+CL_RR = 2.0
+
+
+def _adr(bars: list[dict], bars_per_day: int, days: int = 14) -> Optional[float]:
+    """Average daily range from intraday bars, in chunks of bars_per_day."""
+    out = []
+    for d in range(days):
+        chunk = bars[max(0, len(bars) - (d + 1) * bars_per_day):len(bars) - d * bars_per_day]
+        if len(chunk) >= bars_per_day // 2:
+            out.append(max(b["high"] for b in chunk) - min(b["low"] for b in chunk))
+    return sum(out) / len(out) if out else None
+
+
+def _cl_scale(symbol: str, price: float, bars: list[dict], bars_per_day: int) -> Optional[dict]:
+    """Move-away window and stop buffer in price units: pips for forex, the
+    same share of the daily range for everything else (gold, indices, ...)."""
+    pip = instruments.pip_size(symbol, price)
+    if instruments.asset_class(symbol) in ("fx", "jpy"):
+        return {"move_min": CL_MOVE_MIN_PIPS * pip, "move_max": CL_MOVE_MAX_PIPS * pip,
+                "buffer": CL_STOP_PIPS * pip, "pip": pip}
+    adr = _adr(bars, bars_per_day)
+    if not adr:
+        return None
+    return {"move_min": CL_MOVE_MIN_ADR * adr, "move_max": CL_MOVE_MAX_ADR * adr,
+            "buffer": CL_STOP_ADR * adr, "pip": pip}
+
+
+def _cl_entry_candle(bars: list[dict], sell: bool, atr: float) -> Optional[str]:
+    """The checklist's entry triggers: RR, star, COW, engulfing, hammer /
+    shooting star, or a shift candle, pointing the trade's way."""
+    star = _detect_star(bars)
+    if star["found"] and star["direction"] == ("bearish" if sell else "bullish"):
+        return star["name"]
+    nc = detect_nameable_candle(bars[-2:])
+    ok_names = ("Bearish Engulfing", "RRT", "COW", "Shooting Star") if sell else \
+               ("Bullish Engulfing", "RRT", "COW", "Hammer")
+    if nc.get("found") and nc.get("name") in ok_names and \
+            nc.get("direction") in ("bearish" if sell else "bullish",):
+        return nc["name"]
+    b = bars[-1]
+    rng = b["high"] - b["low"]
+    if rng >= atr and rng > 0 and abs(b["close"] - b["open"]) >= CL_SHIFT_BODY * rng:
+        return "Shift candle"
+    return None
+
+
+def _analyze_checklist(symbol: str, bars: list[dict], timeframe: str = "M15",
+                       bars_per_day: int = 96, h1_candles: Optional[list[dict]] = None) -> dict:
+    """ID50 per the user's checklist, judged on the newest closed bar.
+
+    Required: 13/50 cross within CL_CROSS_MAX_BARS; after it price moved at
+    least the minimum away from the 50 EMA; price came back to touch the 50
+    within the last CL_PULL_BARS bars; the newest candle is the FIRST close
+    back beyond both the 13 and the 50 since that touch, and is an entry
+    candle (RR / star / COW / engulfing / hammer-shooting star / shift).
+    Grade A also needs: move within the 20-50 pip window (scaled), pullback
+    closes past the 50 no more than CL_TRAP_ATR, and the TDI RSI line came
+    back to its midline (45-55) and turned. Grade B = the rest.
+    Stop: bounce candle high/low + 5 pips (scaled). TP1: the move-away swing.
+    TP2: 2R."""
+    if len(bars) < 260:
+        return _no_trade(symbol, f"need >= 260 {timeframe} candles", timeframe)
+    closes = [b["close"] for b in bars]
+    e13, e50, e200 = calc_ema(closes, 13), calc_ema(closes, 50), calc_ema(closes, 200)
+    n = len(bars)
+    i = n - 1
+    price = closes[i]
+    atr = _atr14(bars)
+    if not atr:
+        return _no_trade(symbol, "no ATR", timeframe)
+
+    cross, sell = None, None
+    for k in range(i, max(1, i - CL_CROSS_MAX_BARS), -1):
+        if e13[k - 1] >= e50[k - 1] and e13[k] < e50[k]:
+            cross, sell = k, True
+            break
+        if e13[k - 1] <= e50[k - 1] and e13[k] > e50[k]:
+            cross, sell = k, False
+            break
+    if cross is None:
+        return _no_trade(symbol, f"no 13/50 cross in the last {CL_CROSS_MAX_BARS} candles", timeframe)
+    sg = -1 if sell else 1
+    side = "below" if sell else "above"
+    direction = "bearish" if sell else "bullish"
+
+    b = bars[i]
+    closes_beyond = lambda j: (bars[j]["close"] - e13[j]) * sg > 0 and (bars[j]["close"] - e50[j]) * sg > 0
+    if not (closes_beyond(i) and (b["close"] - b["open"]) * sg > 0):
+        return _no_trade(symbol, f"waiting: no candle closing back {side} the 13 and 50 yet", timeframe)
+
+    touch = [j for j in range(max(cross + 1, i - CL_PULL_BARS), i)
+             if (bars[j]["high"] >= e50[j] - 0.1 * atr if sell else bars[j]["low"] <= e50[j] + 0.1 * atr)]
+    if not touch:
+        return _no_trade(symbol, "no pullback to the 50 EMA in the last candles", timeframe)
+    t0 = touch[0]
+    if any(closes_beyond(j) for j in range(t0, i)):
+        return _no_trade(symbol, "entry already given earlier on this pullback", timeframe)
+
+    scale = _cl_scale(symbol, price, bars, bars_per_day)
+    if scale is None:
+        return _no_trade(symbol, "no daily range to scale the move-away", timeframe)
+    move = max(((e50[j] - bars[j]["low"]) if sell else (bars[j]["high"] - e50[j]))
+               for j in range(cross, t0 + 1))
+    if move < scale["move_min"]:
+        return _no_trade(symbol, f"move away from the 50 too small ({move / scale['pip']:.0f} pips)", timeframe)
+
+    candle = _cl_entry_candle(bars[:i + 1], sell, atr)
+    if candle is None:
+        return _no_trade(symbol, "pullback done but no entry candle (RR/star/COW/engulfing/shift)", timeframe)
+
+    # A-grade checks
+    move_window = move <= scale["move_max"]
+    # how far pullback candles CLOSED on the wrong side of the 50 (above it for a sell)
+    past = max(((bars[j]["close"] - e50[j]) * -sg for j in range(t0, i)), default=0.0)
+    trap_atr = max(0.0, past) / atr
+    trap_ok = trap_atr <= CL_TRAP_ATR
+    tdi = _sma(_rsi(closes, 13), 2)
+    seg = tdi[t0:i + 1]
+    peak = max(seg) if sell else min(seg)
+    midline = CL_MIDLINE[0] <= peak <= CL_MIDLINE[1] and (tdi[i] - peak) * sg > 0
+    checks = {"move 20-50 pips": move_window, "trap": trap_ok, "RSI midline": midline}
+    grade = "A" if all(checks.values()) else "B"
+
+    bounce = max(bars[j]["high"] for j in range(t0, i + 1)) if sell else min(bars[j]["low"] for j in range(t0, i + 1))
+    sl = bounce - sg * scale["buffer"]
+    risk = (price - sl) * sg
+    if risk <= 0:
+        return _no_trade(symbol, "stop on the wrong side of entry", timeframe)
+    swing_idx = (min(range(cross, t0 + 1), key=lambda j: bars[j]["low"]) if sell
+                 else max(range(cross, t0 + 1), key=lambda j: bars[j]["high"]))
+    swing = bars[swing_idx]["low"] if sell else bars[swing_idx]["high"]
+    tp1 = swing if (swing - price) * sg > 0 else None
+    tp2 = price + sg * CL_RR * risk
+    pip = scale["pip"]
+    htf = _htf_bias(h1_candles) if h1_candles else None
+    notes = [f"13/50 cross {i - cross} candles ago", f"move away {move / pip:.0f} pips",
+             f"pullback to the 50 EMA, closed {trap_atr:.2f} ATR past it", f"entry candle: {candle}",
+             f"TDI RSI {'back at its midline and turned' if midline else f'pullback peak {peak:.0f} (not 45-55)'}"]
+    missing = [k for k, v in checks.items() if not v]
+    notes.append("Grade A" if grade == "A" else "Grade B (missing: " + ", ".join(missing) + ")")
+    return {
+        "symbol": symbol, "timeframe": timeframe, "model": "checklist",
+        "setup": "SELL" if sell else "BUY", "grade": grade, "score": sum(checks.values()),
+        "score_max": len(checks), "checks": checks,
+        "notes": "; ".join(notes) + ". UNVALIDATED.", "reason": None,
+        "current_price": price, "direction": direction, "setup_type": "id50",
+        "cross": {"idx": cross, "direction": direction, "bars_ago": i - cross},
+        "move_away": {"ok": True, "pips": round(move / pip, 1), "magnitude_atr": round(move / atr, 2),
+                      "in_window": move_window, "peak": swing, "peak_idx": swing_idx},
+        "retest": {"ok": True, "trap_atr": round(trap_atr, 2), "touch_bars_ago": i - t0},
+        "trap": {"trap": trap_ok, "past_atr": round(trap_atr, 2)},
+        "entry_candle": {"ok": True, "reason": candle},
+        "tdi": {"ok": midline, "pullback_peak": round(peak, 1), "now": round(tdi[i], 1)},
+        "h1_bias": htf, "h1_bias_timeframe": "H1", "h1_aligned": bool(htf == direction) if htf else False,
+        "e50": e50[i], "e200": e200[i],
+        "session": _session_label(b["ts_utc"]), "in_active_session": _in_active_session(b["ts_utc"]),
+        "signal_ts": b["ts_utc"],
+        "trade_plan": {"entry": price, "sl": sl, "sl_pips": round(risk / pip, 1),
+                       "tp1": tp1, "tp2": tp2, "tp3": None,
+                       "rr1": round(abs(tp1 - price) / risk, 2) if tp1 is not None else None,
+                       "rr2": CL_RR, "room_pips": None, "room_ok": tp1 is not None},
+    }
+
+
 def analyze_pair(symbol: str, m15_candles: list[dict],
                  h1_candles: Optional[list[dict]] = None,
                  *, params: Optional[dict] = None) -> dict:
-    """Full ID50 pipeline for one pair: M15 primary (biased by H1).
+    """ID50 for one pair on M15 (the checklist model). `params` (the old
+    backtest's sweep override) selects the legacy scored pipeline."""
+    if params is not None:
+        return _analyze_id50(symbol, m15_candles, h1_candles, params=params)
+    return _analyze_checklist(symbol, m15_candles, "M15", 96, h1_candles)
 
-    `params` is the backtest's sweep override; it merges onto ID50_PARAMS and
-    never mutates the live defaults."""
-    return _analyze_id50(symbol, m15_candles, h1_candles, params=params)
+
+def analyze_pair_h1(symbol: str, h1_candles: list[dict]) -> dict:
+    """The same checklist on H1 ("50/50 1hr: same rules on the 1hr")."""
+    return _analyze_checklist(symbol, h1_candles, "H1", 24, None)
 
 
 def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
@@ -655,6 +844,13 @@ def analyze_universe(candles_by_pair: dict[str, dict]) -> dict:
             row = {"symbol": sym, "setup": "NO-TRADE", "grade": "NO-DATA",
                    "reason": f"error: {e}", "score": 0}
         pairs_out.append(row)
+        if h1:
+            try:
+                h1_row = analyze_pair_h1(sym, h1)
+                if h1_row.get("setup") in ("BUY", "SELL"):
+                    pairs_out.append(h1_row)
+            except Exception as e:  # noqa: BLE001
+                log.debug("btmm_id50 H1 failed for %s: %s", sym, e)
         try:
             watch = _watch_row(sym, m15, row)
         except Exception:  # noqa: BLE001  best-effort watch, never fail the universe
