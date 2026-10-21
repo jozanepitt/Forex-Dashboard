@@ -149,6 +149,16 @@ def upsert_candles(symbol: str, interval: str, bars: Iterable[dict]) -> int:
     return len(rows)
 
 
+def delete_newer_than(symbol: str, interval: str, ts_utc: int) -> int:
+    """Remove bars newer than ts_utc. Used after a good MT5 fetch: MT5 returns
+    every closed bar, so anything newer in the cache is a fallback provider's
+    still-forming bar stored as closed (2026-10-20 outage)."""
+    with _lock, _connect() as conn:
+        cur = conn.execute("DELETE FROM candles WHERE symbol=? AND interval=? AND ts_utc>?",
+                           (symbol, interval, int(ts_utc)))
+        return cur.rowcount
+
+
 def today_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 

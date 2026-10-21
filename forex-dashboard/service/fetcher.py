@@ -28,6 +28,20 @@ def client() -> TwelveDataClient:
     return _td
 
 
+def _now() -> int:
+    return int(datetime.now(timezone.utc).timestamp())
+
+
+def _closed_only(bars: list[dict], interval: str, now_ts: Optional[int] = None) -> list[dict]:
+    """Drop any bar that has not closed yet. MT5 already does this; the
+    TwelveData and Stooq fallbacks return the forming bar, which was stored as
+    closed and never corrected (incremental fetches start one interval after
+    the newest bar) -- the 2026-10-20 false USD/JPY alert."""
+    now_ts = _now() if now_ts is None else now_ts
+    secs = INTERVAL_SECS[interval]
+    return [b for b in bars if b["ts_utc"] + secs <= now_ts]
+
+
 def _try_mt5(symbol: str, interval: str, limit: int,
              start_ts: Optional[int]) -> Optional[bool]:
     """Try MT5 first. Returns False on success (not stale), None to fall through."""
@@ -39,6 +53,12 @@ def _try_mt5(symbol: str, interval: str, limit: int,
         if not bars:
             return None
         n = cache.upsert_candles(symbol, interval, bars)
+        # MT5 is the source of truth and returns every closed bar: anything
+        # newer in the cache is a fallback's forming bar stored as closed.
+        dropped = cache.delete_newer_than(symbol, interval, bars[-1]["ts_utc"])
+        if dropped:
+            log.warning("removed %d fallback bar(s) newer than MT5's last closed bar for %s %s",
+                        dropped, symbol, interval)
         cache.log_refresh(symbol, interval, "mt5", n, credits=0)
         return False
     except MT5NotConnected as e:
@@ -60,7 +80,7 @@ def get_candles(symbol: str, interval: str = "15min",
     """Return (candles, stale). stale=True when we couldn't refresh this call."""
     last_ts = cache.max_ts(symbol, interval)
     interval_secs = INTERVAL_SECS[interval]
-    now_ts = int(datetime.now(timezone.utc).timestamp())
+    now_ts = _now()
 
     if last_ts is None:
         stale = _backfill(symbol, interval, limit)
@@ -69,9 +89,12 @@ def get_candles(symbol: str, interval: str = "15min",
     # The cache holds CLOSED bars only (providers drop the forming one). The
     # newest bar opened at last_ts and closed one interval later; the next one
     # cannot exist until two intervals after last_ts, so asking the provider
-    # before then just burns the MT5 lock for nothing.
+    # before then just burns the MT5 lock for nothing. Except when that newest
+    # bar came from a fallback (volume 0): refetch so MT5 can replace it.
     if now_ts < last_ts + 2 * interval_secs:
-        return cache.read_candles(symbol, interval, limit), False
+        newest = cache.read_candles(symbol, interval, 1)
+        if not newest or (newest[-1].get("volume") or 0) > 0:
+            return cache.read_candles(symbol, interval, limit), False
 
     stale = _incremental(symbol, interval, last_ts)
     return cache.read_candles(symbol, interval, limit), stale
@@ -83,7 +106,7 @@ def _backfill(symbol: str, interval: str, limit: int) -> bool:
         return mt5_result
 
     try:
-        bars = client().fetch(symbol, interval, outputsize=limit)
+        bars = _closed_only(client().fetch(symbol, interval, outputsize=limit), interval)
         n = cache.upsert_candles(symbol, interval, bars)
         cache.log_refresh(symbol, interval, "twelvedata", n, credits=len(bars))
         return False
@@ -105,8 +128,8 @@ def _incremental(symbol: str, interval: str, last_ts: int) -> bool:
         return mt5_result
 
     try:
-        bars = client().fetch(symbol, interval,
-                              outputsize=DEFAULT_BACKFILL, start_ts=start_ts)
+        bars = _closed_only(client().fetch(symbol, interval,
+                                           outputsize=DEFAULT_BACKFILL, start_ts=start_ts), interval)
         n = cache.upsert_candles(symbol, interval, bars)
         cache.log_refresh(symbol, interval, "twelvedata", n, credits=len(bars))
         return False
@@ -126,7 +149,7 @@ def _incremental(symbol: str, interval: str, last_ts: int) -> bool:
 def _stooq_fallback(symbol: str, interval: str, start_ts: Optional[int]) -> bool:
     """Attempt Stooq CSV. Returns stale=True if it also fails or adds nothing."""
     try:
-        bars = stooq.fetch_since(symbol, interval, start_ts=start_ts)
+        bars = _closed_only(stooq.fetch_since(symbol, interval, start_ts=start_ts), interval)
     except StooqNeedsApiKey as e:
         log.info("stooq dormant for %s: %s", symbol, e)
         cache.log_refresh(symbol, interval, "stooq", 0, error="needs apikey")

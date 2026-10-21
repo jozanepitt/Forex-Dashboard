@@ -22,9 +22,15 @@ from typing import Optional
 
 log = logging.getLogger("mt5")
 
+from providers.mt5_worker import WorkerError, WorkerProxy
+
 try:
-    import MetaTrader5 as mt5
+    import MetaTrader5 as _mt5_module
     MT5_AVAILABLE = True
+    # Every call goes to a killable child process: the binding holds the GIL
+    # for the whole of a call, so a stalled call made in-process froze the
+    # entire service (2026-10-18/19). See providers/mt5_worker.py.
+    mt5 = WorkerProxy(_mt5_module)
 except ImportError:
     mt5 = None  # type: ignore[assignment]
     MT5_AVAILABLE = False
@@ -81,29 +87,80 @@ class MT5Client:
         self._status_cache_ts = 0.0
 
     # ------------------------------------------------------------------ init
+    # MetaTrader5 IPC error codes: the link to the terminal is gone (typically
+    # the terminal restarted). Seen 2026-10-20: 17:16 UTC terminal restart,
+    # then 3h of (-10001, 'IPC send failed') because nothing reconnected.
+    IPC_ERROR_CODES = {-10001, -10002, -10003, -10004, -10005}
+
+    def _drop_if_ipc_error(self) -> Optional[tuple]:
+        """Call with self._lock held after an MT5 call failed. If the failure
+        is an IPC error, forget the connection so the next call re-initializes
+        (subject to the retry cooldown). Returns last_error()."""
+        try:
+            err = mt5.last_error()
+        except WorkerError:
+            err = None
+        code = err[0] if isinstance(err, tuple) and err else None
+        if code in self.IPC_ERROR_CODES and self._initialized:
+            log.warning("MT5 IPC link lost (%s) - will re-initialize on the next call", err)
+            self._initialized = False
+            self._status_cache = None
+            # Kill the worker rather than calling shutdown() through it: a
+            # fresh process attaches cleanly to the restarted terminal, and a
+            # dead worker would otherwise be respawned (and re-initialized)
+            # just to be shut down. Fakes in tests may only have shutdown().
+            try:
+                (getattr(mt5, "close", None) or mt5.shutdown)()
+            except Exception:  # noqa: BLE001 - the link is already broken
+                pass
+        return err
+
     def _ensure_init(self) -> bool:
         """Initialize the MT5 connection if needed. Cooldown prevents tight retry loops."""
         if not MT5_AVAILABLE:
             return False
         if self._initialized:
             return True
-        with self._lock:
+        # Never queue behind a reconnect: initialize() can take up to ~75s with
+        # the terminal down, and callers waiting on the lock used to time out in
+        # the scheduler without ever reaching the TwelveData fallback (review
+        # 2026-10-20). Whoever finds a reconnect in progress falls through now.
+        if not self._lock.acquire(timeout=0.5):
+            return False
+        try:
             if self._initialized:
                 return True
             if time.time() - self._last_init_attempt < self.INIT_RETRY_COOLDOWN_SECS:
                 return False
-            self._last_init_attempt = time.time()
-            if not mt5.initialize():
-                log.warning("mt5.initialize() failed: %s", mt5.last_error())
+            try:
+                ok = mt5.initialize()
+            except WorkerError as e:
+                log.warning("mt5.initialize() failed: %s", e)
+                return False
+            finally:
+                # cooldown counts from the END of the attempt: a 60s failed
+                # init must not be retried the moment it returns
+                self._last_init_attempt = time.time()
+            if not ok:
+                try:
+                    err = mt5.last_error()
+                except WorkerError as e:
+                    err = e
+                log.warning("mt5.initialize() failed: %s", err)
                 return False
             self._initialized = True
             self._detect_broker_offset()
-            acct = mt5.account_info()
+            try:
+                acct = mt5.account_info()
+            except WorkerError:
+                acct = None
             log.info("MT5 connected: login=%s server=%s offset=%ds",
                      acct.login if acct else "?",
                      acct.server if acct else "?",
                      self._broker_offset_secs)
             return True
+        finally:
+            self._lock.release()
 
     def _detect_broker_offset(self) -> None:
         """Compare a live tick's server time with local UTC to derive offset (rounded to hour).
@@ -179,12 +236,15 @@ class MT5Client:
 
         symbol = self.to_mt5_symbol(pair)
         with self._lock:
-            if not mt5.symbol_select(symbol, True):
-                raise MT5Error(f"cannot select symbol {symbol}: {mt5.last_error()}")
+            try:
+                if not mt5.symbol_select(symbol, True):
+                    raise MT5Error(f"cannot select symbol {symbol}: {self._drop_if_ipc_error()}")
 
-            rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, outputsize)
-            if rates is None or len(rates) == 0:
-                raise MT5Error(f"no data for {symbol} {interval}: {mt5.last_error()}")
+                rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, outputsize)
+                if rates is None or len(rates) == 0:
+                    raise MT5Error(f"no data for {symbol} {interval}: {self._drop_if_ipc_error()}")
+            except WorkerError as e:   # timed out / worker died: one failed fetch, not a frozen service
+                raise MT5Error(f"{symbol} {interval}: {e}") from e
 
         return self._normalize(rates, interval)
 
@@ -216,7 +276,10 @@ class MT5Client:
             return {"available": False, "reason": "MetaTrader5 package not installed"}
         if not self._ensure_init():
             with self._lock:
-                err = mt5.last_error() if MT5_AVAILABLE else "unavailable"
+                try:
+                    err = mt5.last_error() if MT5_AVAILABLE else "unavailable"
+                except WorkerError as e:
+                    err = e
             return {"available": False, "reason": str(err)}
         # Served from a short cache: the dashboard polls /status, and every MT5
         # call must go through the lock (the binding is not thread-safe and
@@ -226,8 +289,16 @@ class MT5Client:
         if self._status_cache and now - self._status_cache_ts < self.STATUS_CACHE_SECS:
             return self._status_cache
         with self._lock:
-            acct = mt5.account_info()
-            term = mt5.terminal_info()
+            try:
+                acct = mt5.account_info()
+                term = mt5.terminal_info()
+            except WorkerError as e:
+                return {"available": False, "reason": str(e)}
+            if acct is None and term is None:
+                # Both calls failing together means the IPC link is dead; do
+                # not report "available" with a dead link (2026-10-20).
+                err = self._drop_if_ipc_error()
+                return {"available": False, "reason": f"MT5 calls failed: {err}"}
         self._status_cache_ts = now
         self._status_cache = {
             "available": True,

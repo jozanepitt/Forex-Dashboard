@@ -22,6 +22,7 @@ from config import (
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
     VWAP9EMA_ALERTS_ENABLED, VWAP9EMA_GRADE_A_ONLY, VWAP9EMA_NEWS_FILTER,
+    EMA1350_ALERTS_ENABLED, EMA1350_ALERT_GRADES, EMA1350_NEWS_FILTER,
     SWEEP_ALERTS_ENABLED, SWEEP_GRADE_A_ONLY, SWEEP_NEWS_FILTER,
     VWAP_BOUNCE_ALERTS_ENABLED, VWAP_BOUNCE_GRADE_A_ONLY, VWAP_BOUNCE_NEWS_FILTER,
 )
@@ -1545,6 +1546,92 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     if _post_discord(embed):
         _mark_sent(pair, rule)
         log.info("VWAP9EMA alert sent: %s %s grade %s (UNVALIDATED strategy)", pair, setup, grade)
+
+
+# (pair, setup, pattern extreme_ts) -> time sent. One alert per W/M anchor.
+_ema1350_alerted_anchors: dict[tuple, float] = {}
+
+
+def alert_ema1350_setup(pair: str, row: dict):
+    """Fire for a confirmed M15 13/50 EMA cross anchored on a W/M/half batman
+    (ema1350_cross.py). Its own path and throttle rule, separate from the
+    VWAP+9EMA alert. Grades in EMA1350_ALERT_GRADES only (A+ and A by default).
+    UNVALIDATED strategy."""
+    if not EMA1350_ALERTS_ENABLED:
+        return
+    setup = row.get("setup")
+    if setup not in ("BUY", "SELL"):
+        return
+    grade = row.get("grade")
+    if grade not in EMA1350_ALERT_GRADES:
+        log.debug("EMA1350 FILTERED %s: grade %s", pair, grade)
+        return
+
+    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
+    if not (entry and sl and tp1):
+        log.debug("EMA1350 SUPPRESSED %s: incomplete trade plan", pair)
+        return
+    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
+        log.warning("EMA1350 alert BLOCKED for %s: bad R:R", pair)
+        return
+
+    if EMA1350_NEWS_FILTER:
+        try:
+            blocked = forexfactory.currencies_in_window(60, high_only=True)
+        except Exception as e:  # noqa: BLE001
+            blocked = set()
+            log.debug("EMA1350 news check failed for %s (fail-open): %s", pair, e)
+        if _news_blocks_pair(pair, blocked):
+            log.info("EMA1350 SUPPRESSED %s: high-impact news within 60m", pair)
+            return
+
+    # One alert per anchor: a whipsaw re-cross of the 13/50 used to re-send the
+    # same W/M (USD/JPY 2026-10-20, 17:15 and 18:00 on the 14:30 W).
+    anchor_ts = (row.get("pattern") or {}).get("extreme_ts")
+    anchor_key = (pair, setup, anchor_ts)
+    if anchor_ts is not None and anchor_key in _ema1350_alerted_anchors:
+        log.info("EMA1350 SUPPRESSED %s: anchor at %s already alerted", pair, anchor_ts)
+        return
+
+    rule = f"ema1350_{setup.lower()}"
+    if _is_throttled(pair, rule):
+        return
+
+    arrow = "📈" if setup == "BUY" else "📉"
+    colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
+    pat = row.get("pattern") or {}
+    pat_name = {"W": "W", "M": "M", "half_batman": "Half batman"}.get(pat.get("type"), "—")
+    origin = row.get("origin") or []
+
+    embed = {
+        "title": f"{arrow} {pair} — 13/50 EMA cross {setup} (M15)",
+        "description": row.get("notes") or "",
+        "color": colour,
+        "fields": [
+            {"name": "Setup", "value": f"**{setup}**", "inline": True},
+            {"name": "Grade", "value": f"**{grade}**", "inline": True},
+            {"name": "Pattern", "value": f"{pat_name} @ `{_fmt_price(pat['extreme'], pair)}`"
+                                         if pat.get("extreme") is not None else pat_name, "inline": True},
+            {"name": "Divergence", "value": "Yes (RSI)" if row.get("divergence") else "No", "inline": True},
+            {"name": "Origin", "value": ", ".join(origin) if origin else "—", "inline": True},
+            {"name": "Daily VWAP", "value": (f"`{_fmt_price(row['daily_vwap'], pair)}` "
+                                             + ("✅ trade side" if row.get("vwap_aligned") else "❌ wrong side"))
+                                            if row.get("daily_vwap") is not None else "—", "inline": True},
+            {"name": "Entry", "value": f"`{_fmt_price(entry, pair)}`", "inline": True},
+            {"name": "Stop Loss", "value": f"`{_fmt_price(sl, pair)}`", "inline": True},
+            {"name": "Target", "value": f"`{_fmt_price(tp1, pair)}`", "inline": True},
+        ],
+        "footer": {"text": f"BTMM 13/50 EMA cross (unvalidated) · entry is raw mid-price, no spread adjustment · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    if _post_discord(embed):
+        _mark_sent(pair, rule)
+        if anchor_ts is not None:
+            now = time.time()
+            _ema1350_alerted_anchors[anchor_key] = now
+            # an anchor can only be reused inside the 12h pattern window; keep a day
+            for k in [k for k, t in _ema1350_alerted_anchors.items() if now - t > 86400]:
+                del _ema1350_alerted_anchors[k]
+        log.info("EMA1350 alert sent: %s %s grade %s (UNVALIDATED strategy)", pair, setup, grade)
 
 
 def alert_vwap_bounce_setup(pair: str, row: dict):

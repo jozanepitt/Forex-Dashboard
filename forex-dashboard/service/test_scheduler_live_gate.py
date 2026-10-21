@@ -47,6 +47,7 @@ RUNNERS = [
     ("_run_crt_5am_alerts", "crt_strategy", "analyze_universe_5am", ["alert_crt_5am_setup"]),
     ("_run_vwap_bounce_alerts", "vwap_bounce_strategy", "analyze_universe", ["alert_vwap_bounce_setup"]),
     ("_run_sweep_alerts", "sweep_strategy", "analyze_universe", ["alert_sweep_setup"]),
+    ("_run_ema1350_alerts", "ema1350_cross", "analyze_universe", ["alert_ema1350_setup"]),
 ]
 
 

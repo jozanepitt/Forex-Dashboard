@@ -340,6 +340,12 @@ def _refresh_all_inner():
     except Exception as e:
         log.warning("VWAP9EMA alerts failed: %s", e)
 
+    # Standalone M15 13/50 EMA cross check (its own alert path and grades).
+    try:
+        _run_ema1350_alerts()
+    except Exception as e:
+        log.warning("EMA1350 alerts failed: %s", e)
+
     # Run the Sweep (M15 stop-run dot) scanner + Discord alerts (grades A and B)
     try:
         _run_sweep_alerts()
@@ -482,6 +488,60 @@ def _run_vwap9ema_alerts():
             log.debug("VWAP9EMA alert eval failed for %s: %s", row.get("symbol"), e)
 
 
+def _mt5_ready() -> bool:
+    try:
+        from providers import exness_mt5
+        return bool(exness_mt5.MT5_AVAILABLE and exness_mt5.client()._initialized)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _quick_m15_ema1350():
+    """Fast path for the 13/50 cross (user request 2026-10-21): ~20s after each
+    M15 close, fetch only M15 for its universe and run the check, instead of
+    waiting for refresh_all at :02 plus every other scanner (the EUR/JPY alert
+    reached Discord 4m45s after its candle closed). refresh_all still runs the
+    check too; the alert's anchor dedupe and 1h throttle stop a second send."""
+    import ema1350_cross
+    if not _mt5_ready():
+        # MT5 down: the fallback (TwelveData, ~8 calls/min per key) cannot take
+        # a burst of 27 fetches; leave it to refresh_all's paced loop.
+        log.info("EMA1350 quick job skipped: MT5 not connected")
+        return
+    for i, sym in enumerate(ema1350_cross.EMA1350_UNIVERSE):
+        if i > 0 and FANOUT_DELAY_SECS:
+            time.sleep(min(FANOUT_DELAY_SECS, 0.2))
+        try:
+            _fetch_guarded(sym, "15min", limit=ema1350_cross.M15_FETCH_LIMIT)
+        except Exception as e:
+            log.warning("EMA1350 quick fetch failed for %s: %s", sym, e)
+    _run_ema1350_alerts()
+
+
+def _run_ema1350_alerts():
+    """Run the standalone M15 13/50 EMA cross check (ema1350_cross.py, beside
+    the VWAP+9EMA scanner but separate from it) and fire its own Discord
+    alerts. M15 and D1 are already fetched for every PRIORITY_PAIRS symbol."""
+    import cache
+    import ema1350_cross
+
+    candles_by_pair: dict[str, dict] = {}
+    for sym in ema1350_cross.EMA1350_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=ema1350_cross.M15_FETCH_LIMIT),
+            "1d": cache.read_candles(sym, "1day", limit=ema1350_cross.D1_FETCH_LIMIT),
+        }
+    live = _live_symbols("EMA1350", candles_by_pair, [("m15", "15min")])
+    result = ema1350_cross.analyze_universe(candles_by_pair)
+    for row in result.get("pairs", []):
+        if row.get("symbol") not in live:
+            continue
+        try:
+            alerts.alert_ema1350_setup(row["symbol"], row)
+        except Exception as e:
+            log.debug("EMA1350 alert eval failed for %s: %s", row.get("symbol"), e)
+
+
 def _run_sweep_alerts():
     """Run the Sweep scanner on the cache and alert confirmed setups."""
     import cache
@@ -615,6 +675,10 @@ def start() -> BackgroundScheduler:
     # Run 2 min after each 15-min mark so the candle is fully closed by broker.
     sched.add_job(refresh_all, "cron", minute="2,17,32,47", id="refresh_all",
                   misfire_grace_time=120, max_instances=1, coalesce=True)
+    # 13/50 cross fast path: 20s after each M15 close (MT5 has the closed bar
+    # immediately), so its alert is not held behind the full refresh.
+    sched.add_job(_quick_m15_ema1350, "cron", minute="0,15,30,45", second=20, id="ema1350_quick",
+                  misfire_grace_time=60, max_instances=1, coalesce=True)
     # Independent watchdog every 5 min — alerts if refresh_all has stalled.
     sched.add_job(_watchdog, "cron", minute="*/5", id="watchdog",
                   misfire_grace_time=60, max_instances=1, coalesce=True)

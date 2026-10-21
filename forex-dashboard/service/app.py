@@ -24,9 +24,11 @@ import cache
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
 import vwap9ema_strategy
+import ema1350_cross
 import vwap_bounce_strategy
 import sweep_strategy
 import fetcher
+import hang_watchdog
 import restart
 import scheduler
 from providers import forexfactory
@@ -178,6 +180,12 @@ def vwap9ema():
             stale_set.add(sym)
 
     result = vwap9ema_strategy.analyze_universe(candles_by_pair)
+    # Standalone M15 13/50 EMA cross check — reported alongside, never mixed
+    # into the 9EMA/VWAP rows above (see ema1350_cross.py).
+    result["ema13_50"] = ema1350_cross.analyze_universe({
+        sym: {"m15": cache.read_candles(sym, "15min", limit=ema1350_cross.M15_FETCH_LIMIT),
+              "1d": cache.read_candles(sym, "1day", limit=ema1350_cross.D1_FETCH_LIMIT)}
+        for sym in ema1350_cross.EMA1350_UNIVERSE})
     result["stale_pairs"] = sorted(stale_set)
     result["cached_at"] = int(now)
     _VWAP9EMA_CACHE["payload"] = result
@@ -772,6 +780,9 @@ def _ensure_exclusive_port(host: str, port: int) -> None:
 
 def main():
     _ensure_exclusive_port(SERVICE_HOST, SERVICE_PORT)
+    # Dumps every stack to hang_dump.log if the interpreter ever freezes
+    # (the Python-thread self-check freezes with it).
+    hang_watchdog.start(SERVICE_ROOT / "hang_dump.log")
     cache.init_db()
     log.info("DB initialised at %s", cache.DB_PATH if False else "candles.db")
     try:

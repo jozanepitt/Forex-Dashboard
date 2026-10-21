@@ -201,6 +201,13 @@ VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lowe
 VWAP9EMA_GRADE_A_ONLY = os.environ.get("VWAP9EMA_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
 VWAP9EMA_NEWS_FILTER = os.environ.get("VWAP9EMA_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
+# BTMM 13/50 EMA cross (M15, ema1350_cross.py) — standalone check beside the
+# VWAP+9EMA scanner, UNVALIDATED. User decision 2026-10-20: A+ and A go to
+# Discord, B stays on the dashboard. Comma-separated grades.
+EMA1350_ALERTS_ENABLED = os.environ.get("EMA1350_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+EMA1350_ALERT_GRADES = tuple(g.strip() for g in os.environ.get("EMA1350_ALERT_GRADES", "A+,A").split(",") if g.strip())
+EMA1350_NEWS_FILTER = os.environ.get("EMA1350_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+
 # Sweep (LuxAlgo Order Flow VWAP Deviation stop-run dots, M15) — UNVALIDATED.
 # User decision 2026-10-19: grades A and B go to Discord; tighten to A later.
 SWEEP_ALERTS_ENABLED = os.environ.get("SWEEP_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
