@@ -1,0 +1,4 @@
+# Optional. The live service does not need these.
+numpy>=1.26
+matplotlib>=3.8
+dukascopy-python>=4.0.1

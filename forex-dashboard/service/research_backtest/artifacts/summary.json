@@ -1,0 +1,4481 @@
+{
+  "split": "2025-04-01",
+  "symbols": [
+    "EUR/USD",
+    "GBP/USD",
+    "USD/JPY",
+    "XAU/USD",
+    "USD/CHF",
+    "AUD/USD",
+    "USD/CAD",
+    "NZD/USD",
+    "EUR/JPY",
+    "GBP/JPY"
+  ],
+  "robust_rule": {
+    "min_oos_trades": 80,
+    "min_oos_expectancy_r": 0.05,
+    "min_oos_profit_factor": 1.15,
+    "in_sample_expectancy_positive": true,
+    "wide_spread_expectancy_positive": true,
+    "majority_of_oos_years_positive": true
+  },
+  "costs": [
+    {
+      "symbol": "EUR/USD",
+      "spread_price": 0.00011,
+      "spread_pips": 1.1,
+      "slippage_price": 2e-05,
+      "slippage_pips": 0.2,
+      "commission": 0.0
+    },
+    {
+      "symbol": "GBP/USD",
+      "spread_price": 0.00015,
+      "spread_pips": 1.5,
+      "slippage_price": 3e-05,
+      "slippage_pips": 0.3,
+      "commission": 0.0
+    },
+    {
+      "symbol": "AUD/USD",
+      "spread_price": 0.00014,
+      "spread_pips": 1.4,
+      "slippage_price": 2e-05,
+      "slippage_pips": 0.2,
+      "commission": 0.0
+    },
+    {
+      "symbol": "NZD/USD",
+      "spread_price": 0.00018,
+      "spread_pips": 1.8,
+      "slippage_price": 3e-05,
+      "slippage_pips": 0.3,
+      "commission": 0.0
+    },
+    {
+      "symbol": "USD/CHF",
+      "spread_price": 0.00015,
+      "spread_pips": 1.5,
+      "slippage_price": 2e-05,
+      "slippage_pips": 0.2,
+      "commission": 0.0
+    },
+    {
+      "symbol": "USD/CAD",
+      "spread_price": 0.00017,
+      "spread_pips": 1.7,
+      "slippage_price": 3e-05,
+      "slippage_pips": 0.3,
+      "commission": 0.0
+    },
+    {
+      "symbol": "EUR/GBP",
+      "spread_price": 0.00016,
+      "spread_pips": 1.6,
+      "slippage_price": 3e-05,
+      "slippage_pips": 0.3,
+      "commission": 0.0
+    },
+    {
+      "symbol": "EUR/AUD",
+      "spread_price": 0.0002,
+      "spread_pips": 2.0,
+      "slippage_price": 4e-05,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "EUR/CHF",
+      "spread_price": 0.00018,
+      "spread_pips": 1.8,
+      "slippage_price": 3e-05,
+      "slippage_pips": 0.3,
+      "commission": 0.0
+    },
+    {
+      "symbol": "GBP/AUD",
+      "spread_price": 0.00028,
+      "spread_pips": 2.8,
+      "slippage_price": 5e-05,
+      "slippage_pips": 0.5,
+      "commission": 0.0
+    },
+    {
+      "symbol": "GBP/CHF",
+      "spread_price": 0.00024,
+      "spread_pips": 2.4,
+      "slippage_price": 4e-05,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "AUD/CAD",
+      "spread_price": 0.0002,
+      "spread_pips": 2.0,
+      "slippage_price": 4e-05,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "AUD/CHF",
+      "spread_price": 0.0002,
+      "spread_pips": 2.0,
+      "slippage_price": 4e-05,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "AUD/NZD",
+      "spread_price": 0.00022,
+      "spread_pips": 2.2,
+      "slippage_price": 4e-05,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "USD/JPY",
+      "spread_price": 0.012,
+      "spread_pips": 1.2,
+      "slippage_price": 0.003,
+      "slippage_pips": 0.3,
+      "commission": 0.0
+    },
+    {
+      "symbol": "EUR/JPY",
+      "spread_price": 0.018,
+      "spread_pips": 1.8,
+      "slippage_price": 0.004,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "GBP/JPY",
+      "spread_price": 0.028,
+      "spread_pips": 2.8,
+      "slippage_price": 0.006,
+      "slippage_pips": 0.6,
+      "commission": 0.0
+    },
+    {
+      "symbol": "AUD/JPY",
+      "spread_price": 0.018,
+      "spread_pips": 1.8,
+      "slippage_price": 0.004,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "CAD/JPY",
+      "spread_price": 0.018,
+      "spread_pips": 1.8,
+      "slippage_price": 0.004,
+      "slippage_pips": 0.4,
+      "commission": 0.0
+    },
+    {
+      "symbol": "XAU/USD",
+      "spread_price": 0.22,
+      "spread_pips": 2.2,
+      "slippage_price": 0.07,
+      "slippage_pips": 0.7,
+      "commission": 0.0
+    },
+    {
+      "symbol": "XAG/USD",
+      "spread_price": 0.025,
+      "spread_pips": 2.5,
+      "slippage_price": 0.008,
+      "slippage_pips": 0.8,
+      "commission": 0.0
+    },
+    {
+      "symbol": "USOIL",
+      "spread_price": 0.04,
+      "spread_pips": 4.0,
+      "slippage_price": 0.02,
+      "slippage_pips": 2.0,
+      "commission": 0.0
+    },
+    {
+      "symbol": "UKOIL",
+      "spread_price": 0.05,
+      "spread_pips": 5.0,
+      "slippage_price": 0.02,
+      "slippage_pips": 2.0,
+      "commission": 0.0
+    }
+  ],
+  "rows": [
+    {
+      "strategy": "btmm_m15",
+      "is": {
+        "trades": 14251,
+        "win_rate": 0.39232334573012423,
+        "profit_factor": 0.6898380281187024,
+        "expectancy_r": -0.23356949479471772,
+        "expectancy_pips": -2.1049014244324855,
+        "expectancy_r_wide": -0.4177482566395944,
+        "max_drawdown_r": 3338.0563406483266,
+        "sharpe": -9.754835689424157,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 6179,
+            "expectancy_r": -0.23963481745350196
+          },
+          {
+            "year": 2024,
+            "trades": 6244,
+            "expectancy_r": -0.23401027710405606
+          },
+          {
+            "year": 2025,
+            "trades": 1828,
+            "expectancy_r": -0.21156190538107625
+          }
+        ],
+        "outcomes": {
+          "sl": 8396,
+          "tp": 5818,
+          "maxhold": 37
+        }
+      },
+      "oos": {
+        "trades": 10954,
+        "win_rate": 0.3792222019353661,
+        "profit_factor": 0.6744205974932118,
+        "expectancy_r": -0.24799835613559185,
+        "expectancy_pips": -2.063451397924333,
+        "expectancy_r_wide": -0.4325902044875496,
+        "max_drawdown_r": 2727.6627566143675,
+        "sharpe": -10.746715616031759,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 5608,
+            "expectancy_r": -0.2625164236824462
+          },
+          {
+            "year": 2026,
+            "trades": 5346,
+            "expectancy_r": -0.23276877835729787
+          }
+        ],
+        "outcomes": {
+          "tp": 4383,
+          "sl": 6541,
+          "maxhold": 20,
+          "eod": 10
+        }
+      },
+      "oos_alert": {
+        "trades": 95,
+        "win_rate": 0.631578947368421,
+        "profit_factor": 0.8812659584564058,
+        "expectancy_r": -0.04432922540234276,
+        "expectancy_pips": -10.24950676691692,
+        "expectancy_r_wide": -0.15539053647280313,
+        "max_drawdown_r": 10.33472431018954,
+        "sharpe": -0.30146967419434473,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 46,
+            "expectancy_r": 0.1331184325427604
+          },
+          {
+            "year": 2026,
+            "trades": 49,
+            "expectancy_r": -0.21091274102427635
+          }
+        ],
+        "outcomes": {
+          "tp": 59,
+          "sl": 33,
+          "maxhold": 2,
+          "eod": 1
+        }
+      },
+      "is_alert": {
+        "trades": 99,
+        "win_rate": 0.6161616161616161,
+        "profit_factor": 0.8838560674745668,
+        "expectancy_r": -0.04641826386352304,
+        "expectancy_pips": 0.37474747474770553,
+        "expectancy_r_wide": -0.12207083286044158,
+        "max_drawdown_r": 6.899665858931298,
+        "sharpe": -0.28102410881982565,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 48,
+            "expectancy_r": -0.060578535003194295
+          },
+          {
+            "year": 2024,
+            "trades": 42,
+            "expectancy_r": 0.016444925136926053
+          },
+          {
+            "year": 2025,
+            "trades": 9,
+            "expectancy_r": -0.26425836645403905
+          }
+        ],
+        "outcomes": {
+          "tp": 60,
+          "sl": 37,
+          "maxhold": 2
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 1016,
+          "expectancy_r": -0.2118854157038416,
+          "expectancy_pips": -2.9525880977025314,
+          "profit_factor": 0.7046779853210118,
+          "win_rate": 0.3779527559055118,
+          "max_drawdown_r": 224.5949475869296
+        },
+        "GBP/USD": {
+          "trades": 1176,
+          "expectancy_r": -0.267133449491971,
+          "expectancy_pips": -3.4247216271283256,
+          "profit_factor": 0.6416789823781178,
+          "win_rate": 0.37755102040816324,
+          "max_drawdown_r": 317.12286013869453
+        },
+        "USD/JPY": {
+          "trades": 1314,
+          "expectancy_r": -0.18749453343611028,
+          "expectancy_pips": -2.6119177814538928,
+          "profit_factor": 0.758020598424443,
+          "win_rate": 0.3645357686453577,
+          "max_drawdown_r": 283.5421611665044
+        },
+        "XAU/USD": {
+          "trades": 1126,
+          "expectancy_r": 0.034235517686459,
+          "expectancy_pips": 8.617074917270086,
+          "profit_factor": 1.0521877415057992,
+          "win_rate": 0.3925399644760213,
+          "max_drawdown_r": 30.698485723801994
+        },
+        "USD/CHF": {
+          "trades": 843,
+          "expectancy_r": -0.2898494455974907,
+          "expectancy_pips": -2.814177174707237,
+          "profit_factor": 0.6017777960873224,
+          "win_rate": 0.38552787663107946,
+          "max_drawdown_r": 267.9477560650415
+        },
+        "AUD/USD": {
+          "trades": 901,
+          "expectancy_r": -0.24022317187788628,
+          "expectancy_pips": -2.5611900337289852,
+          "profit_factor": 0.6645451164922955,
+          "win_rate": 0.3973362930077691,
+          "max_drawdown_r": 229.7667103491248
+        },
+        "USD/CAD": {
+          "trades": 956,
+          "expectancy_r": -0.2130698383214199,
+          "expectancy_pips": -1.5470102066851594,
+          "profit_factor": 0.7041791667434759,
+          "win_rate": 0.4194560669456067,
+          "max_drawdown_r": 208.16641594720375
+        },
+        "NZD/USD": {
+          "trades": 925,
+          "expectancy_r": -0.2737882401304815,
+          "expectancy_pips": -2.565660045000687,
+          "profit_factor": 0.6281205193599518,
+          "win_rate": 0.40540540540540543,
+          "max_drawdown_r": 257.8005227972302
+        },
+        "EUR/JPY": {
+          "trades": 1339,
+          "expectancy_r": -0.37933949425394387,
+          "expectancy_pips": -4.3506453527014575,
+          "profit_factor": 0.5613911401106203,
+          "win_rate": 0.3435399551904406,
+          "max_drawdown_r": 513.7786012817409
+        },
+        "GBP/JPY": {
+          "trades": 1358,
+          "expectancy_r": -0.40770413790048005,
+          "expectancy_pips": -5.514606670808725,
+          "profit_factor": 0.5366416713538964,
+          "win_rate": 0.35787923416789397,
+          "max_drawdown_r": 558.4093032644626
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "crt_1am",
+      "is": {
+        "trades": 1520,
+        "win_rate": 0.2736842105263158,
+        "profit_factor": 0.7058147104050616,
+        "expectancy_r": -0.22345081915409282,
+        "expectancy_pips": -7.901203947368078,
+        "expectancy_r_wide": -0.28566169104566386,
+        "max_drawdown_r": 357.53492504329495,
+        "sharpe": -3.62725916543476,
+        "max_concurrent": 8,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 700,
+            "expectancy_r": -0.22236749511337295
+          },
+          {
+            "year": 2024,
+            "trades": 658,
+            "expectancy_r": -0.24684026787314375
+          },
+          {
+            "year": 2025,
+            "trades": 162,
+            "expectancy_r": -0.13313026095266334
+          }
+        ],
+        "outcomes": {
+          "sl": 1103,
+          "tp": 414,
+          "maxhold": 3
+        }
+      },
+      "oos": {
+        "trades": 982,
+        "win_rate": 0.2892057026476578,
+        "profit_factor": 0.7556261179542751,
+        "expectancy_r": -0.1824273168509557,
+        "expectancy_pips": -14.842942973523115,
+        "expectancy_r_wide": -0.24704851251393947,
+        "max_drawdown_r": 188.10815204088195,
+        "sharpe": -2.958115696358471,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 503,
+            "expectancy_r": -0.21476041581754832
+          },
+          {
+            "year": 2026,
+            "trades": 479,
+            "expectancy_r": -0.1484741878735108
+          }
+        ],
+        "outcomes": {
+          "sl": 698,
+          "tp": 282,
+          "maxhold": 2
+        }
+      },
+      "oos_alert": {
+        "trades": 0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy_r": null,
+        "expectancy_pips": null,
+        "expectancy_r_wide": null,
+        "max_drawdown_r": null,
+        "sharpe": null,
+        "max_concurrent": 0,
+        "years": [],
+        "outcomes": {}
+      },
+      "is_alert": {
+        "trades": 0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy_r": null,
+        "expectancy_pips": null,
+        "expectancy_r_wide": null,
+        "max_drawdown_r": null,
+        "sharpe": null,
+        "max_concurrent": 0,
+        "years": [],
+        "outcomes": {}
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 107,
+          "expectancy_r": -0.106221513536942,
+          "expectancy_pips": -3.373364485980727,
+          "profit_factor": 0.8513917882193338,
+          "win_rate": 0.308411214953271,
+          "max_drawdown_r": 27.885668900978423
+        },
+        "GBP/USD": {
+          "trades": 89,
+          "expectancy_r": -0.0280154641075413,
+          "expectancy_pips": -1.4820224719106898,
+          "profit_factor": 0.959583409505388,
+          "win_rate": 0.33707865168539325,
+          "max_drawdown_r": 8.66944478721906
+        },
+        "USD/JPY": {
+          "trades": 101,
+          "expectancy_r": -0.3219819296210617,
+          "expectancy_pips": -14.27277227722641,
+          "profit_factor": 0.592905672623286,
+          "win_rate": 0.2376237623762376,
+          "max_drawdown_r": 34.40912947697954
+        },
+        "XAU/USD": {
+          "trades": 101,
+          "expectancy_r": -0.29702587225371224,
+          "expectancy_pips": -86.79524752475244,
+          "profit_factor": 0.6146807582779539,
+          "win_rate": 0.2376237623762376,
+          "max_drawdown_r": 32.95830175043085
+        },
+        "USD/CHF": {
+          "trades": 98,
+          "expectancy_r": -0.07850966853655643,
+          "expectancy_pips": -3.662244897959181,
+          "profit_factor": 0.8897857539655303,
+          "win_rate": 0.32653061224489793,
+          "max_drawdown_r": 11.632256198252982
+        },
+        "AUD/USD": {
+          "trades": 94,
+          "expectancy_r": -0.16060758781975518,
+          "expectancy_pips": -4.462765957447168,
+          "profit_factor": 0.7830179828559088,
+          "win_rate": 0.2978723404255319,
+          "max_drawdown_r": 21.63336135908319
+        },
+        "USD/CAD": {
+          "trades": 115,
+          "expectancy_r": -0.1856727059677386,
+          "expectancy_pips": -4.03434782608678,
+          "profit_factor": 0.7546985656767039,
+          "win_rate": 0.2956521739130435,
+          "max_drawdown_r": 33.56673649695376
+        },
+        "NZD/USD": {
+          "trades": 97,
+          "expectancy_r": -0.1084349009666005,
+          "expectancy_pips": -3.865979381442897,
+          "profit_factor": 0.8505267241423551,
+          "win_rate": 0.31958762886597936,
+          "max_drawdown_r": 17.453299067216918
+        },
+        "EUR/JPY": {
+          "trades": 86,
+          "expectancy_r": -0.19343223961135564,
+          "expectancy_pips": -12.139534883719971,
+          "profit_factor": 0.740180343225238,
+          "win_rate": 0.29069767441860467,
+          "max_drawdown_r": 23.815619239124416
+        },
+        "GBP/JPY": {
+          "trades": 94,
+          "expectancy_r": -0.3347657334680433,
+          "expectancy_pips": -12.911702127659089,
+          "profit_factor": 0.5877515577985696,
+          "win_rate": 0.24468085106382978,
+          "max_drawdown_r": 32.3794372793294
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "crt_5am",
+      "is": {
+        "trades": 51,
+        "win_rate": 0.27450980392156865,
+        "profit_factor": 0.6739094251583282,
+        "expectancy_r": -0.25826340839770523,
+        "expectancy_pips": -1.9366666666664567,
+        "expectancy_r_wide": -0.36093146235710566,
+        "max_drawdown_r": 18.926459458473943,
+        "sharpe": -0.7370697420501162,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 21,
+            "expectancy_r": -0.38345133645367047
+          },
+          {
+            "year": 2024,
+            "trades": 24,
+            "expectancy_r": -0.4530825580394524
+          },
+          {
+            "year": 2025,
+            "trades": 6,
+            "expectancy_r": 0.9591709383651622
+          }
+        ],
+        "outcomes": {
+          "sl": 37,
+          "tp": 14
+        }
+      },
+      "oos": {
+        "trades": 50,
+        "win_rate": 0.32,
+        "profit_factor": 0.8480296517122449,
+        "expectancy_r": -0.11005758256842775,
+        "expectancy_pips": -5.5225999999995885,
+        "expectancy_r_wide": -0.21701863268866464,
+        "max_drawdown_r": 13.680980962097617,
+        "sharpe": -0.4077322536902829,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 23,
+            "expectancy_r": 0.2260869410389213
+          },
+          {
+            "year": 2026,
+            "trades": 27,
+            "expectancy_r": -0.3964029174932065
+          }
+        ],
+        "outcomes": {
+          "sl": 34,
+          "tp": 16
+        }
+      },
+      "oos_alert": {
+        "trades": 0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy_r": null,
+        "expectancy_pips": null,
+        "expectancy_r_wide": null,
+        "max_drawdown_r": null,
+        "sharpe": null,
+        "max_concurrent": 0,
+        "years": [],
+        "outcomes": {}
+      },
+      "is_alert": {
+        "trades": 0,
+        "win_rate": null,
+        "profit_factor": null,
+        "expectancy_r": null,
+        "expectancy_pips": null,
+        "expectancy_r_wide": null,
+        "max_drawdown_r": null,
+        "sharpe": null,
+        "max_concurrent": 0,
+        "years": [],
+        "outcomes": {}
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 5,
+          "expectancy_r": -1.014649401564086,
+          "expectancy_pips": -13.94999999999813,
+          "profit_factor": 0.0,
+          "win_rate": 0.0,
+          "max_drawdown_r": 5.073247007820429
+        },
+        "GBP/USD": {
+          "trades": 8,
+          "expectancy_r": -0.2921381414697575,
+          "expectancy_pips": -5.774999999999531,
+          "profit_factor": 0.6243902191461795,
+          "win_rate": 0.25,
+          "max_drawdown_r": 4.194967832094088
+        },
+        "USD/JPY": {
+          "trades": 1,
+          "expectancy_r": -1.1293103448274848,
+          "expectancy_pips": -13.09999999999718,
+          "profit_factor": 0.0,
+          "win_rate": 0.0,
+          "max_drawdown_r": 1.1293103448274848
+        },
+        "XAU/USD": {
+          "trades": 6,
+          "expectancy_r": -0.5059036238999325,
+          "expectancy_pips": -45.738333333332925,
+          "profit_factor": 0.3971861945072604,
+          "win_rate": 0.16666666666666666,
+          "max_drawdown_r": 5.035421743399596
+        },
+        "USD/CHF": {
+          "trades": 4,
+          "expectancy_r": -1.103662717815624,
+          "expectancy_pips": -14.03750000000009,
+          "profit_factor": 0.0,
+          "win_rate": 0.0,
+          "max_drawdown_r": 4.414650871262496
+        },
+        "AUD/USD": {
+          "trades": 4,
+          "expectancy_r": 1.9704641350210907,
+          "expectancy_pips": 24.94999999999969,
+          "profit_factor": null,
+          "win_rate": 1.0,
+          "max_drawdown_r": 0.0
+        },
+        "USD/CAD": {
+          "trades": 10,
+          "expectancy_r": 0.09367546241652214,
+          "expectancy_pips": 1.5499999999997183,
+          "profit_factor": 1.143110805574033,
+          "win_rate": 0.4,
+          "max_drawdown_r": 2.3398881472126796
+        },
+        "NZD/USD": {
+          "trades": 6,
+          "expectancy_r": -0.07454014117453626,
+          "expectancy_pips": -1.2583333333330655,
+          "profit_factor": 0.8958304840327269,
+          "win_rate": 0.3333333333333333,
+          "max_drawdown_r": 2.2474710605901973
+        },
+        "EUR/JPY": {
+          "trades": 3,
+          "expectancy_r": -1.1654563462981438,
+          "expectancy_pips": -15.583333333331476,
+          "profit_factor": 0.0,
+          "win_rate": 0.0,
+          "max_drawdown_r": 3.4963690388944313
+        },
+        "GBP/JPY": {
+          "trades": 3,
+          "expectancy_r": 1.8706182307795807,
+          "expectancy_pips": 40.833333333333144,
+          "profit_factor": null,
+          "win_rate": 1.0,
+          "max_drawdown_r": 0.0
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_h1",
+      "is": {
+        "trades": 6905,
+        "win_rate": 0.3325126719768284,
+        "profit_factor": 0.7879153310962093,
+        "expectancy_r": -0.16593166194507644,
+        "expectancy_pips": -1.42722457566926,
+        "expectancy_r_wide": -0.28459143690770833,
+        "max_drawdown_r": 1159.727806953965,
+        "sharpe": -4.8172455610689875,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 3084,
+            "expectancy_r": -0.17903291683582115
+          },
+          {
+            "year": 2024,
+            "trades": 3039,
+            "expectancy_r": -0.16107027215190395
+          },
+          {
+            "year": 2025,
+            "trades": 782,
+            "expectancy_r": -0.13315607818343247
+          }
+        ],
+        "outcomes": {
+          "tp": 2291,
+          "sl": 4606,
+          "maxhold": 8
+        }
+      },
+      "oos": {
+        "trades": 5099,
+        "win_rate": 0.3175132378897823,
+        "profit_factor": 0.7177244997373327,
+        "expectancy_r": -0.22903266411435344,
+        "expectancy_pips": -3.6272206735207577,
+        "expectancy_r_wide": -0.35622493324357696,
+        "max_drawdown_r": 1175.6668903610555,
+        "sharpe": -6.687493451844897,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 2526,
+            "expectancy_r": -0.20969483098822866
+          },
+          {
+            "year": 2026,
+            "trades": 2573,
+            "expectancy_r": -0.2480172604907977
+          }
+        ],
+        "outcomes": {
+          "tp": 1608,
+          "sl": 3475,
+          "maxhold": 11,
+          "eod": 5
+        }
+      },
+      "oos_alert": {
+        "trades": 5099,
+        "win_rate": 0.3175132378897823,
+        "profit_factor": 0.7177244997373327,
+        "expectancy_r": -0.22903266411435344,
+        "expectancy_pips": -3.6272206735207577,
+        "expectancy_r_wide": -0.35622493324357696,
+        "max_drawdown_r": 1175.6668903610555,
+        "sharpe": -6.687493451844897,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 2526,
+            "expectancy_r": -0.20969483098822866
+          },
+          {
+            "year": 2026,
+            "trades": 2573,
+            "expectancy_r": -0.2480172604907977
+          }
+        ],
+        "outcomes": {
+          "tp": 1608,
+          "sl": 3475,
+          "maxhold": 11,
+          "eod": 5
+        }
+      },
+      "is_alert": {
+        "trades": 6905,
+        "win_rate": 0.3325126719768284,
+        "profit_factor": 0.7879153310962093,
+        "expectancy_r": -0.16593166194507644,
+        "expectancy_pips": -1.42722457566926,
+        "expectancy_r_wide": -0.28459143690770833,
+        "max_drawdown_r": 1159.727806953965,
+        "sharpe": -4.8172455610689875,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 3084,
+            "expectancy_r": -0.17903291683582115
+          },
+          {
+            "year": 2024,
+            "trades": 3039,
+            "expectancy_r": -0.16107027215190395
+          },
+          {
+            "year": 2025,
+            "trades": 782,
+            "expectancy_r": -0.13315607818343247
+          }
+        ],
+        "outcomes": {
+          "tp": 2291,
+          "sl": 4606,
+          "maxhold": 8
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 535,
+          "expectancy_r": -0.1333538374074938,
+          "expectancy_pips": -1.6576755674221872,
+          "profit_factor": 0.8253933030394819,
+          "win_rate": 0.3383177570093458,
+          "max_drawdown_r": 77.54723342112926
+        },
+        "GBP/USD": {
+          "trades": 471,
+          "expectancy_r": -0.2505024296848573,
+          "expectancy_pips": -4.81078252957284,
+          "profit_factor": 0.689374973601756,
+          "win_rate": 0.30148619957537154,
+          "max_drawdown_r": 125.00680465428688
+        },
+        "USD/JPY": {
+          "trades": 486,
+          "expectancy_r": -0.1933012139848735,
+          "expectancy_pips": -4.735116108169338,
+          "profit_factor": 0.7509567718183205,
+          "win_rate": 0.30864197530864196,
+          "max_drawdown_r": 103.29520193977086
+        },
+        "XAU/USD": {
+          "trades": 536,
+          "expectancy_r": 0.018088115214466377,
+          "expectancy_pips": -4.5588852611927795,
+          "profit_factor": 1.0268696804353712,
+          "win_rate": 0.34888059701492535,
+          "max_drawdown_r": 33.756806635630824
+        },
+        "USD/CHF": {
+          "trades": 520,
+          "expectancy_r": -0.3542494077187516,
+          "expectancy_pips": -3.2687101648353267,
+          "profit_factor": 0.5941610999180816,
+          "win_rate": 0.2923076923076923,
+          "max_drawdown_r": 195.90964963137225
+        },
+        "AUD/USD": {
+          "trades": 521,
+          "expectancy_r": -0.3750495767903734,
+          "expectancy_pips": -3.8567452700856317,
+          "profit_factor": 0.5780104548173681,
+          "win_rate": 0.2840690978886756,
+          "max_drawdown_r": 195.58985813211902
+        },
+        "USD/CAD": {
+          "trades": 526,
+          "expectancy_r": -0.21799833119517886,
+          "expectancy_pips": -2.5240372080387683,
+          "profit_factor": 0.7341598937446108,
+          "win_rate": 0.33460076045627374,
+          "max_drawdown_r": 120.68478795974887
+        },
+        "NZD/USD": {
+          "trades": 527,
+          "expectancy_r": -0.3245907224894878,
+          "expectancy_pips": -2.2334928164806227,
+          "profit_factor": 0.6333544400754837,
+          "win_rate": 0.33396584440227706,
+          "max_drawdown_r": 179.35493257362353
+        },
+        "EUR/JPY": {
+          "trades": 498,
+          "expectancy_r": -0.24428077957859093,
+          "expectancy_pips": -3.944518072287672,
+          "profit_factor": 0.7017647061231967,
+          "win_rate": 0.3092369477911647,
+          "max_drawdown_r": 127.66320889107085
+        },
+        "GBP/JPY": {
+          "trades": 479,
+          "expectancy_r": -0.2239429310449245,
+          "expectancy_pips": -5.051099015806082,
+          "profit_factor": 0.7235363297554009,
+          "win_rate": 0.31941544885177453,
+          "max_drawdown_r": 112.9710980503741
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_h1_retrace50",
+      "is": {
+        "trades": 6126,
+        "win_rate": 0.2069866144302971,
+        "profit_factor": 0.7428052693653825,
+        "expectancy_r": -0.23224628009412449,
+        "expectancy_pips": -2.0512198949440106,
+        "expectancy_r_wide": -0.413437400436283,
+        "max_drawdown_r": 1439.3359762658713,
+        "sharpe": -5.457098103174197,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 2711,
+            "expectancy_r": -0.2250087869983328
+          },
+          {
+            "year": 2024,
+            "trades": 2744,
+            "expectancy_r": -0.2561341411843482
+          },
+          {
+            "year": 2025,
+            "trades": 671,
+            "expectancy_r": -0.1638000102746277
+          }
+        ],
+        "outcomes": {
+          "tp": 1265,
+          "sl": 4857,
+          "maxhold": 4
+        }
+      },
+      "oos": {
+        "trades": 4516,
+        "win_rate": 0.19552701505757308,
+        "profit_factor": 0.6846824502808897,
+        "expectancy_r": -0.29008796399963643,
+        "expectancy_pips": -3.3605189801337754,
+        "expectancy_r_wide": -0.48124454151407103,
+        "max_drawdown_r": 1320.940709648767,
+        "sharpe": -7.612457640962867,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 2224,
+            "expectancy_r": -0.28051821677595196
+          },
+          {
+            "year": 2026,
+            "trades": 2292,
+            "expectancy_r": -0.29937379202122205
+          }
+        ],
+        "outcomes": {
+          "sl": 3632,
+          "tp": 880,
+          "maxhold": 1,
+          "eod": 3
+        }
+      },
+      "oos_alert": {
+        "trades": 4516,
+        "win_rate": 0.19552701505757308,
+        "profit_factor": 0.6846824502808897,
+        "expectancy_r": -0.29008796399963643,
+        "expectancy_pips": -3.3605189801337754,
+        "expectancy_r_wide": -0.48124454151407103,
+        "max_drawdown_r": 1320.940709648767,
+        "sharpe": -7.612457640962867,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 2224,
+            "expectancy_r": -0.28051821677595196
+          },
+          {
+            "year": 2026,
+            "trades": 2292,
+            "expectancy_r": -0.29937379202122205
+          }
+        ],
+        "outcomes": {
+          "sl": 3632,
+          "tp": 880,
+          "maxhold": 1,
+          "eod": 3
+        }
+      },
+      "is_alert": {
+        "trades": 6126,
+        "win_rate": 0.2069866144302971,
+        "profit_factor": 0.7428052693653825,
+        "expectancy_r": -0.23224628009412449,
+        "expectancy_pips": -2.0512198949440106,
+        "expectancy_r_wide": -0.413437400436283,
+        "max_drawdown_r": 1439.3359762658713,
+        "sharpe": -5.457098103174197,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 2711,
+            "expectancy_r": -0.2250087869983328
+          },
+          {
+            "year": 2024,
+            "trades": 2744,
+            "expectancy_r": -0.2561341411843482
+          },
+          {
+            "year": 2025,
+            "trades": 671,
+            "expectancy_r": -0.1638000102746277
+          }
+        ],
+        "outcomes": {
+          "tp": 1265,
+          "sl": 4857,
+          "maxhold": 4
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 448,
+          "expectancy_r": -0.2705759405247515,
+          "expectancy_pips": -2.331485969387281,
+          "profit_factor": 0.6984452224731573,
+          "win_rate": 0.19419642857142858,
+          "max_drawdown_r": 126.81720030711104
+        },
+        "GBP/USD": {
+          "trades": 444,
+          "expectancy_r": -0.4048328366909428,
+          "expectancy_pips": -3.3932062419565,
+          "profit_factor": 0.5689439633885816,
+          "win_rate": 0.16666666666666666,
+          "max_drawdown_r": 186.34650165634218
+        },
+        "USD/JPY": {
+          "trades": 467,
+          "expectancy_r": -0.218864760949748,
+          "expectancy_pips": -2.9458381768114568,
+          "profit_factor": 0.7492206535306013,
+          "win_rate": 0.19271948608137046,
+          "max_drawdown_r": 116.7338005091954
+        },
+        "XAU/USD": {
+          "trades": 472,
+          "expectancy_r": 0.0536780056810655,
+          "expectancy_pips": -8.429528147698914,
+          "profit_factor": 1.0699608974167467,
+          "win_rate": 0.2563559322033898,
+          "max_drawdown_r": 29.655252139541886
+        },
+        "USD/CHF": {
+          "trades": 451,
+          "expectancy_r": -0.44091617286584955,
+          "expectancy_pips": -3.172456445993067,
+          "profit_factor": 0.5520312905693389,
+          "win_rate": 0.16851441241685144,
+          "max_drawdown_r": 208.69807159625833
+        },
+        "AUD/USD": {
+          "trades": 461,
+          "expectancy_r": -0.4130083111350346,
+          "expectancy_pips": -2.9087744034710337,
+          "profit_factor": 0.5733867554384832,
+          "win_rate": 0.1735357917570499,
+          "max_drawdown_r": 198.3869077056507
+        },
+        "USD/CAD": {
+          "trades": 458,
+          "expectancy_r": -0.3176828658251589,
+          "expectancy_pips": -2.1585308796005163,
+          "profit_factor": 0.6651054098994043,
+          "win_rate": 0.19868995633187772,
+          "max_drawdown_r": 155.5021852222577
+        },
+        "NZD/USD": {
+          "trades": 462,
+          "expectancy_r": -0.37405411351036094,
+          "expectancy_pips": -1.8917254174393117,
+          "profit_factor": 0.630623345491907,
+          "win_rate": 0.20562770562770563,
+          "max_drawdown_r": 186.88551136831438
+        },
+        "EUR/JPY": {
+          "trades": 438,
+          "expectancy_r": -0.3266366266542471,
+          "expectancy_pips": -3.2220564253089226,
+          "profit_factor": 0.6435164726984026,
+          "win_rate": 0.18493150684931506,
+          "max_drawdown_r": 157.24727065754598
+        },
+        "GBP/JPY": {
+          "trades": 415,
+          "expectancy_r": -0.19655662417928316,
+          "expectancy_pips": -2.9518141135970617,
+          "profit_factor": 0.7808066514820807,
+          "win_rate": 0.21204819277108433,
+          "max_drawdown_r": 93.27150320663752
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_h4",
+      "is": {
+        "trades": 1825,
+        "win_rate": 0.34356164383561644,
+        "profit_factor": 0.9036144236180719,
+        "expectancy_r": -0.06781671763726593,
+        "expectancy_pips": -2.543963287670727,
+        "expectancy_r_wide": -0.12493264997133448,
+        "max_drawdown_r": 152.95428948722028,
+        "sharpe": -1.0712782394778522,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 723,
+            "expectancy_r": -0.04141499145738389
+          },
+          {
+            "year": 2024,
+            "trades": 881,
+            "expectancy_r": -0.09021630802043201
+          },
+          {
+            "year": 2025,
+            "trades": 221,
+            "expectancy_r": -0.0648954909426298
+          }
+        ],
+        "outcomes": {
+          "sl": 1181,
+          "tp": 582,
+          "maxhold": 62
+        }
+      },
+      "oos": {
+        "trades": 1350,
+        "win_rate": 0.3125925925925926,
+        "profit_factor": 0.7792825344213505,
+        "expectancy_r": -0.16650885323229733,
+        "expectancy_pips": -7.426298412697762,
+        "expectancy_r_wide": -0.22836168608850677,
+        "max_drawdown_r": 250.29176511351017,
+        "sharpe": -2.6188299296324713,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 659,
+            "expectancy_r": -0.13574315191045822
+          },
+          {
+            "year": 2026,
+            "trades": 691,
+            "expectancy_r": -0.1958498042758458
+          }
+        ],
+        "outcomes": {
+          "sl": 921,
+          "tp": 408,
+          "maxhold": 18,
+          "eod": 3
+        }
+      },
+      "oos_alert": {
+        "trades": 1350,
+        "win_rate": 0.3125925925925926,
+        "profit_factor": 0.7792825344213505,
+        "expectancy_r": -0.16650885323229733,
+        "expectancy_pips": -7.426298412697762,
+        "expectancy_r_wide": -0.22836168608850677,
+        "max_drawdown_r": 250.29176511351017,
+        "sharpe": -2.6188299296324713,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 659,
+            "expectancy_r": -0.13574315191045822
+          },
+          {
+            "year": 2026,
+            "trades": 691,
+            "expectancy_r": -0.1958498042758458
+          }
+        ],
+        "outcomes": {
+          "sl": 921,
+          "tp": 408,
+          "maxhold": 18,
+          "eod": 3
+        }
+      },
+      "is_alert": {
+        "trades": 1825,
+        "win_rate": 0.34356164383561644,
+        "profit_factor": 0.9036144236180719,
+        "expectancy_r": -0.06781671763726593,
+        "expectancy_pips": -2.543963287670727,
+        "expectancy_r_wide": -0.12493264997133448,
+        "max_drawdown_r": 152.95428948722028,
+        "sharpe": -1.0712782394778522,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 723,
+            "expectancy_r": -0.04141499145738389
+          },
+          {
+            "year": 2024,
+            "trades": 881,
+            "expectancy_r": -0.09021630802043201
+          },
+          {
+            "year": 2025,
+            "trades": 221,
+            "expectancy_r": -0.0648954909426298
+          }
+        ],
+        "outcomes": {
+          "sl": 1181,
+          "tp": 582,
+          "maxhold": 62
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 134,
+          "expectancy_r": -0.056545473452656946,
+          "expectancy_pips": -1.0915991471206525,
+          "profit_factor": 0.9189044492767682,
+          "win_rate": 0.34328358208955223,
+          "max_drawdown_r": 20.146902328192343
+        },
+        "GBP/USD": {
+          "trades": 131,
+          "expectancy_r": -0.10104239952858472,
+          "expectancy_pips": 0.426755725190081,
+          "profit_factor": 0.8603147519242951,
+          "win_rate": 0.32061068702290074,
+          "max_drawdown_r": 25.126366224205086
+        },
+        "USD/JPY": {
+          "trades": 120,
+          "expectancy_r": -0.06739904813555657,
+          "expectancy_pips": -0.25224404761682234,
+          "profit_factor": 0.9043988620912145,
+          "win_rate": 0.3333333333333333,
+          "max_drawdown_r": 18.79418865111534
+        },
+        "XAU/USD": {
+          "trades": 136,
+          "expectancy_r": -0.03422062340322607,
+          "expectancy_pips": -18.02341386554464,
+          "profit_factor": 0.9509573045443602,
+          "win_rate": 0.34558823529411764,
+          "max_drawdown_r": 18.885524737390334
+        },
+        "USD/CHF": {
+          "trades": 146,
+          "expectancy_r": -0.17901351461629128,
+          "expectancy_pips": -4.66864970645811,
+          "profit_factor": 0.7673192379108439,
+          "win_rate": 0.3150684931506849,
+          "max_drawdown_r": 43.746202512817526
+        },
+        "AUD/USD": {
+          "trades": 132,
+          "expectancy_r": -0.3366292608299038,
+          "expectancy_pips": -10.116271645022247,
+          "profit_factor": 0.592086717895277,
+          "win_rate": 0.26515151515151514,
+          "max_drawdown_r": 48.80403796558741
+        },
+        "USD/CAD": {
+          "trades": 150,
+          "expectancy_r": 0.010088019928627005,
+          "expectancy_pips": 1.5043333333338331,
+          "profit_factor": 1.0146093903192552,
+          "win_rate": 0.38,
+          "max_drawdown_r": 14.361394708722461
+        },
+        "NZD/USD": {
+          "trades": 161,
+          "expectancy_r": -0.37184317434886094,
+          "expectancy_pips": -5.9442990239565185,
+          "profit_factor": 0.5645754796543441,
+          "win_rate": 0.2608695652173913,
+          "max_drawdown_r": 67.56534077782165
+        },
+        "EUR/JPY": {
+          "trades": 113,
+          "expectancy_r": -0.18408450370564855,
+          "expectancy_pips": -16.02023388116134,
+          "profit_factor": 0.7519880428444697,
+          "win_rate": 0.3008849557522124,
+          "max_drawdown_r": 28.63610374498573
+        },
+        "GBP/JPY": {
+          "trades": 127,
+          "expectancy_r": -0.3268132359091227,
+          "expectancy_pips": -22.795596175477538,
+          "profit_factor": 0.602998893388904,
+          "win_rate": 0.25984251968503935,
+          "max_drawdown_r": 42.309098848372265
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_m1",
+      "is": {
+        "trades": 103083,
+        "win_rate": 0.3336631646343238,
+        "profit_factor": 0.47961691430070325,
+        "expectancy_r": -0.5485826636091996,
+        "expectancy_pips": -2.3108853715653823,
+        "expectancy_r_wide": -0.9500706432347513,
+        "max_drawdown_r": 56549.546712828764,
+        "sharpe": -56.453950307806664,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 46391,
+            "expectancy_r": -0.5707360083366533
+          },
+          {
+            "year": 2024,
+            "trades": 43671,
+            "expectancy_r": -0.5377748171499841
+          },
+          {
+            "year": 2025,
+            "trades": 13021,
+            "expectancy_r": -0.5059034260290673
+          }
+        ],
+        "outcomes": {
+          "sl": 68635,
+          "tp": 34447,
+          "maxhold": 1
+        }
+      },
+      "oos": {
+        "trades": 73582,
+        "win_rate": 0.33099127504009135,
+        "profit_factor": 0.5591926379794251,
+        "expectancy_r": -0.42500190788750497,
+        "expectancy_pips": -2.4448455891764374,
+        "expectancy_r_wide": -0.7303326287662658,
+        "max_drawdown_r": 31277.60017798932,
+        "sharpe": -46.74790872957778,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 37764,
+            "expectancy_r": -0.4255915550595515
+          },
+          {
+            "year": 2026,
+            "trades": 35818,
+            "expectancy_r": -0.4243802250519148
+          }
+        ],
+        "outcomes": {
+          "tp": 24374,
+          "sl": 49205,
+          "eod": 3
+        }
+      },
+      "oos_alert": {
+        "trades": 73582,
+        "win_rate": 0.33099127504009135,
+        "profit_factor": 0.5591926379794251,
+        "expectancy_r": -0.42500190788750497,
+        "expectancy_pips": -2.4448455891764374,
+        "expectancy_r_wide": -0.7303326287662658,
+        "max_drawdown_r": 31277.60017798932,
+        "sharpe": -46.74790872957778,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 37764,
+            "expectancy_r": -0.4255915550595515
+          },
+          {
+            "year": 2026,
+            "trades": 35818,
+            "expectancy_r": -0.4243802250519148
+          }
+        ],
+        "outcomes": {
+          "tp": 24374,
+          "sl": 49205,
+          "eod": 3
+        }
+      },
+      "is_alert": {
+        "trades": 103083,
+        "win_rate": 0.3336631646343238,
+        "profit_factor": 0.47961691430070325,
+        "expectancy_r": -0.5485826636091996,
+        "expectancy_pips": -2.3108853715653823,
+        "expectancy_r_wide": -0.9500706432347513,
+        "max_drawdown_r": 56549.546712828764,
+        "sharpe": -56.453950307806664,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 46391,
+            "expectancy_r": -0.5707360083366533
+          },
+          {
+            "year": 2024,
+            "trades": 43671,
+            "expectancy_r": -0.5377748171499841
+          },
+          {
+            "year": 2025,
+            "trades": 13021,
+            "expectancy_r": -0.5059034260290673
+          }
+        ],
+        "outcomes": {
+          "sl": 68635,
+          "tp": 34447,
+          "maxhold": 1
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 12195,
+          "expectancy_r": -0.5171689660908444,
+          "expectancy_pips": -1.5413626193394856,
+          "profit_factor": 0.49403987466970856,
+          "win_rate": 0.3245592455924559,
+          "max_drawdown_r": 6310.272839621032
+        },
+        "GBP/USD": {
+          "trades": 14368,
+          "expectancy_r": -0.6591742609939257,
+          "expectancy_pips": -2.117685630767297,
+          "profit_factor": 0.4138367477563821,
+          "win_rate": 0.3279510022271715,
+          "max_drawdown_r": 9471.01578196067
+        },
+        "USD/JPY": {
+          "trades": 18193,
+          "expectancy_r": -0.5145536849667165,
+          "expectancy_pips": -1.8188623567910946,
+          "profit_factor": 0.4986005842628068,
+          "win_rate": 0.3280932226680591,
+          "max_drawdown_r": 9363.340316269087
+        },
+        "XAU/USD": {
+          "trades": 28826,
+          "expectancy_r": -0.21277054992507954,
+          "expectancy_pips": -3.385216159022087,
+          "profit_factor": 0.7406690452512692,
+          "win_rate": 0.3370568237008256,
+          "max_drawdown_r": 6136.460072446119
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_m15",
+      "is": {
+        "trades": 26365,
+        "win_rate": 0.3223591883178456,
+        "profit_factor": 0.6165321940858285,
+        "expectancy_r": -0.34546771277659055,
+        "expectancy_pips": -2.811675202676123,
+        "expectancy_r_wide": -0.5784202607420296,
+        "max_drawdown_r": 9111.799622431587,
+        "sharpe": -18.401932577142396,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 11565,
+            "expectancy_r": -0.33051526589178243
+          },
+          {
+            "year": 2024,
+            "trades": 11695,
+            "expectancy_r": -0.37055751925266806
+          },
+          {
+            "year": 2025,
+            "trades": 3105,
+            "expectancy_r": -0.3066592623692085
+          }
+        ],
+        "outcomes": {
+          "tp": 8507,
+          "sl": 17847,
+          "maxhold": 11
+        }
+      },
+      "oos": {
+        "trades": 18721,
+        "win_rate": 0.3262646226163132,
+        "profit_factor": 0.617632818501635,
+        "expectancy_r": -0.34461528814878556,
+        "expectancy_pips": -2.787490793378815,
+        "expectancy_r_wide": -0.5862614120489165,
+        "max_drawdown_r": 6451.5428094333865,
+        "sharpe": -18.2439582499606,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 9344,
+            "expectancy_r": -0.32637938976121955
+          },
+          {
+            "year": 2026,
+            "trades": 9377,
+            "expectancy_r": -0.3627870098650505
+          }
+        ],
+        "outcomes": {
+          "sl": 12596,
+          "tp": 6116,
+          "maxhold": 4,
+          "eod": 5
+        }
+      },
+      "oos_alert": {
+        "trades": 18721,
+        "win_rate": 0.3262646226163132,
+        "profit_factor": 0.617632818501635,
+        "expectancy_r": -0.34461528814878556,
+        "expectancy_pips": -2.787490793378815,
+        "expectancy_r_wide": -0.5862614120489165,
+        "max_drawdown_r": 6451.5428094333865,
+        "sharpe": -18.2439582499606,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 9344,
+            "expectancy_r": -0.32637938976121955
+          },
+          {
+            "year": 2026,
+            "trades": 9377,
+            "expectancy_r": -0.3627870098650505
+          }
+        ],
+        "outcomes": {
+          "sl": 12596,
+          "tp": 6116,
+          "maxhold": 4,
+          "eod": 5
+        }
+      },
+      "is_alert": {
+        "trades": 26365,
+        "win_rate": 0.3223591883178456,
+        "profit_factor": 0.6165321940858285,
+        "expectancy_r": -0.34546771277659055,
+        "expectancy_pips": -2.811675202676123,
+        "expectancy_r_wide": -0.5784202607420296,
+        "max_drawdown_r": 9111.799622431587,
+        "sharpe": -18.401932577142396,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 11565,
+            "expectancy_r": -0.33051526589178243
+          },
+          {
+            "year": 2024,
+            "trades": 11695,
+            "expectancy_r": -0.37055751925266806
+          },
+          {
+            "year": 2025,
+            "trades": 3105,
+            "expectancy_r": -0.3066592623692085
+          }
+        ],
+        "outcomes": {
+          "tp": 8507,
+          "sl": 17847,
+          "maxhold": 11
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 1794,
+          "expectancy_r": -0.2909741124325305,
+          "expectancy_pips": -1.73642697881721,
+          "profit_factor": 0.6622484695022688,
+          "win_rate": 0.32274247491638797,
+          "max_drawdown_r": 525.1602315434865
+        },
+        "GBP/USD": {
+          "trades": 1820,
+          "expectancy_r": -0.3341185919539072,
+          "expectancy_pips": -2.3769234693882377,
+          "profit_factor": 0.6242645867149459,
+          "win_rate": 0.32142857142857145,
+          "max_drawdown_r": 618.5734552715725
+        },
+        "USD/JPY": {
+          "trades": 1922,
+          "expectancy_r": -0.1981647908018636,
+          "expectancy_pips": -1.300770774488601,
+          "profit_factor": 0.7579968438191362,
+          "win_rate": 0.34235171696149846,
+          "max_drawdown_r": 405.0045783565664
+        },
+        "XAU/USD": {
+          "trades": 1992,
+          "expectancy_r": -0.045118020831487166,
+          "expectancy_pips": -3.8261733362010575,
+          "profit_factor": 0.9360591413661253,
+          "win_rate": 0.339859437751004,
+          "max_drawdown_r": 104.15452926633316
+        },
+        "USD/CHF": {
+          "trades": 1858,
+          "expectancy_r": -0.4534086847100494,
+          "expectancy_pips": -2.6033215439029753,
+          "profit_factor": 0.5299208323600307,
+          "win_rate": 0.3110871905274489,
+          "max_drawdown_r": 844.6907704494467
+        },
+        "AUD/USD": {
+          "trades": 1836,
+          "expectancy_r": -0.39881067026632994,
+          "expectancy_pips": -2.360100762527838,
+          "profit_factor": 0.5721029532677205,
+          "win_rate": 0.3224400871459695,
+          "max_drawdown_r": 732.2163906089819
+        },
+        "USD/CAD": {
+          "trades": 1740,
+          "expectancy_r": -0.3933570304091868,
+          "expectancy_pips": -2.187922824301782,
+          "profit_factor": 0.5815445935728446,
+          "win_rate": 0.34022988505747126,
+          "max_drawdown_r": 698.6335301571889
+        },
+        "NZD/USD": {
+          "trades": 1832,
+          "expectancy_r": -0.5379651149177488,
+          "expectancy_pips": -2.804307548346054,
+          "profit_factor": 0.47673263947731376,
+          "win_rate": 0.32532751091703055,
+          "max_drawdown_r": 988.0651407031403
+        },
+        "EUR/JPY": {
+          "trades": 1965,
+          "expectancy_r": -0.3569271098557206,
+          "expectancy_pips": -3.0728756815688145,
+          "profit_factor": 0.6079471374783941,
+          "win_rate": 0.3236641221374046,
+          "max_drawdown_r": 701.3617708664916
+        },
+        "GBP/JPY": {
+          "trades": 1962,
+          "expectancy_r": -0.46110436689490025,
+          "expectancy_pips": -5.335806028832778,
+          "profit_factor": 0.528294264330072,
+          "win_rate": 0.31345565749235477,
+          "max_drawdown_r": 911.8414784749352
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_m15_retrace50",
+      "is": {
+        "trades": 23329,
+        "win_rate": 0.19246431480132026,
+        "profit_factor": 0.5860720064896197,
+        "expectancy_r": -0.4182830306161081,
+        "expectancy_pips": -2.2393824921155443,
+        "expectancy_r_wide": -0.749084753076419,
+        "max_drawdown_r": 9759.829792112194,
+        "sharpe": -19.002177556707704,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 10438,
+            "expectancy_r": -0.4049018292455193
+          },
+          {
+            "year": 2024,
+            "trades": 10218,
+            "expectancy_r": -0.4461649390900496
+          },
+          {
+            "year": 2025,
+            "trades": 2673,
+            "expectancy_r": -0.36395292927659123
+          }
+        ],
+        "outcomes": {
+          "tp": 4493,
+          "sl": 18835,
+          "maxhold": 1
+        }
+      },
+      "oos": {
+        "trades": 16155,
+        "win_rate": 0.1912101516558341,
+        "profit_factor": 0.5630979911635359,
+        "expectancy_r": -0.4455328037659128,
+        "expectancy_pips": -2.074782424724384,
+        "expectancy_r_wide": -0.783535903280226,
+        "max_drawdown_r": 7197.582444838311,
+        "sharpe": -18.60037791921712,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 8127,
+            "expectancy_r": -0.4112881927960669
+          },
+          {
+            "year": 2026,
+            "trades": 8028,
+            "expectancy_r": -0.480199713749961
+          }
+        ],
+        "outcomes": {
+          "sl": 13062,
+          "tp": 3090,
+          "maxhold": 1,
+          "eod": 2
+        }
+      },
+      "oos_alert": {
+        "trades": 16155,
+        "win_rate": 0.1912101516558341,
+        "profit_factor": 0.5630979911635359,
+        "expectancy_r": -0.4455328037659128,
+        "expectancy_pips": -2.074782424724384,
+        "expectancy_r_wide": -0.783535903280226,
+        "max_drawdown_r": 7197.582444838311,
+        "sharpe": -18.60037791921712,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 8127,
+            "expectancy_r": -0.4112881927960669
+          },
+          {
+            "year": 2026,
+            "trades": 8028,
+            "expectancy_r": -0.480199713749961
+          }
+        ],
+        "outcomes": {
+          "sl": 13062,
+          "tp": 3090,
+          "maxhold": 1,
+          "eod": 2
+        }
+      },
+      "is_alert": {
+        "trades": 23329,
+        "win_rate": 0.19246431480132026,
+        "profit_factor": 0.5860720064896197,
+        "expectancy_r": -0.4182830306161081,
+        "expectancy_pips": -2.2393824921155443,
+        "expectancy_r_wide": -0.749084753076419,
+        "max_drawdown_r": 9759.829792112194,
+        "sharpe": -19.002177556707704,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 10438,
+            "expectancy_r": -0.4049018292455193
+          },
+          {
+            "year": 2024,
+            "trades": 10218,
+            "expectancy_r": -0.4461649390900496
+          },
+          {
+            "year": 2025,
+            "trades": 2673,
+            "expectancy_r": -0.36395292927659123
+          }
+        ],
+        "outcomes": {
+          "tp": 4493,
+          "sl": 18835,
+          "maxhold": 1
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 1571,
+          "expectancy_r": -0.4124932081295118,
+          "expectancy_pips": -1.706816859142896,
+          "profit_factor": 0.5816761289165744,
+          "win_rate": 0.1890515595162317,
+          "max_drawdown_r": 656.0839060110251
+        },
+        "GBP/USD": {
+          "trades": 1642,
+          "expectancy_r": -0.4502529487968731,
+          "expectancy_pips": -2.3248734122153625,
+          "profit_factor": 0.5567775445336027,
+          "win_rate": 0.18757612667478685,
+          "max_drawdown_r": 747.3988183426985
+        },
+        "USD/JPY": {
+          "trades": 1773,
+          "expectancy_r": -0.332598270816955,
+          "expectancy_pips": -1.5450922568676173,
+          "profit_factor": 0.6512501017747738,
+          "win_rate": 0.19289340101522842,
+          "max_drawdown_r": 619.5142152509856
+        },
+        "XAU/USD": {
+          "trades": 1769,
+          "expectancy_r": -0.0757267518220054,
+          "expectancy_pips": -0.5017035855605849,
+          "profit_factor": 0.907356930194312,
+          "win_rate": 0.22611644997173544,
+          "max_drawdown_r": 156.789397641357
+        },
+        "USD/CHF": {
+          "trades": 1483,
+          "expectancy_r": -0.5584025356675117,
+          "expectancy_pips": -1.9223711588479058,
+          "profit_factor": 0.4762134102687916,
+          "win_rate": 0.17734322319622386,
+          "max_drawdown_r": 834.412947897054
+        },
+        "AUD/USD": {
+          "trades": 1488,
+          "expectancy_r": -0.5009299500548297,
+          "expectancy_pips": -1.9801224078343767,
+          "profit_factor": 0.5186642126641556,
+          "win_rate": 0.18615591397849462,
+          "max_drawdown_r": 745.383765681588
+        },
+        "USD/CAD": {
+          "trades": 1535,
+          "expectancy_r": -0.5140785863216414,
+          "expectancy_pips": -1.8672145183804334,
+          "profit_factor": 0.5227525397799533,
+          "win_rate": 0.19413680781758957,
+          "max_drawdown_r": 805.5708190708026
+        },
+        "NZD/USD": {
+          "trades": 1437,
+          "expectancy_r": -0.6912481559775095,
+          "expectancy_pips": -2.684594393080322,
+          "profit_factor": 0.4072180132404901,
+          "win_rate": 0.17954070981210857,
+          "max_drawdown_r": 993.3236001396797
+        },
+        "EUR/JPY": {
+          "trades": 1738,
+          "expectancy_r": -0.44558168303752826,
+          "expectancy_pips": -2.4629898898560523,
+          "profit_factor": 0.5611684977369215,
+          "win_rate": 0.1904487917146145,
+          "max_drawdown_r": 774.4209651192248
+        },
+        "GBP/JPY": {
+          "trades": 1719,
+          "expectancy_r": -0.5562728292447198,
+          "expectancy_pips": -3.8338481675387697,
+          "profit_factor": 0.4958267781946298,
+          "win_rate": 0.18324607329842932,
+          "max_drawdown_r": 965.7241864971621
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "engulfing_m5",
+      "is": {
+        "trades": 70370,
+        "win_rate": 0.3215432712803752,
+        "profit_factor": 0.515058599418177,
+        "expectancy_r": -0.4855114000217641,
+        "expectancy_pips": -2.579376563673059,
+        "expectancy_r_wide": -0.8290770312568432,
+        "max_drawdown_r": 34171.178719698575,
+        "sharpe": -39.84142649024001,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 32120,
+            "expectancy_r": -0.4986745004689741
+          },
+          {
+            "year": 2024,
+            "trades": 30271,
+            "expectancy_r": -0.48604010176671764
+          },
+          {
+            "year": 2025,
+            "trades": 7979,
+            "expectancy_r": -0.4305166491900968
+          }
+        ],
+        "outcomes": {
+          "tp": 22665,
+          "sl": 47695,
+          "maxhold": 10
+        }
+      },
+      "oos": {
+        "trades": 48834,
+        "win_rate": 0.32059630585247983,
+        "profit_factor": 0.5120499506073242,
+        "expectancy_r": -0.4887717429490302,
+        "expectancy_pips": -2.3711598227808577,
+        "expectancy_r_wide": -0.8375826458596037,
+        "max_drawdown_r": 23871.13122815546,
+        "sharpe": -38.40119289501662,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 24217,
+            "expectancy_r": -0.4727657031467399
+          },
+          {
+            "year": 2026,
+            "trades": 24617,
+            "expectancy_r": -0.5045177016723541
+          }
+        ],
+        "outcomes": {
+          "sl": 33117,
+          "tp": 15706,
+          "maxhold": 6,
+          "eod": 5
+        }
+      },
+      "oos_alert": {
+        "trades": 48834,
+        "win_rate": 0.32059630585247983,
+        "profit_factor": 0.5120499506073242,
+        "expectancy_r": -0.4887717429490302,
+        "expectancy_pips": -2.3711598227808577,
+        "expectancy_r_wide": -0.8375826458596037,
+        "max_drawdown_r": 23871.13122815546,
+        "sharpe": -38.40119289501662,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 24217,
+            "expectancy_r": -0.4727657031467399
+          },
+          {
+            "year": 2026,
+            "trades": 24617,
+            "expectancy_r": -0.5045177016723541
+          }
+        ],
+        "outcomes": {
+          "sl": 33117,
+          "tp": 15706,
+          "maxhold": 6,
+          "eod": 5
+        }
+      },
+      "is_alert": {
+        "trades": 70370,
+        "win_rate": 0.3215432712803752,
+        "profit_factor": 0.515058599418177,
+        "expectancy_r": -0.4855114000217641,
+        "expectancy_pips": -2.579376563673059,
+        "expectancy_r_wide": -0.8290770312568432,
+        "max_drawdown_r": 34171.178719698575,
+        "sharpe": -39.84142649024001,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 32120,
+            "expectancy_r": -0.4986745004689741
+          },
+          {
+            "year": 2024,
+            "trades": 30271,
+            "expectancy_r": -0.48604010176671764
+          },
+          {
+            "year": 2025,
+            "trades": 7979,
+            "expectancy_r": -0.4305166491900968
+          }
+        ],
+        "outcomes": {
+          "tp": 22665,
+          "sl": 47695,
+          "maxhold": 10
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 4525,
+          "expectancy_r": -0.39391625902331656,
+          "expectancy_pips": -1.7269419100226908,
+          "profit_factor": 0.5762639653737882,
+          "win_rate": 0.32044198895027626,
+          "max_drawdown_r": 1791.0206136990337
+        },
+        "GBP/USD": {
+          "trades": 4765,
+          "expectancy_r": -0.48571577974673286,
+          "expectancy_pips": -2.2449085594368796,
+          "profit_factor": 0.513470711108325,
+          "win_rate": 0.3194123819517314,
+          "max_drawdown_r": 2322.9689023839064
+        },
+        "USD/JPY": {
+          "trades": 5290,
+          "expectancy_r": -0.3765151111493179,
+          "expectancy_pips": -1.9230406427197864,
+          "profit_factor": 0.5920741895088523,
+          "win_rate": 0.3206049149338374,
+          "max_drawdown_r": 2008.577175338133
+        },
+        "XAU/USD": {
+          "trades": 5807,
+          "expectancy_r": -0.07383584163211077,
+          "expectancy_pips": -0.7721337917282876,
+          "profit_factor": 0.8988052197079682,
+          "win_rate": 0.3425176511107284,
+          "max_drawdown_r": 442.19785432180413
+        },
+        "USD/CHF": {
+          "trades": 4259,
+          "expectancy_r": -0.5428691103579996,
+          "expectancy_pips": -2.0943953979809224,
+          "profit_factor": 0.4749229384392817,
+          "win_rate": 0.32237614463489084,
+          "max_drawdown_r": 2321.3834369177544
+        },
+        "AUD/USD": {
+          "trades": 4291,
+          "expectancy_r": -0.5677156560069546,
+          "expectancy_pips": -2.23845190931245,
+          "profit_factor": 0.45559624129541987,
+          "win_rate": 0.3087858308086693,
+          "max_drawdown_r": 2442.2899969444716
+        },
+        "USD/CAD": {
+          "trades": 4647,
+          "expectancy_r": -0.6211772702355527,
+          "expectancy_pips": -2.5155851701554544,
+          "profit_factor": 0.4316700215096846,
+          "win_rate": 0.32278889606197547,
+          "max_drawdown_r": 2892.894108637784
+        },
+        "NZD/USD": {
+          "trades": 4276,
+          "expectancy_r": -0.7537450855959916,
+          "expectancy_pips": -2.757533242014386,
+          "profit_factor": 0.36324610062574975,
+          "win_rate": 0.3105706267539757,
+          "max_drawdown_r": 3228.1043259348476
+        },
+        "EUR/JPY": {
+          "trades": 5348,
+          "expectancy_r": -0.5436705612807232,
+          "expectancy_pips": -3.0744564055974357,
+          "profit_factor": 0.47724087827624934,
+          "win_rate": 0.31357516828721016,
+          "max_drawdown_r": 2907.550161729307
+        },
+        "GBP/JPY": {
+          "trades": 5626,
+          "expectancy_r": -0.6373836684676054,
+          "expectancy_pips": -4.297297369355793,
+          "profit_factor": 0.42645647734782,
+          "win_rate": 0.31923213650906507,
+          "max_drawdown_r": 3587.0523508766387
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "id50_m15",
+      "is": {
+        "trades": 1823,
+        "win_rate": 0.6692265496434449,
+        "profit_factor": 0.7298531970993792,
+        "expectancy_r": -0.08823677170987745,
+        "expectancy_pips": -3.804171695007769,
+        "expectancy_r_wide": -0.20970303758085723,
+        "max_drawdown_r": 165.93435628083748,
+        "sharpe": -2.980337471407194,
+        "max_concurrent": 6,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 812,
+            "expectancy_r": -0.06707831305989687
+          },
+          {
+            "year": 2024,
+            "trades": 825,
+            "expectancy_r": -0.11981562995814994
+          },
+          {
+            "year": 2025,
+            "trades": 186,
+            "expectancy_r": -0.04053844036019699
+          }
+        ],
+        "outcomes": {
+          "tp": 1284,
+          "sl": 535,
+          "maxhold": 4
+        }
+      },
+      "oos": {
+        "trades": 1265,
+        "win_rate": 0.6592885375494071,
+        "profit_factor": 0.7025554557953592,
+        "expectancy_r": -0.10267215337975855,
+        "expectancy_pips": -3.640939582156447,
+        "expectancy_r_wide": -0.23734235732498002,
+        "max_drawdown_r": 131.99040576343555,
+        "sharpe": -3.5549057017553913,
+        "max_concurrent": 7,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 629,
+            "expectancy_r": -0.10085371355260889
+          },
+          {
+            "year": 2026,
+            "trades": 636,
+            "expectancy_r": -0.1044705789320811
+          }
+        ],
+        "outcomes": {
+          "tp": 875,
+          "sl": 385,
+          "maxhold": 5
+        }
+      },
+      "oos_alert": {
+        "trades": 3,
+        "win_rate": 0.3333333333333333,
+        "profit_factor": 0.5150898532078503,
+        "expectancy_r": -0.34995947798257476,
+        "expectancy_pips": -69.38690476190568,
+        "expectancy_r_wide": -0.40148999013315495,
+        "max_drawdown_r": 2.165098917589243,
+        "sharpe": -0.4366976832865719,
+        "max_concurrent": 1,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1,
+            "expectancy_r": 1.1152204836415187
+          },
+          {
+            "year": 2026,
+            "trades": 2,
+            "expectancy_r": -1.0825494587946216
+          }
+        ],
+        "outcomes": {
+          "tp": 1,
+          "sl": 2
+        }
+      },
+      "is_alert": {
+        "trades": 2,
+        "win_rate": 1.0,
+        "profit_factor": null,
+        "expectancy_r": 2.110364645358905,
+        "expectancy_pips": 34.85000000000016,
+        "expectancy_r_wide": 2.0256365503572606,
+        "max_drawdown_r": 0.0,
+        "sharpe": 0.9108681376114541,
+        "max_concurrent": 1,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 1,
+            "expectancy_r": 1.7071593533487135
+          },
+          {
+            "year": 2025,
+            "trades": 1,
+            "expectancy_r": 2.5135699373690965
+          }
+        ],
+        "outcomes": {
+          "tp": 2
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 141,
+          "expectancy_r": -0.07834399087354685,
+          "expectancy_pips": 0.389412360689591,
+          "profit_factor": 0.7566094922965534,
+          "win_rate": 0.6666666666666666,
+          "max_drawdown_r": 15.08403472057208
+        },
+        "GBP/USD": {
+          "trades": 138,
+          "expectancy_r": -0.0037050593016424486,
+          "expectancy_pips": 2.2590320910966186,
+          "profit_factor": 0.9863648823495349,
+          "win_rate": 0.717391304347826,
+          "max_drawdown_r": 9.55192698278865
+        },
+        "USD/JPY": {
+          "trades": 122,
+          "expectancy_r": -0.03026551995394732,
+          "expectancy_pips": -4.884221311473623,
+          "profit_factor": 0.9095728571878752,
+          "win_rate": 0.6639344262295082,
+          "max_drawdown_r": 11.281318542268506
+        },
+        "XAU/USD": {
+          "trades": 131,
+          "expectancy_r": -0.047792240458732906,
+          "expectancy_pips": -15.548985823335883,
+          "profit_factor": 0.8504485945195748,
+          "win_rate": 0.6870229007633588,
+          "max_drawdown_r": 10.1513138886616
+        },
+        "USD/CHF": {
+          "trades": 115,
+          "expectancy_r": -0.08803773009398604,
+          "expectancy_pips": -2.832204968944179,
+          "profit_factor": 0.6943444770737741,
+          "win_rate": 0.6782608695652174,
+          "max_drawdown_r": 13.115632654905923
+        },
+        "AUD/USD": {
+          "trades": 112,
+          "expectancy_r": -0.09676959804319177,
+          "expectancy_pips": -0.9763711734698395,
+          "profit_factor": 0.7080629471618851,
+          "win_rate": 0.6696428571428571,
+          "max_drawdown_r": 13.920872826520739
+        },
+        "USD/CAD": {
+          "trades": 110,
+          "expectancy_r": -0.24472650925179623,
+          "expectancy_pips": -4.055811688311211,
+          "profit_factor": 0.46491811399376237,
+          "win_rate": 0.5636363636363636,
+          "max_drawdown_r": 28.25105941021628
+        },
+        "NZD/USD": {
+          "trades": 120,
+          "expectancy_r": -0.292058533836756,
+          "expectancy_pips": -5.042113095237379,
+          "profit_factor": 0.3777349858421133,
+          "win_rate": 0.55,
+          "max_drawdown_r": 36.0554633736297
+        },
+        "EUR/JPY": {
+          "trades": 138,
+          "expectancy_r": -0.03486853264342007,
+          "expectancy_pips": 0.7154503105600296,
+          "profit_factor": 0.8822226987203595,
+          "win_rate": 0.7246376811594203,
+          "max_drawdown_r": 8.949457936972752
+        },
+        "GBP/JPY": {
+          "trades": 138,
+          "expectancy_r": -0.1494780048520007,
+          "expectancy_pips": -6.899508281572827,
+          "profit_factor": 0.6132523052594944,
+          "win_rate": 0.644927536231884,
+          "max_drawdown_r": 20.62796466957609
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "id50_m5",
+      "is": {
+        "trades": 5100,
+        "win_rate": 0.6341176470588236,
+        "profit_factor": 0.5998233189372029,
+        "expectancy_r": -0.13879722812549264,
+        "expectancy_pips": -3.204114885153559,
+        "expectancy_r_wide": -0.31348273915788183,
+        "max_drawdown_r": 709.9234977454231,
+        "sharpe": -8.733178024834215,
+        "max_concurrent": 7,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 2253,
+            "expectancy_r": -0.12775190444002338
+          },
+          {
+            "year": 2024,
+            "trades": 2252,
+            "expectancy_r": -0.13106601629455916
+          },
+          {
+            "year": 2025,
+            "trades": 595,
+            "expectancy_r": -0.20988261183410503
+          }
+        ],
+        "outcomes": {
+          "tp": 3577,
+          "sl": 1523
+        }
+      },
+      "oos": {
+        "trades": 3518,
+        "win_rate": 0.6335986355884025,
+        "profit_factor": 0.6123275310918365,
+        "expectancy_r": -0.13621947956365785,
+        "expectancy_pips": -1.550186286850768,
+        "expectancy_r_wide": -0.3343141022579175,
+        "max_drawdown_r": 483.62070840451366,
+        "sharpe": -8.520489699322416,
+        "max_concurrent": 7,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1709,
+            "expectancy_r": -0.12508703798168103
+          },
+          {
+            "year": 2026,
+            "trades": 1809,
+            "expectancy_r": -0.1467365291289417
+          }
+        ],
+        "outcomes": {
+          "tp": 2460,
+          "sl": 1053,
+          "maxhold": 1,
+          "eod": 4
+        }
+      },
+      "oos_alert": {
+        "trades": 3,
+        "win_rate": 0.3333333333333333,
+        "profit_factor": 0.9948977744105038,
+        "expectancy_r": -0.0036428871623006565,
+        "expectancy_pips": 29.18964285714334,
+        "expectancy_r_wide": -0.059040455022180804,
+        "max_drawdown_r": 2.1419400799134416,
+        "sharpe": -0.0032966367770514834,
+        "max_concurrent": 1,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1,
+            "expectancy_r": -1.1092043681747965
+          },
+          {
+            "year": 2026,
+            "trades": 2,
+            "expectancy_r": 0.5491378533439473
+          }
+        ],
+        "outcomes": {
+          "sl": 2,
+          "tp": 1
+        }
+      },
+      "is_alert": {
+        "trades": 3,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "expectancy_r": -1.179078048326386,
+        "expectancy_pips": -17.3833333333319,
+        "expectancy_r_wide": -1.300513143917041,
+        "max_drawdown_r": 3.5372341449791582,
+        "sharpe": -0.9262939252493645,
+        "max_concurrent": 1,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 1,
+            "expectancy_r": -1.1535580524344797
+          },
+          {
+            "year": 2024,
+            "trades": 2,
+            "expectancy_r": -1.191838046272339
+          }
+        ],
+        "outcomes": {
+          "sl": 3
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 361,
+          "expectancy_r": -0.15137392981979003,
+          "expectancy_pips": -1.8001582904622222,
+          "profit_factor": 0.5810734280317533,
+          "win_rate": 0.6204986149584487,
+          "max_drawdown_r": 55.81943491037998
+        },
+        "GBP/USD": {
+          "trades": 350,
+          "expectancy_r": -0.11679968553902607,
+          "expectancy_pips": -0.8338673469391606,
+          "profit_factor": 0.6684656792218197,
+          "win_rate": 0.66,
+          "max_drawdown_r": 43.301645811328136
+        },
+        "USD/JPY": {
+          "trades": 346,
+          "expectancy_r": -0.11629993130477774,
+          "expectancy_pips": -0.42182080924685206,
+          "profit_factor": 0.6714808023989475,
+          "win_rate": 0.6445086705202312,
+          "max_drawdown_r": 42.77444014531543
+        },
+        "XAU/USD": {
+          "trades": 351,
+          "expectancy_r": 0.004977225044713727,
+          "expectancy_pips": 3.02839336589394,
+          "profit_factor": 1.017167542513566,
+          "win_rate": 0.7065527065527065,
+          "max_drawdown_r": 15.052101854542407
+        },
+        "USD/CHF": {
+          "trades": 374,
+          "expectancy_r": -0.13533634332690736,
+          "expectancy_pips": -1.391520244461493,
+          "profit_factor": 0.5923497479627456,
+          "win_rate": 0.6310160427807486,
+          "max_drawdown_r": 52.28188160500694
+        },
+        "AUD/USD": {
+          "trades": 341,
+          "expectancy_r": -0.1602955536534506,
+          "expectancy_pips": -2.402398408044121,
+          "profit_factor": 0.5431997917674142,
+          "win_rate": 0.624633431085044,
+          "max_drawdown_r": 55.69722887509535
+        },
+        "USD/CAD": {
+          "trades": 307,
+          "expectancy_r": -0.14923217244740747,
+          "expectancy_pips": -1.8535365286175736,
+          "profit_factor": 0.5561688816312039,
+          "win_rate": 0.6286644951140065,
+          "max_drawdown_r": 50.95858423119522
+        },
+        "NZD/USD": {
+          "trades": 320,
+          "expectancy_r": -0.29117684215291345,
+          "expectancy_pips": -3.5128459821421116,
+          "profit_factor": 0.32945516411531633,
+          "win_rate": 0.5375,
+          "max_drawdown_r": 93.71731332376115
+        },
+        "EUR/JPY": {
+          "trades": 363,
+          "expectancy_r": -0.09214543635977829,
+          "expectancy_pips": -1.8793683589125663,
+          "profit_factor": 0.7176792994250514,
+          "win_rate": 0.6473829201101928,
+          "max_drawdown_r": 33.96432849641319
+        },
+        "GBP/JPY": {
+          "trades": 405,
+          "expectancy_r": -0.16663023267064334,
+          "expectancy_pips": -4.231746031745238,
+          "profit_factor": 0.5608269711862557,
+          "win_rate": 0.6271604938271605,
+          "max_drawdown_r": 70.76012037322238
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "tdi_h1",
+      "is": {
+        "trades": 1010,
+        "win_rate": 0.43564356435643564,
+        "profit_factor": 0.9118237786973914,
+        "expectancy_r": -0.054948643961264455,
+        "expectancy_pips": 0.48593093031069884,
+        "expectancy_r_wide": -0.1392967947490324,
+        "max_drawdown_r": 93.01201828935704,
+        "sharpe": -0.593049000094377,
+        "max_concurrent": 8,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 315,
+            "expectancy_r": -0.04941609837221178
+          },
+          {
+            "year": 2024,
+            "trades": 571,
+            "expectancy_r": -0.09243979366125868
+          },
+          {
+            "year": 2025,
+            "trades": 124,
+            "expectancy_r": 0.10363760295926065
+          }
+        ],
+        "outcomes": {
+          "sl": 563,
+          "tp": 446,
+          "maxhold": 1
+        }
+      },
+      "oos": {
+        "trades": 819,
+        "win_rate": 0.43101343101343104,
+        "profit_factor": 0.8054546435128903,
+        "expectancy_r": -0.1231705301588387,
+        "expectancy_pips": 5.674870849334841,
+        "expectancy_r_wide": -0.20567433011995845,
+        "max_drawdown_r": 101.36614337774596,
+        "sharpe": -1.4951920478096565,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 409,
+            "expectancy_r": -0.13094079672723694
+          },
+          {
+            "year": 2026,
+            "trades": 410,
+            "expectancy_r": -0.11541921546011948
+          }
+        ],
+        "outcomes": {
+          "tp": 354,
+          "sl": 462,
+          "maxhold": 2,
+          "eod": 1
+        }
+      },
+      "oos_alert": {
+        "trades": 135,
+        "win_rate": 0.34074074074074073,
+        "profit_factor": 0.7255653142236256,
+        "expectancy_r": -0.20150170327280628,
+        "expectancy_pips": -15.918421509108285,
+        "expectancy_r_wide": -0.28344288562158704,
+        "max_drawdown_r": 29.394907464459205,
+        "sharpe": -0.7530278808686728,
+        "max_concurrent": 5,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 74,
+            "expectancy_r": -0.10900373520533685
+          },
+          {
+            "year": 2026,
+            "trades": 61,
+            "expectancy_r": -0.31371235305957246
+          }
+        ],
+        "outcomes": {
+          "sl": 88,
+          "tp": 46,
+          "eod": 1
+        }
+      },
+      "is_alert": {
+        "trades": 207,
+        "win_rate": 0.4057971014492754,
+        "profit_factor": 0.973269852934959,
+        "expectancy_r": -0.01720946837016111,
+        "expectancy_pips": 1.5408254862978676,
+        "expectancy_r_wide": -0.08916882190273151,
+        "max_drawdown_r": 23.074401120042697,
+        "sharpe": -0.10486407912293162,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 57,
+            "expectancy_r": -0.18056760871529318
+          },
+          {
+            "year": 2024,
+            "trades": 120,
+            "expectancy_r": -0.08576071973547844
+          },
+          {
+            "year": 2025,
+            "trades": 30,
+            "expectancy_r": 0.567376003746859
+          }
+        ],
+        "outcomes": {
+          "sl": 120,
+          "tp": 87
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 69,
+          "expectancy_r": -0.04732430095237641,
+          "expectancy_pips": -1.6191748604147624,
+          "profit_factor": 0.921767380583302,
+          "win_rate": 0.43478260869565216,
+          "max_drawdown_r": 10.272946302208972
+        },
+        "GBP/USD": {
+          "trades": 87,
+          "expectancy_r": 0.09185193916501379,
+          "expectancy_pips": 4.201224454719076,
+          "profit_factor": 1.1726598116611664,
+          "win_rate": 0.5172413793103449,
+          "max_drawdown_r": 13.46043817833069
+        },
+        "USD/JPY": {
+          "trades": 97,
+          "expectancy_r": 0.1823258793551889,
+          "expectancy_pips": 6.713953986705382,
+          "profit_factor": 1.3771383874046297,
+          "win_rate": 0.5463917525773195,
+          "max_drawdown_r": 7.986934059532722
+        },
+        "XAU/USD": {
+          "trades": 93,
+          "expectancy_r": 0.1758167439190351,
+          "expectancy_pips": 76.49501802572965,
+          "profit_factor": 1.35676747708425,
+          "win_rate": 0.5161290322580645,
+          "max_drawdown_r": 5.908429078580331
+        },
+        "USD/CHF": {
+          "trades": 72,
+          "expectancy_r": -0.18981114937590052,
+          "expectancy_pips": -4.441834335002564,
+          "profit_factor": 0.7101719967699931,
+          "win_rate": 0.4166666666666667,
+          "max_drawdown_r": 13.666402755064842
+        },
+        "AUD/USD": {
+          "trades": 64,
+          "expectancy_r": -0.1670353667988229,
+          "expectancy_pips": -3.6289947567203815,
+          "profit_factor": 0.7467076312203098,
+          "win_rate": 0.40625,
+          "max_drawdown_r": 20.96838763164721
+        },
+        "USD/CAD": {
+          "trades": 101,
+          "expectancy_r": -0.604546228016864,
+          "expectancy_pips": -9.59386562932564,
+          "profit_factor": 0.27858171921364067,
+          "win_rate": 0.27722772277227725,
+          "max_drawdown_r": 61.05916902970326
+        },
+        "NZD/USD": {
+          "trades": 79,
+          "expectancy_r": -0.5202042021980833,
+          "expectancy_pips": -9.88581501779349,
+          "profit_factor": 0.3731541349830567,
+          "win_rate": 0.31645569620253167,
+          "max_drawdown_r": 41.42662621616904
+        },
+        "EUR/JPY": {
+          "trades": 81,
+          "expectancy_r": -0.12941384663302313,
+          "expectancy_pips": -3.7914881820553443,
+          "profit_factor": 0.7926145567812495,
+          "win_rate": 0.43209876543209874,
+          "max_drawdown_r": 16.411907418398666
+        },
+        "GBP/JPY": {
+          "trades": 76,
+          "expectancy_r": -0.034795852800506545,
+          "expectancy_pips": -10.029162571389985,
+          "profit_factor": 0.9445317545769012,
+          "win_rate": 0.4342105263157895,
+          "max_drawdown_r": 14.792867295396558
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "tdi_m15",
+      "is": {
+        "trades": 3675,
+        "win_rate": 0.3961904761904762,
+        "profit_factor": 0.7885458099451639,
+        "expectancy_r": -0.15617837741474092,
+        "expectancy_pips": -1.7991242094999103,
+        "expectancy_r_wide": -0.31097626079572055,
+        "max_drawdown_r": 590.3259786434556,
+        "sharpe": -2.8273139079888723,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 1657,
+            "expectancy_r": -0.1545688778644557
+          },
+          {
+            "year": 2024,
+            "trades": 1602,
+            "expectancy_r": -0.15887653662224777
+          },
+          {
+            "year": 2025,
+            "trades": 416,
+            "expectancy_r": -0.15219878535800205
+          }
+        ],
+        "outcomes": {
+          "sl": 2195,
+          "tp": 1480
+        }
+      },
+      "oos": {
+        "trades": 2363,
+        "win_rate": 0.3872196360558612,
+        "profit_factor": 0.7418365828037619,
+        "expectancy_r": -0.19161432397995473,
+        "expectancy_pips": -3.0733514405625204,
+        "expectancy_r_wide": -0.3623776732376004,
+        "max_drawdown_r": 491.47794319691513,
+        "sharpe": -3.6327358589155754,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1221,
+            "expectancy_r": -0.17488359635594103
+          },
+          {
+            "year": 2026,
+            "trades": 1142,
+            "expectancy_r": -0.20950243118566464
+          }
+        ],
+        "outcomes": {
+          "tp": 933,
+          "sl": 1430
+        }
+      },
+      "oos_alert": {
+        "trades": 350,
+        "win_rate": 0.32285714285714284,
+        "profit_factor": 0.683261862045235,
+        "expectancy_r": -0.25417582181193493,
+        "expectancy_pips": 3.674012482268875,
+        "expectancy_r_wide": -0.39408015063466767,
+        "max_drawdown_r": 102.86994672577318,
+        "sharpe": -2.1312557809362174,
+        "max_concurrent": 6,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 181,
+            "expectancy_r": -0.15322955298734633
+          },
+          {
+            "year": 2026,
+            "trades": 169,
+            "expectancy_r": -0.36228987303826954
+          }
+        ],
+        "outcomes": {
+          "tp": 117,
+          "sl": 233
+        }
+      },
+      "is_alert": {
+        "trades": 473,
+        "win_rate": 0.38266384778012685,
+        "profit_factor": 0.8987923541998143,
+        "expectancy_r": -0.07424072262930208,
+        "expectancy_pips": -0.7996416802764026,
+        "expectancy_r_wide": -0.2001970939524637,
+        "max_drawdown_r": 85.18526485250854,
+        "sharpe": -0.6915461915084862,
+        "max_concurrent": 6,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 210,
+            "expectancy_r": 0.046860029598844104
+          },
+          {
+            "year": 2024,
+            "trades": 214,
+            "expectancy_r": -0.25174751067506407
+          },
+          {
+            "year": 2025,
+            "trades": 49,
+            "expectancy_r": 0.1819897809193178
+          }
+        ],
+        "outcomes": {
+          "sl": 292,
+          "tp": 181
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 206,
+          "expectancy_r": -0.157610148329328,
+          "expectancy_pips": 0.04930442807508118,
+          "profit_factor": 0.7749144002213961,
+          "win_rate": 0.41262135922330095,
+          "max_drawdown_r": 46.24122408438101
+        },
+        "GBP/USD": {
+          "trades": 228,
+          "expectancy_r": -0.09088241686011768,
+          "expectancy_pips": -1.7156188108717338,
+          "profit_factor": 0.8662812505489469,
+          "win_rate": 0.4298245614035088,
+          "max_drawdown_r": 54.57913407876839
+        },
+        "USD/JPY": {
+          "trades": 292,
+          "expectancy_r": -0.2216327138207979,
+          "expectancy_pips": -2.9262824171643964,
+          "profit_factor": 0.7035414689256902,
+          "win_rate": 0.3424657534246575,
+          "max_drawdown_r": 81.50832659103554
+        },
+        "XAU/USD": {
+          "trades": 294,
+          "expectancy_r": -0.2144566521444038,
+          "expectancy_pips": -8.6597175885589,
+          "profit_factor": 0.6946633073418268,
+          "win_rate": 0.3333333333333333,
+          "max_drawdown_r": 68.80655600696215
+        },
+        "USD/CHF": {
+          "trades": 186,
+          "expectancy_r": -0.08116480968509718,
+          "expectancy_pips": -0.7543836911592,
+          "profit_factor": 0.8919526631855945,
+          "win_rate": 0.40860215053763443,
+          "max_drawdown_r": 43.25571340272751
+        },
+        "AUD/USD": {
+          "trades": 217,
+          "expectancy_r": -0.06029869841004267,
+          "expectancy_pips": -1.237316166860404,
+          "profit_factor": 0.9147480140603735,
+          "win_rate": 0.4377880184331797,
+          "max_drawdown_r": 24.322136937260797
+        },
+        "USD/CAD": {
+          "trades": 206,
+          "expectancy_r": -0.5122133427454861,
+          "expectancy_pips": -5.292219446504656,
+          "profit_factor": 0.4305159265715653,
+          "win_rate": 0.3155339805825243,
+          "max_drawdown_r": 109.15432067756875
+        },
+        "NZD/USD": {
+          "trades": 211,
+          "expectancy_r": -0.3057658558284327,
+          "expectancy_pips": -3.096416141441663,
+          "profit_factor": 0.6260221111150726,
+          "win_rate": 0.38388625592417064,
+          "max_drawdown_r": 71.01155152870595
+        },
+        "EUR/JPY": {
+          "trades": 257,
+          "expectancy_r": -0.08299992791582587,
+          "expectancy_pips": -1.1425764147888922,
+          "profit_factor": 0.8757722518313295,
+          "win_rate": 0.4357976653696498,
+          "max_drawdown_r": 40.16481580969054
+        },
+        "GBP/JPY": {
+          "trades": 266,
+          "expectancy_r": -0.1965554886556876,
+          "expectancy_pips": -3.8905921628436593,
+          "profit_factor": 0.7476098458582844,
+          "win_rate": 0.39473684210526316,
+          "max_drawdown_r": 63.47718555054257
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "tdi_m5",
+      "is": {
+        "trades": 3339,
+        "win_rate": 0.40401317759808325,
+        "profit_factor": 0.7421056287539411,
+        "expectancy_r": -0.18868146433229493,
+        "expectancy_pips": -2.360213663027579,
+        "expectancy_r_wide": -0.34114743061523545,
+        "max_drawdown_r": 639.3497606541836,
+        "sharpe": -4.257177391492508,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 1527,
+            "expectancy_r": -0.17840457254208208
+          },
+          {
+            "year": 2024,
+            "trades": 1434,
+            "expectancy_r": -0.19712936649513466
+          },
+          {
+            "year": 2025,
+            "trades": 378,
+            "expectancy_r": -0.1981484539146836
+          }
+        ],
+        "outcomes": {
+          "sl": 1970,
+          "tp": 1369
+        }
+      },
+      "oos": {
+        "trades": 2387,
+        "win_rate": 0.3912861332216171,
+        "profit_factor": 0.7375430981382601,
+        "expectancy_r": -0.19269073898571967,
+        "expectancy_pips": -1.195894173587217,
+        "expectancy_r_wide": -0.3302729536213874,
+        "max_drawdown_r": 492.9064411735674,
+        "sharpe": -3.902010521894995,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1309,
+            "expectancy_r": -0.25439218543187014
+          },
+          {
+            "year": 2026,
+            "trades": 1078,
+            "expectancy_r": -0.11776755401539411
+          }
+        ],
+        "outcomes": {
+          "sl": 1440,
+          "tp": 947
+        }
+      },
+      "oos_alert": {
+        "trades": 350,
+        "win_rate": 0.3171428571428571,
+        "profit_factor": 0.622925276390271,
+        "expectancy_r": -0.31261588638878257,
+        "expectancy_pips": -0.19351144471810877,
+        "expectancy_r_wide": -0.45310406324228275,
+        "max_drawdown_r": 135.96215656594265,
+        "sharpe": -2.9264339157670616,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 207,
+            "expectancy_r": -0.41286508709174086
+          },
+          {
+            "year": 2026,
+            "trades": 143,
+            "expectancy_r": -0.16749991054603858
+          }
+        ],
+        "outcomes": {
+          "sl": 238,
+          "tp": 112
+        }
+      },
+      "is_alert": {
+        "trades": 482,
+        "win_rate": 0.3879668049792531,
+        "profit_factor": 0.7803597143315872,
+        "expectancy_r": -0.16869534582189,
+        "expectancy_pips": -2.515653517165722,
+        "expectancy_r_wide": -0.30255742531565777,
+        "max_drawdown_r": 95.0690512138512,
+        "sharpe": -1.3978068374443884,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 213,
+            "expectancy_r": -0.07880816875048147
+          },
+          {
+            "year": 2024,
+            "trades": 218,
+            "expectancy_r": -0.2656402503587306
+          },
+          {
+            "year": 2025,
+            "trades": 51,
+            "expectancy_r": -0.1297145522371598
+          }
+        ],
+        "outcomes": {
+          "sl": 294,
+          "tp": 188
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 392,
+          "expectancy_r": -0.2615349315260916,
+          "expectancy_pips": -1.6589977111681717,
+          "profit_factor": 0.6631379131363061,
+          "win_rate": 0.3852040816326531,
+          "max_drawdown_r": 114.8211044724252
+        },
+        "GBP/USD": {
+          "trades": 529,
+          "expectancy_r": -0.1927580113130571,
+          "expectancy_pips": -1.1365283162268451,
+          "profit_factor": 0.7435899765239925,
+          "win_rate": 0.42722117202268434,
+          "max_drawdown_r": 113.70515563859894
+        },
+        "USD/JPY": {
+          "trades": 678,
+          "expectancy_r": -0.2953834066558466,
+          "expectancy_pips": -3.235063055200363,
+          "profit_factor": 0.6267243161969804,
+          "win_rate": 0.36283185840707965,
+          "max_drawdown_r": 223.52304366353727
+        },
+        "XAU/USD": {
+          "trades": 788,
+          "expectancy_r": -0.07004081612108341,
+          "expectancy_pips": 0.7491420572780256,
+          "profit_factor": 0.8926109682977441,
+          "win_rate": 0.3946700507614213,
+          "max_drawdown_r": 59.37250853300383
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap9ema_m1",
+      "is": {
+        "trades": 7491,
+        "win_rate": 0.3298625016686691,
+        "profit_factor": 0.5240315236330778,
+        "expectancy_r": -0.4759968488392099,
+        "expectancy_pips": -2.4786845547984395,
+        "expectancy_r_wide": -0.823705898407768,
+        "max_drawdown_r": 3575.3767584257193,
+        "sharpe": -12.271960198931449,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 3492,
+            "expectancy_r": -0.5100425581151846
+          },
+          {
+            "year": 2024,
+            "trades": 3172,
+            "expectancy_r": -0.4434711557351331
+          },
+          {
+            "year": 2025,
+            "trades": 827,
+            "expectancy_r": -0.45699307826415253
+          }
+        ],
+        "outcomes": {
+          "sl": 5016,
+          "tp": 2469,
+          "maxhold": 6
+        }
+      },
+      "oos": {
+        "trades": 5312,
+        "win_rate": 0.3217243975903614,
+        "profit_factor": 0.5612396934541735,
+        "expectancy_r": -0.4186573248557555,
+        "expectancy_pips": -2.7732046310231495,
+        "expectancy_r_wide": -0.7135845205964926,
+        "max_drawdown_r": 2233.4885687828855,
+        "sharpe": -11.956482842592967,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 2731,
+            "expectancy_r": -0.4262288518119283
+          },
+          {
+            "year": 2026,
+            "trades": 2581,
+            "expectancy_r": -0.4106457633999989
+          }
+        ],
+        "outcomes": {
+          "tp": 1714,
+          "sl": 3597,
+          "maxhold": 1
+        }
+      },
+      "oos_alert": {
+        "trades": 5312,
+        "win_rate": 0.3217243975903614,
+        "profit_factor": 0.5612396934541735,
+        "expectancy_r": -0.4186573248557555,
+        "expectancy_pips": -2.7732046310231495,
+        "expectancy_r_wide": -0.7135845205964926,
+        "max_drawdown_r": 2233.4885687828855,
+        "sharpe": -11.956482842592967,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 2731,
+            "expectancy_r": -0.4262288518119283
+          },
+          {
+            "year": 2026,
+            "trades": 2581,
+            "expectancy_r": -0.4106457633999989
+          }
+        ],
+        "outcomes": {
+          "tp": 1714,
+          "sl": 3597,
+          "maxhold": 1
+        }
+      },
+      "is_alert": {
+        "trades": 7491,
+        "win_rate": 0.3298625016686691,
+        "profit_factor": 0.5240315236330778,
+        "expectancy_r": -0.4759968488392099,
+        "expectancy_pips": -2.4786845547984395,
+        "expectancy_r_wide": -0.823705898407768,
+        "max_drawdown_r": 3575.3767584257193,
+        "sharpe": -12.271960198931449,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 3492,
+            "expectancy_r": -0.5100425581151846
+          },
+          {
+            "year": 2024,
+            "trades": 3172,
+            "expectancy_r": -0.4434711557351331
+          },
+          {
+            "year": 2025,
+            "trades": 827,
+            "expectancy_r": -0.45699307826415253
+          }
+        ],
+        "outcomes": {
+          "sl": 5016,
+          "tp": 2469,
+          "maxhold": 6
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 1077,
+          "expectancy_r": -0.42921106378197776,
+          "expectancy_pips": -1.4942804085412815,
+          "profit_factor": 0.5526929011915225,
+          "win_rate": 0.3277623026926648,
+          "max_drawdown_r": 467.3006199212413
+        },
+        "GBP/USD": {
+          "trades": 1239,
+          "expectancy_r": -0.6541469741055388,
+          "expectancy_pips": -2.4974414850690434,
+          "profit_factor": 0.4095946783457404,
+          "win_rate": 0.3026634382566586,
+          "max_drawdown_r": 815.3283252548352
+        },
+        "USD/JPY": {
+          "trades": 1185,
+          "expectancy_r": -0.4385503748159239,
+          "expectancy_pips": -1.7008776371285244,
+          "profit_factor": 0.5529404241418681,
+          "win_rate": 0.3333333333333333,
+          "max_drawdown_r": 530.2888184220669
+        },
+        "XAU/USD": {
+          "trades": 1811,
+          "expectancy_r": -0.23825350572443457,
+          "expectancy_pips": -4.424104362229798,
+          "profit_factor": 0.7123440755485579,
+          "win_rate": 0.32357813362782994,
+          "max_drawdown_r": 436.0088980856356
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap9ema_m5",
+      "is": {
+        "trades": 10072,
+        "win_rate": 0.3188046068308181,
+        "profit_factor": 0.5696619866661333,
+        "expectancy_r": -0.40445779625859707,
+        "expectancy_pips": -2.6967515885618245,
+        "expectancy_r_wide": -0.6796799296130679,
+        "max_drawdown_r": 4087.045963845294,
+        "sharpe": -13.01519526162303,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 4671,
+            "expectancy_r": -0.36552094532306467
+          },
+          {
+            "year": 2024,
+            "trades": 4262,
+            "expectancy_r": -0.4419452969700344
+          },
+          {
+            "year": 2025,
+            "trades": 1139,
+            "expectancy_r": -0.423862803008137
+          }
+        ],
+        "outcomes": {
+          "tp": 3208,
+          "sl": 6844,
+          "maxhold": 20
+        }
+      },
+      "oos": {
+        "trades": 6915,
+        "win_rate": 0.3136659436008677,
+        "profit_factor": 0.5351241415288117,
+        "expectancy_r": -0.4487208970623344,
+        "expectancy_pips": -3.8838804049161673,
+        "expectancy_r_wide": -0.7449588938313925,
+        "max_drawdown_r": 3102.9050031860306,
+        "sharpe": -13.271407300653703,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 3427,
+            "expectancy_r": -0.4424055018429764
+          },
+          {
+            "year": 2026,
+            "trades": 3488,
+            "expectancy_r": -0.45492584528961094
+          }
+        ],
+        "outcomes": {
+          "sl": 4736,
+          "tp": 2166,
+          "maxhold": 13
+        }
+      },
+      "oos_alert": {
+        "trades": 6915,
+        "win_rate": 0.3136659436008677,
+        "profit_factor": 0.5351241415288117,
+        "expectancy_r": -0.4487208970623344,
+        "expectancy_pips": -3.8838804049161673,
+        "expectancy_r_wide": -0.7449588938313925,
+        "max_drawdown_r": 3102.9050031860306,
+        "sharpe": -13.271407300653703,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 3427,
+            "expectancy_r": -0.4424055018429764
+          },
+          {
+            "year": 2026,
+            "trades": 3488,
+            "expectancy_r": -0.45492584528961094
+          }
+        ],
+        "outcomes": {
+          "sl": 4736,
+          "tp": 2166,
+          "maxhold": 13
+        }
+      },
+      "is_alert": {
+        "trades": 10072,
+        "win_rate": 0.3188046068308181,
+        "profit_factor": 0.5696619866661333,
+        "expectancy_r": -0.40445779625859707,
+        "expectancy_pips": -2.6967515885618245,
+        "expectancy_r_wide": -0.6796799296130679,
+        "max_drawdown_r": 4087.045963845294,
+        "sharpe": -13.01519526162303,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 4671,
+            "expectancy_r": -0.36552094532306467
+          },
+          {
+            "year": 2024,
+            "trades": 4262,
+            "expectancy_r": -0.4419452969700344
+          },
+          {
+            "year": 2025,
+            "trades": 1139,
+            "expectancy_r": -0.423862803008137
+          }
+        ],
+        "outcomes": {
+          "tp": 3208,
+          "sl": 6844,
+          "maxhold": 20
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 667,
+          "expectancy_r": -0.3509431907657231,
+          "expectancy_pips": -2.5220089955012064,
+          "profit_factor": 0.6063277897288807,
+          "win_rate": 0.3148425787106447,
+          "max_drawdown_r": 235.90027068485054
+        },
+        "GBP/USD": {
+          "trades": 717,
+          "expectancy_r": -0.4074575599566477,
+          "expectancy_pips": -2.33588563458914,
+          "profit_factor": 0.5627765355851209,
+          "win_rate": 0.3179916317991632,
+          "max_drawdown_r": 292.14707048891614
+        },
+        "USD/JPY": {
+          "trades": 722,
+          "expectancy_r": -0.41724538548729617,
+          "expectancy_pips": -2.090789473681835,
+          "profit_factor": 0.5530899819208931,
+          "win_rate": 0.2950138504155125,
+          "max_drawdown_r": 310.5547997850577
+        },
+        "XAU/USD": {
+          "trades": 705,
+          "expectancy_r": -0.14123431372518863,
+          "expectancy_pips": -10.667337588651337,
+          "profit_factor": 0.8114350922247628,
+          "win_rate": 0.32056737588652484,
+          "max_drawdown_r": 121.58717058102636
+        },
+        "USD/CHF": {
+          "trades": 667,
+          "expectancy_r": -0.4465997882938777,
+          "expectancy_pips": -2.5839880059971807,
+          "profit_factor": 0.5360326023077828,
+          "win_rate": 0.32233883058470764,
+          "max_drawdown_r": 301.636196833012
+        },
+        "AUD/USD": {
+          "trades": 621,
+          "expectancy_r": -0.4154716505119571,
+          "expectancy_pips": -1.7887117552341116,
+          "profit_factor": 0.5673599286732272,
+          "win_rate": 0.33816425120772947,
+          "max_drawdown_r": 267.8062653059747
+        },
+        "USD/CAD": {
+          "trades": 732,
+          "expectancy_r": -0.4865939396072511,
+          "expectancy_pips": -2.4425683060105587,
+          "profit_factor": 0.5157982966869742,
+          "win_rate": 0.3224043715846995,
+          "max_drawdown_r": 360.0359597135677
+        },
+        "NZD/USD": {
+          "trades": 612,
+          "expectancy_r": -0.6796108117176759,
+          "expectancy_pips": -3.1918954248356757,
+          "profit_factor": 0.3901039722726653,
+          "win_rate": 0.3006535947712418,
+          "max_drawdown_r": 418.8816343830741
+        },
+        "EUR/JPY": {
+          "trades": 701,
+          "expectancy_r": -0.4875678707967506,
+          "expectancy_pips": -4.263566333807456,
+          "profit_factor": 0.5144828484412954,
+          "win_rate": 0.3238231098430813,
+          "max_drawdown_r": 344.22655193942927
+        },
+        "GBP/JPY": {
+          "trades": 771,
+          "expectancy_r": -0.6563863206304977,
+          "expectancy_pips": -6.362555123215829,
+          "profit_factor": 0.4045245762815225,
+          "win_rate": 0.2853437094682231,
+          "max_drawdown_r": 513.7382877708111
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap_bounce_m1",
+      "is": {
+        "trades": 5376,
+        "win_rate": 0.33482142857142855,
+        "profit_factor": 0.5084911107247201,
+        "expectancy_r": -0.5097488694241006,
+        "expectancy_pips": -2.156845488546266,
+        "expectancy_r_wide": -0.9151755799939923,
+        "max_drawdown_r": 2741.2381141033306,
+        "sharpe": -12.214527109940024,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 2429,
+            "expectancy_r": -0.5214310508734238
+          },
+          {
+            "year": 2024,
+            "trades": 2296,
+            "expectancy_r": -0.48982415158836046
+          },
+          {
+            "year": 2025,
+            "trades": 651,
+            "expectancy_r": -0.5364326381037521
+          }
+        ],
+        "outcomes": {
+          "sl": 3576,
+          "tp": 1800
+        }
+      },
+      "oos": {
+        "trades": 3694,
+        "win_rate": 0.34055224688684355,
+        "profit_factor": 0.6015328850443212,
+        "expectancy_r": -0.3722718581173803,
+        "expectancy_pips": -2.7845736329172546,
+        "expectancy_r_wide": -0.6877895722189075,
+        "max_drawdown_r": 1383.951596935818,
+        "sharpe": -8.019837718004403,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1939,
+            "expectancy_r": -0.35418265095684914
+          },
+          {
+            "year": 2026,
+            "trades": 1755,
+            "expectancy_r": -0.39225759753861655
+          }
+        ],
+        "outcomes": {
+          "sl": 2432,
+          "tp": 1262
+        }
+      },
+      "oos_alert": {
+        "trades": 613,
+        "win_rate": 0.38499184339314846,
+        "profit_factor": 0.5571739924839069,
+        "expectancy_r": -0.39299888663700894,
+        "expectancy_pips": -4.317208838265321,
+        "expectancy_r_wide": -0.726840736078134,
+        "max_drawdown_r": 245.61748034754453,
+        "sharpe": -5.049659207418812,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 327,
+            "expectancy_r": -0.31027907639607716
+          },
+          {
+            "year": 2026,
+            "trades": 286,
+            "expectancy_r": -0.4875771312131791
+          }
+        ],
+        "outcomes": {
+          "sl": 377,
+          "tp": 236
+        }
+      },
+      "is_alert": {
+        "trades": 1007,
+        "win_rate": 0.3416087388282026,
+        "profit_factor": 0.4100408920492485,
+        "expectancy_r": -0.5847298623572577,
+        "expectancy_pips": -2.799593300467418,
+        "expectancy_r_wide": -0.9676775213981703,
+        "max_drawdown_r": 590.639752442333,
+        "sharpe": -7.4672590431693555,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 496,
+            "expectancy_r": -0.6148505561585048
+          },
+          {
+            "year": 2024,
+            "trades": 408,
+            "expectancy_r": -0.5381541255619247
+          },
+          {
+            "year": 2025,
+            "trades": 103,
+            "expectancy_r": -0.6241768185424745
+          }
+        ],
+        "outcomes": {
+          "tp": 344,
+          "sl": 663
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 693,
+          "expectancy_r": -0.5050764786445702,
+          "expectancy_pips": -1.982637600493731,
+          "profit_factor": 0.48195055882519017,
+          "win_rate": 0.3578643578643579,
+          "max_drawdown_r": 359.95971588139696
+        },
+        "GBP/USD": {
+          "trades": 824,
+          "expectancy_r": -0.651807716953906,
+          "expectancy_pips": -2.1012829403610676,
+          "profit_factor": 0.4146592370643239,
+          "win_rate": 0.3483009708737864,
+          "max_drawdown_r": 540.1810719904624
+        },
+        "USD/JPY": {
+          "trades": 986,
+          "expectancy_r": -0.34731887530132904,
+          "expectancy_pips": -1.7143382352917753,
+          "profit_factor": 0.6336152387954527,
+          "win_rate": 0.33874239350912777,
+          "max_drawdown_r": 361.7320059263946
+        },
+        "XAU/USD": {
+          "trades": 1191,
+          "expectancy_r": -0.12225715731972,
+          "expectancy_pips": -4.609951721241791,
+          "profit_factor": 0.8422876600078887,
+          "win_rate": 0.3266162888329135,
+          "max_drawdown_r": 153.31512494900886
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap_bounce_m15",
+      "is": {
+        "trades": 11356,
+        "win_rate": 0.34994716449454033,
+        "profit_factor": 0.6978219009011024,
+        "expectancy_r": -0.24750772678356994,
+        "expectancy_pips": -2.1665555417521185,
+        "expectancy_r_wide": -0.43096452901069165,
+        "max_drawdown_r": 2840.457264402235,
+        "sharpe": -8.236942692115928,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 5161,
+            "expectancy_r": -0.2264847439366929
+          },
+          {
+            "year": 2024,
+            "trades": 4936,
+            "expectancy_r": -0.26556199699517863
+          },
+          {
+            "year": 2025,
+            "trades": 1259,
+            "expectancy_r": -0.26290386396246723
+          }
+        ],
+        "outcomes": {
+          "tp": 3973,
+          "sl": 7379,
+          "maxhold": 4
+        }
+      },
+      "oos": {
+        "trades": 7692,
+        "win_rate": 0.35114404576183045,
+        "profit_factor": 0.7054178559062929,
+        "expectancy_r": -0.24350633428798277,
+        "expectancy_pips": -0.9356957947955127,
+        "expectancy_r_wide": -0.43436598758604106,
+        "max_drawdown_r": 1879.6059023579028,
+        "sharpe": -7.031135895255938,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 3768,
+            "expectancy_r": -0.24670421606280418
+          },
+          {
+            "year": 2026,
+            "trades": 3924,
+            "expectancy_r": -0.24043558542775675
+          }
+        ],
+        "outcomes": {
+          "sl": 4985,
+          "tp": 2700,
+          "maxhold": 1,
+          "eod": 6
+        }
+      },
+      "oos_alert": {
+        "trades": 1211,
+        "win_rate": 0.3864574731626755,
+        "profit_factor": 0.7520834418341138,
+        "expectancy_r": -0.18289200532428782,
+        "expectancy_pips": -0.7699056269901627,
+        "expectancy_r_wide": -0.32676741750017,
+        "max_drawdown_r": 232.02441932220904,
+        "sharpe": -3.021098549138592,
+        "max_concurrent": 8,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 593,
+            "expectancy_r": -0.064788727880696
+          },
+          {
+            "year": 2026,
+            "trades": 618,
+            "expectancy_r": -0.2962176420945952
+          }
+        ],
+        "outcomes": {
+          "sl": 743,
+          "tp": 467,
+          "maxhold": 1
+        }
+      },
+      "is_alert": {
+        "trades": 1805,
+        "win_rate": 0.3844875346260388,
+        "profit_factor": 0.781178142372995,
+        "expectancy_r": -0.15823251441470498,
+        "expectancy_pips": -1.878518500197343,
+        "expectancy_r_wide": -0.28493850009413096,
+        "max_drawdown_r": 291.3135350772652,
+        "sharpe": -2.83611589009164,
+        "max_concurrent": 6,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 836,
+            "expectancy_r": -0.14867920212270835
+          },
+          {
+            "year": 2024,
+            "trades": 799,
+            "expectancy_r": -0.15575149010068223
+          },
+          {
+            "year": 2025,
+            "trades": 170,
+            "expectancy_r": -0.21687314678537178
+          }
+        ],
+        "outcomes": {
+          "tp": 693,
+          "sl": 1109,
+          "maxhold": 3
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 790,
+          "expectancy_r": -0.2608599519715387,
+          "expectancy_pips": -2.577179023507153,
+          "profit_factor": 0.6829557030030161,
+          "win_rate": 0.330379746835443,
+          "max_drawdown_r": 210.82676869840827
+        },
+        "GBP/USD": {
+          "trades": 835,
+          "expectancy_r": -0.26745241028608874,
+          "expectancy_pips": -2.5420220273743324,
+          "profit_factor": 0.6806301608628151,
+          "win_rate": 0.332934131736527,
+          "max_drawdown_r": 235.72853357989405
+        },
+        "USD/JPY": {
+          "trades": 748,
+          "expectancy_r": -0.06051535194206444,
+          "expectancy_pips": -0.8205882352919184,
+          "profit_factor": 0.9169430316407183,
+          "win_rate": 0.3810160427807487,
+          "max_drawdown_r": 58.81375061137617
+        },
+        "XAU/USD": {
+          "trades": 726,
+          "expectancy_r": 0.030411731563759307,
+          "expectancy_pips": 13.525012667257483,
+          "profit_factor": 1.0463205341247819,
+          "win_rate": 0.3746556473829201,
+          "max_drawdown_r": 36.69067866182466
+        },
+        "USD/CHF": {
+          "trades": 786,
+          "expectancy_r": -0.35110565832438023,
+          "expectancy_pips": -2.368109323882371,
+          "profit_factor": 0.6055756350014007,
+          "win_rate": 0.3384223918575064,
+          "max_drawdown_r": 277.7993159838308
+        },
+        "AUD/USD": {
+          "trades": 791,
+          "expectancy_r": -0.3129948352907565,
+          "expectancy_pips": -2.254378499187915,
+          "profit_factor": 0.6340748014695617,
+          "win_rate": 0.3463969658659924,
+          "max_drawdown_r": 248.07694252464523
+        },
+        "USD/CAD": {
+          "trades": 808,
+          "expectancy_r": -0.2504128027609041,
+          "expectancy_pips": -1.6950937057987736,
+          "profit_factor": 0.7126921763692811,
+          "win_rate": 0.37376237623762376,
+          "max_drawdown_r": 206.35343780775892
+        },
+        "NZD/USD": {
+          "trades": 737,
+          "expectancy_r": -0.4173871414692255,
+          "expectancy_pips": -2.8915899399100216,
+          "profit_factor": 0.5544858870273238,
+          "win_rate": 0.34328358208955223,
+          "max_drawdown_r": 317.8262672254395
+        },
+        "EUR/JPY": {
+          "trades": 725,
+          "expectancy_r": -0.2606807569182034,
+          "expectancy_pips": -3.776784482757143,
+          "profit_factor": 0.6835073469317832,
+          "win_rate": 0.3393103448275862,
+          "max_drawdown_r": 188.99354876569765
+        },
+        "GBP/JPY": {
+          "trades": 746,
+          "expectancy_r": -0.2653788924156977,
+          "expectancy_pips": -3.1645011489842276,
+          "profit_factor": 0.6803290387343983,
+          "win_rate": 0.353887399463807,
+          "max_drawdown_r": 200.87239955099346
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap_bounce_m5",
+      "is": {
+        "trades": 16046,
+        "win_rate": 0.32288420790228095,
+        "profit_factor": 0.5805579809664315,
+        "expectancy_r": -0.4029941747639574,
+        "expectancy_pips": -2.3782196167041154,
+        "expectancy_r_wide": -0.7146747623951907,
+        "max_drawdown_r": 6473.100007953824,
+        "sharpe": -14.245343587207172,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 7160,
+            "expectancy_r": -0.3928242595667147
+          },
+          {
+            "year": 2024,
+            "trades": 7082,
+            "expectancy_r": -0.4139764404386088
+          },
+          {
+            "year": 2025,
+            "trades": 1804,
+            "expectancy_r": -0.40024483291494145
+          }
+        ],
+        "outcomes": {
+          "sl": 10864,
+          "tp": 5182
+        }
+      },
+      "oos": {
+        "trades": 10577,
+        "win_rate": 0.32097948378557245,
+        "profit_factor": 0.5745591910180985,
+        "expectancy_r": -0.4118582024758022,
+        "expectancy_pips": -2.163675816123308,
+        "expectancy_r_wide": -0.7313992073023423,
+        "max_drawdown_r": 4393.719506123256,
+        "sharpe": -13.341164274473792,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 5168,
+            "expectancy_r": -0.37878291437403405
+          },
+          {
+            "year": 2026,
+            "trades": 5409,
+            "expectancy_r": -0.4434598088558979
+          }
+        ],
+        "outcomes": {
+          "sl": 7181,
+          "tp": 3393,
+          "maxhold": 1,
+          "eod": 2
+        }
+      },
+      "oos_alert": {
+        "trades": 1272,
+        "win_rate": 0.35377358490566035,
+        "profit_factor": 0.5552330065428849,
+        "expectancy_r": -0.38807707621801046,
+        "expectancy_pips": -2.7655167621288856,
+        "expectancy_r_wide": -0.665078780906684,
+        "max_drawdown_r": 502.5149630766332,
+        "sharpe": -5.9696810178604105,
+        "max_concurrent": 7,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 612,
+            "expectancy_r": -0.40611379940164666
+          },
+          {
+            "year": 2026,
+            "trades": 660,
+            "expectancy_r": -0.3713521147204568
+          }
+        ],
+        "outcomes": {
+          "sl": 822,
+          "tp": 450
+        }
+      },
+      "is_alert": {
+        "trades": 2043,
+        "win_rate": 0.3901125795398923,
+        "profit_factor": 0.6398757561685535,
+        "expectancy_r": -0.29439739758060907,
+        "expectancy_pips": -1.4047376057614005,
+        "expectancy_r_wide": -0.5454243465265365,
+        "max_drawdown_r": 602.8129561048676,
+        "sharpe": -4.742520982474338,
+        "max_concurrent": 8,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 859,
+            "expectancy_r": -0.2869113465024033
+          },
+          {
+            "year": 2024,
+            "trades": 960,
+            "expectancy_r": -0.31781155821371043
+          },
+          {
+            "year": 2025,
+            "trades": 224,
+            "expectancy_r": -0.222758663957401
+          }
+        ],
+        "outcomes": {
+          "tp": 797,
+          "sl": 1246
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 1117,
+          "expectancy_r": -0.36427525360577484,
+          "expectancy_pips": -1.6903232510540935,
+          "profit_factor": 0.6065302242793905,
+          "win_rate": 0.3258728737690242,
+          "max_drawdown_r": 416.4759979029485
+        },
+        "GBP/USD": {
+          "trades": 1151,
+          "expectancy_r": -0.47927644744275766,
+          "expectancy_pips": -2.4764087129209322,
+          "profit_factor": 0.5246103961707281,
+          "win_rate": 0.3040834057341442,
+          "max_drawdown_r": 561.3815250265541
+        },
+        "USD/JPY": {
+          "trades": 1050,
+          "expectancy_r": -0.20313856397314503,
+          "expectancy_pips": -1.6900365646235318,
+          "profit_factor": 0.7610147978875959,
+          "win_rate": 0.3333333333333333,
+          "max_drawdown_r": 213.43929261200796
+        },
+        "XAU/USD": {
+          "trades": 1085,
+          "expectancy_r": -0.02664302650248105,
+          "expectancy_pips": 0.4476925608961474,
+          "profit_factor": 0.9632131753926401,
+          "win_rate": 0.3317972350230415,
+          "max_drawdown_r": 49.393042747542786
+        },
+        "USD/CHF": {
+          "trades": 1077,
+          "expectancy_r": -0.5548683664923022,
+          "expectancy_pips": -2.359282564000664,
+          "profit_factor": 0.46947990607350926,
+          "win_rate": 0.31012070566388117,
+          "max_drawdown_r": 606.9350499550586
+        },
+        "AUD/USD": {
+          "trades": 1102,
+          "expectancy_r": -0.5400646642749318,
+          "expectancy_pips": -2.5035989758885955,
+          "profit_factor": 0.4751615631389768,
+          "win_rate": 0.29945553539019965,
+          "max_drawdown_r": 604.4160630981046
+        },
+        "USD/CAD": {
+          "trades": 978,
+          "expectancy_r": -0.5086673170171355,
+          "expectancy_pips": -1.7760051489917215,
+          "profit_factor": 0.5205621352595867,
+          "win_rate": 0.3476482617586912,
+          "max_drawdown_r": 517.8256620542144
+        },
+        "NZD/USD": {
+          "trades": 1031,
+          "expectancy_r": -0.60887157455462,
+          "expectancy_pips": -2.609587605652477,
+          "profit_factor": 0.45212903576572705,
+          "win_rate": 0.3239573229873909,
+          "max_drawdown_r": 646.3004977317412
+        },
+        "EUR/JPY": {
+          "trades": 1005,
+          "expectancy_r": -0.38620136385258064,
+          "expectancy_pips": -3.1398711798136896,
+          "profit_factor": 0.5885933090735195,
+          "win_rate": 0.31840796019900497,
+          "max_drawdown_r": 390.0863038879706
+        },
+        "GBP/JPY": {
+          "trades": 981,
+          "expectancy_r": -0.4580818466378195,
+          "expectancy_pips": -4.052056938982783,
+          "profit_factor": 0.5410861125416632,
+          "win_rate": 0.31906218144750254,
+          "max_drawdown_r": 450.61194196787227
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap_mr_m15",
+      "is": {
+        "trades": 17439,
+        "win_rate": 0.426515281839555,
+        "profit_factor": 0.6045334453835053,
+        "expectancy_r": -0.2697984254232835,
+        "expectancy_pips": -2.295655665357428,
+        "expectancy_r_wide": -0.49532718888633054,
+        "max_drawdown_r": 4710.126197151393,
+        "sharpe": -13.665473597416849,
+        "max_concurrent": 9,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 7909,
+            "expectancy_r": -0.23265932994466873
+          },
+          {
+            "year": 2024,
+            "trades": 7704,
+            "expectancy_r": -0.3100992422377061
+          },
+          {
+            "year": 2025,
+            "trades": 1826,
+            "expectancy_r": -0.2606284437157555
+          }
+        ],
+        "outcomes": {
+          "sl": 8864,
+          "tp": 6862,
+          "time": 1713
+        }
+      },
+      "oos": {
+        "trades": 11481,
+        "win_rate": 0.42783729640275237,
+        "profit_factor": 0.6269609348632834,
+        "expectancy_r": -0.25593639114293293,
+        "expectancy_pips": -2.576841514266124,
+        "expectancy_r_wide": -0.49522866256179926,
+        "max_drawdown_r": 2952.039168982218,
+        "sharpe": -12.449589882322268,
+        "max_concurrent": 10,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 5626,
+            "expectancy_r": -0.2367084754651952
+          },
+          {
+            "year": 2026,
+            "trades": 5855,
+            "expectancy_r": -0.2744122670785354
+          }
+        ],
+        "outcomes": {
+          "sl": 5793,
+          "tp": 4427,
+          "time": 1261
+        }
+      },
+      "oos_alert": {
+        "trades": 41,
+        "win_rate": 0.5121951219512195,
+        "profit_factor": 0.6648418247854232,
+        "expectancy_r": -0.1580750978998247,
+        "expectancy_pips": -32.13517125160008,
+        "expectancy_r_wide": -0.23646032212122128,
+        "max_drawdown_r": 14.340167960637762,
+        "sharpe": -0.7995199696188225,
+        "max_concurrent": 3,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 16,
+            "expectancy_r": -0.40820067058146947
+          },
+          {
+            "year": 2026,
+            "trades": 25,
+            "expectancy_r": 0.0020052686164279574
+          }
+        ],
+        "outcomes": {
+          "sl": 16,
+          "tp": 18,
+          "time": 7
+        }
+      },
+      "is_alert": {
+        "trades": 80,
+        "win_rate": 0.6625,
+        "profit_factor": 1.410194753195097,
+        "expectancy_r": 0.13185634890493175,
+        "expectancy_pips": 5.8888164068467574,
+        "expectancy_r_wide": 0.039728274942612433,
+        "max_drawdown_r": 6.60424835606265,
+        "sharpe": 0.8107703791968833,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 33,
+            "expectancy_r": -0.09919789470641378
+          },
+          {
+            "year": 2024,
+            "trades": 40,
+            "expectancy_r": 0.3527606266445103
+          },
+          {
+            "year": 2025,
+            "trades": 7,
+            "expectancy_r": -0.04119808972488822
+          }
+        ],
+        "outcomes": {
+          "tp": 49,
+          "time": 10,
+          "sl": 21
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 1299,
+          "expectancy_r": -0.18519268063922187,
+          "expectancy_pips": -1.2743328629032205,
+          "profit_factor": 0.7113170060679143,
+          "win_rate": 0.4472671285604311,
+          "max_drawdown_r": 252.10492038214142
+        },
+        "GBP/USD": {
+          "trades": 1399,
+          "expectancy_r": -0.2322264527517763,
+          "expectancy_pips": -2.214591577593473,
+          "profit_factor": 0.6561695150389104,
+          "win_rate": 0.4281629735525375,
+          "max_drawdown_r": 325.15295615371963
+        },
+        "USD/JPY": {
+          "trades": 940,
+          "expectancy_r": -0.17367159522131892,
+          "expectancy_pips": -1.8425705183351921,
+          "profit_factor": 0.726974081326374,
+          "win_rate": 0.4340425531914894,
+          "max_drawdown_r": 166.0106588508742
+        },
+        "XAU/USD": {
+          "trades": 906,
+          "expectancy_r": -0.020265647897953754,
+          "expectancy_pips": -6.7660192643255925,
+          "profit_factor": 0.9641334620645599,
+          "win_rate": 0.4304635761589404,
+          "max_drawdown_r": 55.53854557124017
+        },
+        "USD/CHF": {
+          "trades": 1287,
+          "expectancy_r": -0.3442667599383669,
+          "expectancy_pips": -1.9615912832094078,
+          "profit_factor": 0.5277510254927938,
+          "win_rate": 0.42035742035742035,
+          "max_drawdown_r": 449.84416415550976
+        },
+        "AUD/USD": {
+          "trades": 1058,
+          "expectancy_r": -0.2724078998751629,
+          "expectancy_pips": -1.485017642306736,
+          "profit_factor": 0.6132505846614021,
+          "win_rate": 0.42627599243856334,
+          "max_drawdown_r": 290.40007382235285
+        },
+        "USD/CAD": {
+          "trades": 1448,
+          "expectancy_r": -0.3332184939270058,
+          "expectancy_pips": -2.1236599712580193,
+          "profit_factor": 0.5304894065921658,
+          "win_rate": 0.43439226519337015,
+          "max_drawdown_r": 487.1639921518409
+        },
+        "NZD/USD": {
+          "trades": 1013,
+          "expectancy_r": -0.451783760061056,
+          "expectancy_pips": -2.6485633117100376,
+          "profit_factor": 0.4447305570324782,
+          "win_rate": 0.39782823297137215,
+          "max_drawdown_r": 458.3942236031071
+        },
+        "EUR/JPY": {
+          "trades": 1001,
+          "expectancy_r": -0.20282351199281917,
+          "expectancy_pips": -2.4448543145579325,
+          "profit_factor": 0.6930917423452158,
+          "win_rate": 0.4305694305694306,
+          "max_drawdown_r": 221.35430556224136
+        },
+        "GBP/JPY": {
+          "trades": 1130,
+          "expectancy_r": -0.2804257423865274,
+          "expectancy_pips": -4.131013796056058,
+          "profit_factor": 0.5999253566337003,
+          "win_rate": 0.42389380530973453,
+          "max_drawdown_r": 318.53737233465506
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    },
+    {
+      "strategy": "vwap_mr_m5",
+      "is": {
+        "trades": 14660,
+        "win_rate": 0.37319236016371077,
+        "profit_factor": 0.5876541426362103,
+        "expectancy_r": -0.3106365778327507,
+        "expectancy_pips": -2.443018923072698,
+        "expectancy_r_wide": -0.541554794955436,
+        "max_drawdown_r": 4560.247563422516,
+        "sharpe": -14.547804831857622,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 6695,
+            "expectancy_r": -0.2941539863770181
+          },
+          {
+            "year": 2024,
+            "trades": 6398,
+            "expectancy_r": -0.33276305679470386
+          },
+          {
+            "year": 2025,
+            "trades": 1567,
+            "expectancy_r": -0.2907168186735633
+          }
+        ],
+        "outcomes": {
+          "time": 2733,
+          "tp": 3986,
+          "sl": 7941
+        }
+      },
+      "oos": {
+        "trades": 9152,
+        "win_rate": 0.3800262237762238,
+        "profit_factor": 0.6444261405825591,
+        "expectancy_r": -0.25937665079224215,
+        "expectancy_pips": -2.1893974455014082,
+        "expectancy_r_wide": -0.47394377675106414,
+        "max_drawdown_r": 2384.0352523678885,
+        "sharpe": -10.871688850037653,
+        "max_concurrent": 4,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 4529,
+            "expectancy_r": -0.24225062676691633
+          },
+          {
+            "year": 2026,
+            "trades": 4623,
+            "expectancy_r": -0.27615444936691236
+          }
+        ],
+        "outcomes": {
+          "tp": 2335,
+          "sl": 4884,
+          "time": 1933
+        }
+      },
+      "oos_alert": {
+        "trades": 6,
+        "win_rate": 0.5,
+        "profit_factor": 0.4411588648760559,
+        "expectancy_r": -0.14716983980086049,
+        "expectancy_pips": 8.823429285770539,
+        "expectancy_r_wide": -0.2175530591824121,
+        "max_drawdown_r": 1.5800895519427365,
+        "sharpe": -0.6034691514043748,
+        "max_concurrent": 1,
+        "years": [
+          {
+            "year": 2025,
+            "trades": 1,
+            "expectancy_r": 0.03773584905660893
+          },
+          {
+            "year": 2026,
+            "trades": 5,
+            "expectancy_r": -0.1841509775723544
+          }
+        ],
+        "outcomes": {
+          "time": 5,
+          "tp": 1
+        }
+      },
+      "is_alert": {
+        "trades": 14,
+        "win_rate": 0.5,
+        "profit_factor": 0.5256753103341543,
+        "expectancy_r": -0.22756357715151912,
+        "expectancy_pips": -3.484445883923786,
+        "expectancy_r_wide": -0.29377929974663114,
+        "max_drawdown_r": 4.446923447145275,
+        "sharpe": -0.6611220006798519,
+        "max_concurrent": 2,
+        "years": [
+          {
+            "year": 2023,
+            "trades": 9,
+            "expectancy_r": 0.08672376516716777
+          },
+          {
+            "year": 2024,
+            "trades": 3,
+            "expectancy_r": -0.6113026758187821
+          },
+          {
+            "year": 2025,
+            "trades": 2,
+            "expectancy_r": -1.0662479695847158
+          }
+        ],
+        "outcomes": {
+          "sl": 6,
+          "time": 4,
+          "tp": 4
+        }
+      },
+      "by_symbol": {
+        "EUR/USD": {
+          "trades": 2516,
+          "expectancy_r": -0.30654470332380407,
+          "expectancy_pips": -1.39238434170117,
+          "profit_factor": 0.5790262437284271,
+          "win_rate": 0.38910969793322736,
+          "max_drawdown_r": 788.0436254799702
+        },
+        "GBP/USD": {
+          "trades": 2758,
+          "expectancy_r": -0.35865869564855746,
+          "expectancy_pips": -1.9964054908337228,
+          "profit_factor": 0.5517283635273709,
+          "win_rate": 0.37599709934735315,
+          "max_drawdown_r": 989.1806825987221
+        },
+        "USD/JPY": {
+          "trades": 1906,
+          "expectancy_r": -0.25228722729413866,
+          "expectancy_pips": -1.6825654404900443,
+          "profit_factor": 0.6578131162177412,
+          "win_rate": 0.36935991605456453,
+          "max_drawdown_r": 483.5917814314886
+        },
+        "XAU/USD": {
+          "trades": 1972,
+          "expectancy_r": -0.06719497802563842,
+          "expectancy_pips": -3.966060012279571,
+          "profit_factor": 0.8924445500450965,
+          "win_rate": 0.3843813387423935,
+          "max_drawdown_r": 162.1030944941837
+        }
+      },
+      "robust": false,
+      "robust_alert": false
+    }
+  ]
+}
