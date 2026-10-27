@@ -852,7 +852,7 @@ td.mono{font-family:var(--font-mono)}
     </div>
     <div class="trend-controls">
       <button class="trend-refresh-btn" id="vwapBounceRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta">M15 · Today's VWAP (00:00 UTC anchor) + 50 MVWAP · all pairs · judged on the candle that just closed</div>
+      <div class="trend-meta">M15 · Session VWAP (resets 00:00 SAST, like TradingView) + 50 MVWAP · all pairs · judged on the candle that just closed</div>
     </div>
     <div class="trend-summary" id="vwapBounceSummary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table">
@@ -893,7 +893,7 @@ td.mono{font-family:var(--font-mono)}
     <div class="trend-controls">
       <div class="trend-control-group" style="min-width:260px">
         <label>📐 VWAP Mean Reversion — M15</label>
-        <div id="vwapMrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Session VWAP (00:00 UTC / 02:00 SAST reset — MT5 server midnight) · sigma bands · efficiency-ratio regime filter · stall confirmation</div>
+        <div id="vwapMrStatusLine" style="font-size:.78rem;color:var(--text-secondary);line-height:1.4">Session VWAP (resets 00:00 SAST, like TradingView) · sigma bands · efficiency-ratio regime filter · stall confirmation</div>
       </div>
       <button class="trend-refresh-btn" id="vwapMrRefreshBtn">Refresh Scanner</button>
       <div class="trend-meta" id="vwapMrMeta">Majors + USTEC · adapted from a US-equity research spec, unvalidated for forex</div>
@@ -920,8 +920,8 @@ td.mono{font-family:var(--font-mono)}
       <tbody id="vwapMrTableBody"><tr><td colspan="13" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>VWAP Mean Reversion (M15):</b> fades extensions from a rising/falling session VWAP (resets each 00:00 UTC
-      / 02:00 SAST — MT5 server midnight)
+      <b>VWAP Mean Reversion (M15):</b> fades extensions from a rising/falling session VWAP (resets each 00:00 SAST
+      = 22:00 UTC, matching TradingView; MT5's own day starts 2h later)
       using sigma bands, gated by an efficiency-ratio regime filter (range-bound conditions only — trending markets
       are excluded). Entry requires a stall/reversal confirmation (rejection wick, close back inside the band, or a
       two-bar reversal pattern) after price extends beyond the sigma threshold. SL sits beyond the extension; TP1
@@ -935,7 +935,7 @@ td.mono{font-family:var(--font-mono)}
   <div class="table-container" id="sweepContainer" style="display:none">
     <div class="trend-controls">
       <button class="trend-refresh-btn" id="sweepRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta">M15 · stop-run dots (swing high/low taken on 2× volume) · session VWAP ±2σ (17:00 New York anchor) · forex, metals, indices, crypto, oil, EUR/CAD</div>
+      <div class="trend-meta">M15 · stop-run dots (swing high/low taken on 2× volume) · session VWAP ±2σ (resets 00:00 SAST) · forex, metals, indices, crypto, oil, EUR/CAD</div>
     </div>
     <div class="trend-summary" id="sweepSummary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table">
@@ -1298,6 +1298,30 @@ const BTMM_KILL_ZONES = [
 ];
 
 let pairData = {};
+// Key levels (previous day + 2d..5d H/L/C, last week H/L) from the service's
+// MT5 daily candles (/key-levels), loaded once per fetchAllData cycle.
+let keyLevelsData = {};
+
+async function fetchKeyLevels() {
+  try {
+    const base = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+    const resp = await fetch(`${base}/key-levels`, { cache: 'no-store' });
+    if (resp.ok) keyLevelsData = await resp.json();
+  } catch (e) { console.warn('key levels unavailable', e); }
+}
+
+// Same rule as key_levels.near(): levels price sits on (within tol), and the
+// next one above and below. cluster = how many levels price is on at once.
+function keyLevelNear(symbol, price) {
+  const kl = keyLevelsData[symbol];
+  if (!kl || !kl.levels || !kl.tol) return { at: [], above: null, below: null, cluster: 0, tol: null };
+  const tol = kl.tol;
+  const at = kl.levels.filter(l => Math.abs(l.price - price) <= tol)
+    .sort((a, b) => Math.abs(a.price - price) - Math.abs(b.price - price));
+  const above = kl.levels.filter(l => l.price > price + tol).sort((a, b) => a.price - b.price)[0] || null;
+  const below = kl.levels.filter(l => l.price < price - tol).sort((a, b) => b.price - a.price)[0] || null;
+  return { at, above, below, cluster: at.length, tol };
+}
 let currentMode = 'indicator';
 let currentFilter = 'all';
 let currentTypeFilter = 'all';
@@ -3720,6 +3744,7 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     .map(k => ({ key: k, ...btmmSetups[k] }))
     .filter(s => s.active)
     .sort((a, b) => b.gatesPassed - a.gatesPassed)[0] || null;
+  const keyLevel = keyLevelNear(pair.symbol, currentPrice);
   const btmmChecklist = [
     { name: `Price ${setupBullish ? 'Above' : 'Below'} 800 EMA${!ema800Warm ? ' ⚠' : ''}`, pass: setupBullish ? priceAbove800 : !priceAbove800 },
     { name: `5/13 Cross Fresh (${lastCross.candlesAgo}c ago)`, pass: lastCross.candlesAgo <= 20 },
@@ -3728,69 +3753,93 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     { name: 'Kill Zone Active', pass: !!activeZone },
     { name: 'ADR < 75% Consumed', pass: adrConsumed < 75 },
     { name: 'AMD Distribution Phase', pass: amd.phase === 'Distribution' },
-    { name: `Near PF Level (< 25 pips)`, pass: setupBullish ? pfLevels.pflDistance / pair.pip < 25 : pfLevels.pfcDistance / pair.pip < 25 },
+    // Key level (2026-10-27): previous day / 2d-5d high-low-close or last week high-low,
+    // from MT5 daily candles; replaces the old "Near PF Level" item.
+    { name: keyLevel.cluster ? `At Key Level (${keyLevel.at.map(l => l.name).join(', ')})` : 'At Key Level (PDH/PDL/PDC, 2d-5d, PWH/PWL)',
+      pass: keyLevel.cluster > 0 },
     // Additional BTMM Setup 6/8 check
     { name: `Setup 6/8 (Price 6-8pips from EMA 50)`, pass: nearEMA50Setup },
-    { name: 'HOD/LOD Retest', pass: !!(btmmHODLOD && (btmmHODLOD.retestingHOD || btmmHODLOD.retestingLOD)) },
-    { name: 'TDI 2nd Leg Confirmed', pass: !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence !== 'low') },
-    { name: 'Named Setup Active', pass: !!activeSetup },
+    // Direction-gated (2026-10-27): these used to pass when they pointed the OTHER way
+    { name: setupBullish ? 'LOD Retest' : 'HOD Retest', pass: !!(btmmHODLOD && (setupBullish ? btmmHODLOD.retestingLOD : btmmHODLOD.retestingHOD)) },
+    { name: 'TDI 2nd Leg Confirmed', pass: !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.direction === (setupBullish ? 'bullish' : 'bearish') && btmmTDILeg.confidence !== 'low') },
+    { name: 'Named Setup Active', pass: !!(activeSetup && activeSetup.direction === (setupBullish ? 'bullish' : 'bearish')) },
     { name: 'No High-Impact News Block', pass: !isNewsBlocked(pair, blockedCurrencies) },
   ];
   const newsBlocked = isNewsBlocked(pair, blockedCurrencies);
   const checklistScore = btmmChecklist.filter(c => c.pass).length;
 
+  // Core score from indicators. ADR is signed by the trend (2026-10-27): it used
+  // to add +7.5 toward BUY on every pair whenever the day still had range left.
+  const trendDir = emaScore !== 0 ? Math.sign(emaScore) : Math.sign(tdiScore || 1);
+  const coreScore = (emaScore * 0.4 + tdiScore * 0.25 + adrScore * trendDir * 0.15 + amdScore * 0.1 + killZoneScore * 0.1) * 100;
+  const scoreDir = coreScore !== 0 ? Math.sign(coreScore) : trendDir;
+  // A directional pattern only adds when it points the trade's way (2026-10-27):
+  // a bearish Shark Fin used to add to a buy score. Context items (key level,
+  // Asian range, pivots, fibs...) have no direction and always count.
+  const bonusDir = scoreDir > 0 ? 'bullish' : 'bearish';
+  const agrees = p => !!p && p.direction === bonusDir;
+  const huntDir = btmmStopHunt && btmmStopHunt.direction === 'up' ? 'bearish' : 'bullish'; // hunt above the range = sell
+
   // BTMM Pattern Bonus Scoring (normalized 0-10 scale)
   let patternBonus = 0;
+  // Key levels: great areas to trade from or around (+2), stronger where several meet (+1)
+  if (keyLevel.cluster > 0) patternBonus += 2;
+  if (keyLevel.cluster > 1) patternBonus += 1;
   // Core patterns (1-3 points each)
   if (btmmAsianRange && btmmAsianRange.valid) patternBonus += 1; // Valid Asian range < 50 pips
-  if (btmmStopHunt && btmmStopHunt.active) patternBonus += 2; // Stop hunt detected
-  if (btmmMWPattern && btmmMWPattern.formed) patternBonus += 2; // M/W pattern forming
+  if (btmmStopHunt && btmmStopHunt.active && huntDir === bonusDir) patternBonus += 2; // Stop hunt detected
+  if (btmmMWPattern && btmmMWPattern.formed && agrees(btmmMWPattern)) patternBonus += 2; // M/W pattern forming
   if (btmmLevelCount && btmmLevelCount.level === 3) patternBonus += 1; // Level 3 - reversal imminent
-  if (btmmSharkFin && btmmSharkFin.active) patternBonus += 3; // Shark Fin - high probability entry
-  if (btmmEMA200Bounce && btmmEMA200Bounce.active) patternBonus += 3; // 200 EMA Bounce - very high probability
+  if (btmmSharkFin && btmmSharkFin.active && agrees(btmmSharkFin)) patternBonus += 3; // Shark Fin - high probability entry
+  if (btmmEMA200Bounce && btmmEMA200Bounce.active && agrees(btmmEMA200Bounce)) patternBonus += 3; // 200 EMA Bounce - very high probability
   // Setup confirmations (2 points each)
   if (nearEMA50Setup) patternBonus += 2; // Setup 6/8 - price 6-8 pips from EMA 50
   if (checklistScore >= 6) patternBonus += 2; // Consider Setup - 6/8 or higher on checklist
   // Multi-timeframe patterns (1-3 points each)
-  if (btmmWeeklyCycle && btmmWeeklyCycle.active) patternBonus += 2; // Weekly M/W pattern
+  if (btmmWeeklyCycle && btmmWeeklyCycle.active && agrees(btmmWeeklyCycle)) patternBonus += 2; // Weekly M/W pattern
   if (btmm3DayCycle && btmm3DayCycle.level === 'III') patternBonus += 2; // 3-Day Level III
-  if (btmmStraightaway && btmmStraightaway.active) patternBonus += 3; // Straightaway - clean break
+  if (btmmStraightaway && btmmStraightaway.active && agrees(btmmStraightaway)) patternBonus += 3; // Straightaway - clean break
   if (btmmNYCReversal && btmmNYCReversal.active) patternBonus += 3; // NYC Reversal - high probability
-  if (btmmTDIDivergence && btmmTDIDivergence.active) patternBonus += 2; // TDI Divergence - key confirmation
+  if (btmmTDIDivergence && btmmTDIDivergence.active && agrees(btmmTDIDivergence)) patternBonus += 2; // TDI Divergence - key confirmation
   if (btmmHalfBatman && btmmHalfBatman.active) patternBonus += 2; // Half Batman - Level I consolidation
   if (btmmPivots && btmmPivots.nearest) patternBonus += 1; // Near pivot point - target zone
-  if (btmmHODLOD && btmmHODLOD.retestingHOD) patternBonus += 2; // HOD retest — bearish setup
-  if (btmmHODLOD && btmmHODLOD.retestingLOD) patternBonus += 2; // LOD retest — bullish setup
-  if (btmmNameableCandle && btmmNameableCandle.found && btmmNameableCandle.direction !== 'neutral') patternBonus += 2; // Nameable 2nd leg candle
+  if (btmmHODLOD && btmmHODLOD.retestingHOD && bonusDir === 'bearish') patternBonus += 2; // HOD retest — bearish setup
+  if (btmmHODLOD && btmmHODLOD.retestingLOD && bonusDir === 'bullish') patternBonus += 2; // LOD retest — bullish setup
+  if (btmmNameableCandle && btmmNameableCandle.found && agrees(btmmNameableCandle)) patternBonus += 2; // Nameable 2nd leg candle
   if (btmmWeeklyFibs && btmmWeeklyFibs.highProbZone) patternBonus += 2; // At weekly 61.8/78.6 fib zone
-  if (btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence === 'high') patternBonus += 3; // TDI 2nd leg confirmed — Safety Trade ready
-  if (btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.confidence === 'medium') patternBonus += 1; // TDI 2nd leg forming
+  if (btmmTDILeg && btmmTDILeg.leg === 2 && agrees(btmmTDILeg) && btmmTDILeg.confidence === 'high') patternBonus += 3; // TDI 2nd leg confirmed — Safety Trade ready
+  if (btmmTDILeg && btmmTDILeg.leg === 2 && agrees(btmmTDILeg) && btmmTDILeg.confidence === 'medium') patternBonus += 1; // TDI 2nd leg forming
   if (btmmH1MTF && btmmH1MTF.valid && btmmH1MTF.trend !== 'neutral') {
     const h1AlignsWith15m = (btmmH1MTF.trend === 'bullish' && emaScore > 0) || (btmmH1MTF.trend === 'bearish' && emaScore < 0);
     if (h1AlignsWith15m) patternBonus += 3; // H1 MTF confirmation — strong confluence
   }
   // Named setup bonus — high-confidence setups deserve their own weight
-  if (activeSetup && activeSetup.confidence === 'high')   patternBonus += 4;
-  else if (activeSetup && activeSetup.confidence === 'medium') patternBonus += 2;
-  else if (activeSetup) patternBonus += 1;
+  const setupAgrees = agrees(activeSetup);
+  if (setupAgrees && activeSetup.confidence === 'high')   patternBonus += 4;
+  else if (setupAgrees && activeSetup.confidence === 'medium') patternBonus += 2;
+  else if (setupAgrees) patternBonus += 1;
 
-  // Core score (0-100 from indicators) + Pattern bonus signed by trend direction
-  // Bonus is always directional: bearish setups add negative bonus, bullish setups add positive.
-  const coreScore = (emaScore * 0.4 + tdiScore * 0.25 + adrScore * 0.15 + amdScore * 0.1 + killZoneScore * 0.1) * 100;
-  const scoreDir = coreScore !== 0 ? Math.sign(coreScore) : Math.sign(emaScore || tdiScore || 1);
+  // Core score + pattern bonus signed by the trade direction
   const btmmCompositeScore = Math.max(-100, Math.min(100, coreScore + scoreDir * patternBonus));
 
+  // Symmetric tiers (2026-10-27): -20..-50 used to show 'Strong Sell' — there was no plain Sell
   let btmmSignal, btmmSignalClass;
   if (btmmCompositeScore >= 50) { btmmSignal = 'Strong Buy'; btmmSignalClass = 'strong-buy'; }
   else if (btmmCompositeScore >= 20) { btmmSignal = 'Buy'; btmmSignalClass = 'buy'; }
-  else if (btmmCompositeScore >= -20) { btmmSignal = 'Neutral'; btmmSignalClass = 'neutral'; }
+  else if (btmmCompositeScore > -20) { btmmSignal = 'Neutral'; btmmSignalClass = 'neutral'; }
+  else if (btmmCompositeScore > -50) { btmmSignal = 'Sell'; btmmSignalClass = 'sell'; }
   else { btmmSignal = 'Strong Sell'; btmmSignalClass = 'strong-sell'; }
   // BTMM hard gate: outside a kill zone = no actionable signal
   if (!activeZone) { btmmSignal = 'WAIT'; btmmSignalClass = 'wait'; }
 
   const dist800Pips = Math.abs(currentPrice - e800) / pair.pip;
 
-  const btmmFactors = [emaScore, tdiScore, adrScore, amdScore * 2, killZoneScore];
+  // Directional votes only, same five as Python _btmm_direction_factors (2026-10-27):
+  // ADR, AMD and kill zone say nothing about direction and used to lean bullish.
+  const dirVote = p => p && p.direction === 'bullish' ? 1 : p && p.direction === 'bearish' ? -1 : 0;
+  const btmmFactors = [emaScore, tdiScore, priceAbove800 ? 1 : -1,
+                       btmmMWPattern && btmmMWPattern.formed ? dirVote(btmmMWPattern) : 0,
+                       btmmTDIDivergence && btmmTDIDivergence.active ? dirVote(btmmTDIDivergence) : 0];
   const bullishCount = btmmFactors.filter(v => v > 0).length;
   const bearishCount = btmmFactors.filter(v => v < 0).length;
   const confidence = bullishCount >= 4 || bearishCount >= 4 ? 'High' : bullishCount >= 2 || bearishCount >= 2 ? 'Medium' : 'Low';
@@ -3921,7 +3970,7 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     wyckoffScore, wyckoffCompositeScore, wyckoffSignal, wyckoffSignalClass,
     btmmCompositeScore, btmmSignal, btmmSignalClass,
     combinedScore, combinedSignal, combinedSignalClass,
-    tdi, adr, adrConsumed, adrRemaining, pfLevels, amd, fibs,
+    tdi, adr, adrConsumed, adrRemaining, pfLevels, keyLevel, amd, fibs,
     activeZone, isRealData,
     emaScore, tdiScore, adrScore, amdScore, killZoneScore,
     dist800Pips, ema800Val,
@@ -3986,6 +4035,7 @@ async function fetchAllData() {
 
   // Fetch news once per cycle (non-blocking)
   fetchNewsData();
+  await fetchKeyLevels();
 
   // Fetch priority pairs (11 majors) for live data - like v6/v7/v8
   for (const pair of FOREX_PAIRS) {
@@ -4292,6 +4342,10 @@ function openModal(symbol) {
         <div class="detail-row"><span class="detail-label">ADR Remaining</span><span class="detail-value mono">${Math.round(pair.adrRemaining / pair.pip)} pips</span></div>
         <div class="detail-row"><span class="detail-label">AMD Phase</span><span class="detail-value mono"><span class="amd-badge ${pair.amd.phase.toLowerCase()}">${pair.amd.phase}</span></span></div>
         <div class="detail-row"><span class="detail-label">Kill Zone</span><span class="detail-value mono">${pair.activeZone ? pair.activeZone.name : 'Inactive'}</span></div>
+        <div class="detail-row"><span class="detail-label" style="color:var(--cyan)">Key Levels (MT5 days)</span></div>
+        <div class="detail-row"><span class="detail-label">At Level</span><span class="detail-value mono" style="color:${pair.keyLevel && pair.keyLevel.cluster ? 'var(--green)' : 'var(--text-muted)'}">${pair.keyLevel && pair.keyLevel.cluster ? pair.keyLevel.at.map(l => l.name + ' ' + l.price.toFixed(pair.decimals)).join(' · ') : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">Next Above</span><span class="detail-value mono">${pair.keyLevel && pair.keyLevel.above ? pair.keyLevel.above.name + ' ' + pair.keyLevel.above.price.toFixed(pair.decimals) + ' (+' + Math.round((pair.keyLevel.above.price - pair.currentPrice) / pair.pip) + ' pips)' : '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Next Below</span><span class="detail-value mono">${pair.keyLevel && pair.keyLevel.below ? pair.keyLevel.below.name + ' ' + pair.keyLevel.below.price.toFixed(pair.decimals) + ' (−' + Math.round((pair.currentPrice - pair.keyLevel.below.price) / pair.pip) + ' pips)' : '—'}</span></div>
         <div class="detail-row"><span class="detail-label">PFL</span><span class="detail-value mono">${pair.pfLevels.pfl.toFixed(pair.decimals)}</span></div>
         <div class="detail-row"><span class="detail-label">PFC</span><span class="detail-value mono">${pair.pfLevels.pfc.toFixed(pair.decimals)}</span></div>
         <div class="detail-row"><span class="detail-label">PF Status</span><span class="detail-value mono">${pair.pfLevels.pfhStatus}</span></div>

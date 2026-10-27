@@ -218,6 +218,17 @@ def vwap_bounce():
     return jsonify(result)
 
 
+@app.get("/key-levels")
+def key_levels_route():
+    """Previous day + 2d..5d high/low/close and last week's high/low for every
+    pair, from the cached MT5 daily candles (key_levels.py). Cache-only."""
+    import time as _t
+    import key_levels
+    now = int(_t.time())
+    return jsonify({sym: key_levels.levels_for(sym, cache.read_candles(sym, "1day", limit=60), now)
+                    for sym in PRIORITY_PAIRS})
+
+
 _SWEEP_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
 _SWEEP_TTL_SECS = 60
 

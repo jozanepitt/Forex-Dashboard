@@ -1082,6 +1082,58 @@ def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw:
     return _gate_result(gates, direction, entry, sl, tp1, tp2)
 
 
+# ── Checklist / score / label (phase 1 fixes, 2026-10-27) ─────────────────────
+
+def _btmm_checklist(bull: bool, *, stack, tdi, kz, adr_c, amd, asian, push_hunt, hunt,
+                    tdi_leg, level, mw, shark, hod_lod, half_bat, tdi_div) -> list[bool]:
+    """The 13-item BTMM checklist for a trade in direction `bull`. Every
+    directional item must point the trade's way (audit 2026-10-15: the TDI 2nd
+    leg, Shark Fin, stop hunt, Level II and Half Batman items used to pass when
+    they pointed the other way)."""
+    d = "bullish" if bull else "bearish"
+    return [
+        stack["score"] >= 2 if bull else stack["score"] <= -2,                       # 1 EMA stack
+        bool(tdi["bullish"] if bull else tdi["bearish"]),                            # 2 TDI direction
+        bool(kz),                                                                    # 3 kill zone
+        adr_c < 75,                                                                  # 4 ADR headroom
+        amd["phase"] in ("Manipulation", "Distribution"),                            # 5 AMD phase
+        bool(asian.get("valid")),                                                    # 6 Asian range
+        bool((push_hunt.get("detected") and push_hunt.get("direction") == d) or
+             (hunt.get("active") and hunt.get("direction") == d)),                   # 7 stop hunt
+        tdi_leg.get("leg") == 2 and tdi_leg.get("direction") == d,                   # 8 TDI 2nd leg
+        bool(level.get("level_ii")) and level.get("direction") == d,                 # 9 Level II
+        bool(mw.get("detected") and mw.get("pattern") == ("W" if bull else "M")),    # 10 M/W
+        bool(shark.get("entry_ready")) and shark.get("direction") == d,              # 11 Shark Fin
+        bool((hod_lod.get("at_lod") if bull else hod_lod.get("at_hod")) or
+             (half_bat.get("detected") and half_bat.get("direction") == d)),         # 12 HOD/LOD / Half Batman
+        bool(tdi_div.get("detected")) and tdi_div.get("direction") == d,             # 13 divergence
+    ]
+
+
+def _composite_score(stack_score: int, checklist_score: int, bull: bool) -> int:
+    """-100..+100, signed by the trade direction: EMA stack (-50..+50) plus the
+    checklist (0..50 toward the trade). Audit 2026-10-15: the checklist part
+    used to always count upward, so a sell topped out at about +30 and an A+
+    Sell (score <= -70) was impossible."""
+    sgn = 1 if bull else -1
+    return max(-100, min(100, stack_score * 10 + sgn * round(checklist_score / 13 * 50)))
+
+
+def _signal_label(score: int, is_aplus: bool, bull: bool, kz) -> str:
+    """Symmetric tiers: A+ / Strong / plain Buy-Sell / Neutral, WAIT outside a kill zone."""
+    if not kz:
+        return "WAIT"
+    side = "Buy" if bull else "Sell"
+    toward = score if bull else -score
+    if is_aplus:
+        return f"A+ {side}"
+    if toward >= 40:
+        return f"Strong {side}"
+    if toward >= 20:
+        return side
+    return "Neutral"
+
+
 # ── Full pair analysis ────────────────────────────────────────────────────────
 
 def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
@@ -1114,72 +1166,24 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     tdi_div   = detect_tdi_divergence(bars)
     push_hunt = detect_3push_stop_hunt(bars)
 
-    setup_bullish = stack["setup_bullish"]   # price > e800
+    # Trade direction = the 5/13 EMA relationship, the same rule the dashboard
+    # tab uses (audit 2026-10-15: this used price vs the 800 EMA, so the tab
+    # and Discord could disagree on the same pair). Price vs 800 is checklist
+    # item 1's job and the confidence 'bias' vote.
+    setup_bullish = stack["e5"] > stack["e13"]
 
-    # ── 13-item BTMM checklist ────────────────────────────────────────────────
-    checklist = [
-        # 1. EMA stack aligned (≥ 2 of 5 EMAs in setup direction)
-        stack["score"] >= 2 if setup_bullish else stack["score"] <= -2,
-        # 2. TDI direction confirms
-        tdi["bullish"] if setup_bullish else tdi["bearish"],
-        # 3. Kill zone active
-        bool(kz),
-        # 4. ADR headroom (< 75% consumed)
-        adr_c < 75,
-        # 5. AMD phase correct for trade direction
-        amd["phase"] in ("Manipulation", "Distribution"),
-        # 6. Asian range valid and tight (< 50 pips)
-        asian["valid"],
-        # 7. 3-push stop hunt OR basic stop hunt present
-        push_hunt["detected"] or hunt["active"],
-        # 8. TDI 2nd leg formed (Shark Fin entry trigger)
-        tdi_leg["leg"] == 2,
-        # 9. Level II — 4+ of 5 EMAs aligned (institutional-grade stack)
-        level["level_ii"],
-        # 10. M/W pattern matching setup direction
-        mw["detected"] and (
-            (mw["pattern"] == "W" and setup_bullish) or
-            (mw["pattern"] == "M" and not setup_bullish)
-        ),
-        # 11. Shark Fin entry ready (leg 2 + medium/high confidence)
-        shark["entry_ready"],
-        # 12. HOD/LOD proximity OR Half Batman zone
-        (hod_lod["at_hod"] and not setup_bullish) or
-        (hod_lod["at_lod"] and setup_bullish) or
-        half_bat["detected"],
-        # 13. TDI divergence confirms exhaustion in opposing direction
-        tdi_div["detected"] and (
-            (tdi_div["direction"] == "bearish" and not setup_bullish) or
-            (tdi_div["direction"] == "bullish" and setup_bullish)
-        ),
-    ]
+    checklist = _btmm_checklist(
+        setup_bullish, stack=stack, tdi=tdi, kz=kz, adr_c=adr_c, amd=amd, asian=asian,
+        push_hunt=push_hunt, hunt=hunt, tdi_leg=tdi_leg, level=level, mw=mw, shark=shark,
+        hod_lod=hod_lod, half_bat=half_bat, tdi_div=tdi_div)
     checklist_score = sum(checklist)
+    score = _composite_score(stack["score"], checklist_score, setup_bullish)
 
-    # ── Composite score: EMA stack (−50→+50) + checklist (−50→+50) = −100→+100
-    ema_contribution = stack["score"] * 10                       # −50 to +50
-    cl_contribution  = round(checklist_score / 13 * 100 - 50)   # −50 to +50
-    score = max(-100, min(100, ema_contribution + cl_contribution))
-
-    # ── A+ gate check (must precede signal label so label is accurate) ──────────
-    # All four gates must pass; score ≥ 70 alone is not sufficient for A+ label
-    is_aplus = (
-        score >= 70 and
-        checklist_score >= 10 and
-        level["level_ii"] and
-        bool(kz)
-    )
-
-    # ── Signal tier ───────────────────────────────────────────────────────────
-    if not kz:
-        signal = "WAIT"
-    elif is_aplus:
-        signal = "A+ Buy" if setup_bullish else "A+ Sell"   # only when ALL gates pass
-    elif score >= 40:
-        signal = "Strong Buy" if setup_bullish else "Strong Sell"
-    elif score >= 20:
-        signal = "Buy" if setup_bullish else "Sell"
-    else:
-        signal = "Neutral"
+    # A+ = strong score toward the trade + most of the checklist + an in-direction
+    # Level II cascade + a kill zone. Symmetric for buys and sells.
+    toward = score if setup_bullish else -score
+    is_aplus = (toward >= 70 and checklist_score >= 10 and checklist[8] and bool(kz))
+    signal = _signal_label(score, is_aplus, setup_bullish, kz)
 
     # ── Trade plan (SL/TP from Asian range or fallback) ───────────────────────
     pip       = instruments.pip_size(symbol, closes[-1])

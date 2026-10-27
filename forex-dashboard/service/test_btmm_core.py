@@ -62,6 +62,56 @@ def test_confidence_excludes_nondirectional_factors():
     assert b._classify_confidence(1, 0) == "low"
 
 
+# ── 2026-10-27 phase 1: direction bugs ────────────────────────────────────────
+
+def _ctx(direction):
+    """Every checklist input pointing `direction` ('bullish'/'bearish')."""
+    bull = direction == "bullish"
+    return dict(
+        stack={"score": 5 if bull else -5}, tdi={"bullish": bull, "bearish": not bull}, kz="London",
+        adr_c=40, amd={"phase": "Distribution"}, asian={"valid": True},
+        push_hunt={"detected": True, "direction": direction}, hunt={"active": True, "direction": direction},
+        tdi_leg={"leg": 2, "direction": direction}, level={"level_ii": True, "direction": direction},
+        mw={"detected": True, "pattern": "W" if bull else "M"},
+        shark={"entry_ready": True, "direction": direction},
+        hod_lod={"at_lod": bull, "at_hod": not bull}, half_bat={"detected": True, "direction": direction},
+        tdi_div={"detected": True, "direction": direction})
+
+
+def test_checklist_counts_only_items_pointing_the_trade_way():
+    """Audit 2026-10-15: TDI 2nd leg, Shark Fin, stop hunt and Half Batman
+    passed even when they pointed the OTHER way (16,294 times in the replay)."""
+    assert sum(b._btmm_checklist(True, **_ctx("bullish"))) == 13
+    against = _ctx("bearish")
+    against.update(stack={"score": 5}, tdi={"bullish": True, "bearish": False},
+                   mw={"detected": True, "pattern": "W"}, hod_lod={"at_lod": True, "at_hod": False})
+    items = b._btmm_checklist(True, **against)
+    names = ["ema", "tdi", "kz", "adr", "amd", "asian", "hunt", "leg2", "level", "mw", "shark", "hodlod", "div"]
+    failed = {n for n, ok in zip(names, items) if not ok}
+    assert {"hunt", "leg2", "level", "shark", "div"} <= failed
+
+
+def test_checklist_is_symmetric_for_buys_and_sells():
+    assert b._btmm_checklist(True, **_ctx("bullish")) == b._btmm_checklist(False, **_ctx("bearish"))
+
+
+def test_a_plus_sell_is_reachable():
+    """Audit 2026-10-15: a sell maxed out at about +30 while A+ needs 70, so
+    0 A+ Sells in 35,950 sell setups."""
+    assert b._composite_score(5, 13, True) == 100
+    assert b._composite_score(-5, 13, False) == -100
+    assert b._signal_label(-100, True, False, kz="London") == "A+ Sell"
+    assert b._signal_label(100, True, True, kz="London") == "A+ Buy"
+
+
+def test_signal_tiers_are_symmetric():
+    for score, bull, label in ((45, True, "Strong Buy"), (-45, False, "Strong Sell"),
+                               (25, True, "Buy"), (-25, False, "Sell"), (10, True, "Neutral"),
+                               (-10, False, "Neutral")):
+        assert b._signal_label(score, False, bull, kz="NY") == label, (score, bull)
+    assert b._signal_label(-45, False, False, kz=None) == "WAIT"
+
+
 # ── #4  HOD/LOD requires a retest ─────────────────────────────────────────────
 
 def _bar(ts, hi, lo, cl):

@@ -31,8 +31,14 @@ function Write-Log($msg) {
     }
 }
 
-function Get-Procs($exeFilter, $pattern) {
-    Get-CimInstance Win32_Process -Filter $exeFilter | Where-Object { $_.CommandLine -like $pattern }
+# $script is matched as `"...python(w).exe"<any whitespace>script` at the end of
+# the command line: the guardian starts app.py with TWO spaces, which a
+# `*" app.py` wildcard missed, so the old app survived and the new one could
+# not bind port 3002 (2026-10-27).
+function Get-Procs($exeFilter, $script, [int]$extraPid = 0) {
+    $rx = '"\s+' + [regex]::Escape($script) + '\s*$'
+    Get-CimInstance Win32_Process -Filter $exeFilter |
+        Where-Object { $_.CommandLine -match $rx -or ($extraPid -gt 0 -and $_.ProcessId -eq $extraPid) }
 }
 
 # Returns $true when everything stopped, $false if any process survived.
@@ -64,14 +70,15 @@ $t0 = Get-Date
 Write-Log "requested from the dashboard (old app.py pid $OldPid)"
 
 # 1. guardians
-$guardians = Get-Procs "Name='powershell.exe'" "*guardian-loop.ps1*"
+$guardians = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*guardian-loop.ps1*" }
 $null = Stop-AndConfirm $guardians "guardian loop"
 
 # 2. services. Match `"...pythonw.exe" app.py` exactly, not any *app.py*
-# (that would also hit e.g. a pytest run of test_app.py).
+# (that would also hit e.g. a pytest run of test_app.py). The pid app.py
+# reported for itself is always included.
 $pyFilter = "Name='pythonw.exe' OR Name='python.exe'"
-$appGone = Stop-AndConfirm (Get-Procs $pyFilter '*" app.py') "app.py"
-$botGone = Stop-AndConfirm (Get-Procs $pyFilter '*" discord_bot.py') "discord_bot.py"
+$appGone = Stop-AndConfirm (Get-Procs $pyFilter 'app.py' $OldPid) "app.py"
+$botGone = Stop-AndConfirm (Get-Procs $pyFilter 'discord_bot.py') "discord_bot.py"
 
 if (-not $appGone) {
     # Never start a second app.py next to one that would not die: two copies
