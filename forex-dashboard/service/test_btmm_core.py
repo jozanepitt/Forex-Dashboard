@@ -112,6 +112,15 @@ def test_signal_tiers_are_symmetric():
     assert b._signal_label(-45, False, False, kz=None) == "WAIT"
 
 
+def test_a_plus_needs_a_shark_fin_trigger_not_just_confluence():
+    fin = {"entry_ready": True, "direction": "bearish"}
+    assert b._is_aplus(fin, False, "London", -45)
+    assert not b._is_aplus({"entry_ready": False}, False, "London", -100)    # max score, no trigger
+    assert not b._is_aplus(fin, True, "London", 100)                         # fin against the trade
+    assert not b._is_aplus(fin, False, None, -100)                           # outside a session
+    assert not b._is_aplus(fin, False, "NY", -30)                            # score too weak
+
+
 # ── #4  HOD/LOD requires a retest ─────────────────────────────────────────────
 
 def _bar(ts, hi, lo, cl):

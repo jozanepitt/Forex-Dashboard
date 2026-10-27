@@ -3882,6 +3882,22 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   // BTMM hard gate: outside a kill zone = no actionable signal
   if (!activeZone) { btmmSignal = 'WAIT'; btmmSignalClass = 'wait'; }
 
+  // Edge-based BTMM grade (2026-10-27, = btmm_core._is_aplus): only a Shark Fin
+  // entry (800 EMA bias, 68/32, 25-50p beyond Asian) is a trigger. A+ = that
+  // trigger in a session, no news, score >= 40 toward it; A = trigger, weaker
+  // score. Without a trigger a strong score is B (watch) at most — M/W, Half
+  // Batman and the other patterns are confluence, never triggers.
+  const sfTrigger = !!(ruleShark && ruleShark.entry_ready && ruleShark.direction === bonusDir);
+  const towardScore = scoreDir > 0 ? btmmCompositeScore : -btmmCompositeScore;
+  let btmmGrade;
+  if (sfTrigger && activeZone && !newsBlocked) {
+    btmmGrade = towardScore >= 40 ? { grade: 'A+', cls: 'grade-a', title: 'Shark Fin trigger + score' }
+                                  : { grade: 'A', cls: 'grade-a', title: 'Shark Fin trigger, weaker score' };
+    if (towardScore >= 40) { btmmSignal = scoreDir > 0 ? 'A+ Buy' : 'A+ Sell'; btmmSignalClass = scoreDir > 0 ? 'strong-buy' : 'strong-sell'; }
+  } else if (Math.abs(btmmCompositeScore) >= 70) btmmGrade = { grade: 'B', cls: 'grade-b', title: 'strong confluence, no Shark Fin trigger — watch' };
+  else if (Math.abs(btmmCompositeScore) >= 40) btmmGrade = { grade: 'C', cls: 'grade-c', title: 'confluence only' };
+  else btmmGrade = { grade: 'D', cls: 'grade-d', title: 'no setup' };
+
   const dist800Pips = Math.abs(currentPrice - e800) / pair.pip;
 
   // Directional votes only, same five as Python _btmm_direction_factors (2026-10-27):
@@ -4020,7 +4036,7 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     wyckoffScore, wyckoffCompositeScore, wyckoffSignal, wyckoffSignalClass,
     btmmCompositeScore, btmmSignal, btmmSignalClass,
     combinedScore, combinedSignal, combinedSignalClass,
-    tdi, adr, adrConsumed, adrRemaining, pfLevels, keyLevel, btmmRules: rules, amd, fibs,
+    tdi, adr, adrConsumed, adrRemaining, pfLevels, keyLevel, btmmRules: rules, btmmGrade, amd, fibs,
     activeZone, isRealData,
     emaScore, tdiScore, adrScore, amdScore, killZoneScore,
     dist800Pips, ema800Val,
@@ -4266,7 +4282,7 @@ function renderTable() {
     const changeClass = pair.changePercent >= 0 ? 'positive' : 'negative';
     const changeSign = pair.changePercent >= 0 ? '+' : '';
     const confidenceClass = pair.confidence.toLowerCase();
-    const grade = getGrade(pair[scoreKey]);
+    const grade = scoreKey === 'btmmCompositeScore' && pair.btmmGrade ? pair.btmmGrade : getGrade(pair[scoreKey]);
 
     let indicatorsHTML = '';
     if (currentMode === 'indicator') {
@@ -4364,7 +4380,7 @@ function openModal(symbol) {
   const changeClass = pair.changePercent >= 0 ? 'positive' : 'negative';
   const changeSign = pair.changePercent >= 0 ? '+' : '';
   const scoreColor = pair.btmmCompositeScore >= 20 ? 'var(--green)' : pair.btmmCompositeScore >= -20 ? 'var(--yellow)' : 'var(--red)';
-  const grade = getGrade(pair.btmmCompositeScore);
+  const grade = pair.btmmGrade || getGrade(pair.btmmCompositeScore);
 
   let btmmHTML = '';
   if (currentMode === 'indicator' || currentMode === 'combined') {
