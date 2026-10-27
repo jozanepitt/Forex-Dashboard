@@ -50,7 +50,19 @@ HB_EMA50_TOL_PIPS = 3.0       # Type 2: a low/high within 3 pips of the 50 EMA =
 RESET_MIN_BARS = 8            # a reset pullback holds 13 < 50 (or >) for 2h of M15
 RESET_MIN_SPACING_BARS = 96   # and comes a day (M15) after the previous level
 
-SL_BUFFER_PIPS = 5.0         # course: 3-5 pips beyond the shift candle / HOD-LOD
+# Shark Fin stop: 5 pips + 0.10 ADR beyond the spike (tested 2026-10-27 at
+# real Exness Standard spreads, Shark Fin only, k = extra ADR fraction:
+# k=0 -0.05R, 0.05 0.00R, 0.10 +0.05R, 0.15 +0.05R, 0.20 +0.01R net per trade;
+# 0.10 was the value proposed before the test). The tight stop let the spread
+# eat ~0.16R a trade; 0.10 ADR cuts that to ~0.09R.
+SF_STOP_EXTRA_ADR = 0.10
+# Shark Fin A/A+ grades only on the USD majors: forward test registered
+# 2026-10-27 (replay: majors +0.19R net n=67, other pairs -0.04R n=111 --
+# found AFTER looking, so it is a hypothesis until the forward test agrees).
+SF_MAJORS = ("EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "USD/CAD", "NZD/USD")
+FORWARD_TEST_START = "2026-10-27"
+
+SL_BUFFER_PIPS = 5.0        # course: 3-5 pips beyond the shift candle / HOD-LOD
 TP_PIPS_LOW_ADR, TP_PIPS_HIGH_ADR = 20.0, 30.0   # ADR < 100 pips / ADR >= 100 pips
 FX_MEDIAN_ADR_PIPS = 56.0
 
@@ -198,6 +210,7 @@ def detect_shark_fin(bars: list[dict], ts: dict, asian: dict, unit: float,
             "location_pips": round(loc, 1),
             "location_ok": SF_LOC_MIN_PIPS <= loc <= SF_LOC_MAX_PIPS,
             "spike_extreme": ext,
+            "spike_ts": b[last_out]["ts_utc"],
             "fin_bars_ago": None if fin is None else n - 1 - fin,
             "bitw_bars_ago": None if bitw is None else n - 1 - bitw,
             "bars_ago": n - 1 - last_out,

@@ -229,6 +229,13 @@ def key_levels_route():
                     for sym in PRIORITY_PAIRS})
 
 
+@app.get("/btmm-forward")
+def btmm_forward_route():
+    """Shark Fin forward test journal (btmm_forward.py): rule, counts, net R."""
+    import btmm_forward
+    return jsonify(btmm_forward.stats())
+
+
 _BTMM_RULES_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
 
 

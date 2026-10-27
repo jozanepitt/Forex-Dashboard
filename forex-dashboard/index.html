@@ -1319,13 +1319,18 @@ let keyLevelsData = {};
 // BTMM course rules per pair from service/btmm_rules.py (2026-10-27): Shark Fin
 // (68/32, 25-50 pips beyond Asian, signal-line / baseline entries), confirmed
 // M/W, Half Batman Type 1/2, MM levels + resets, session and trade plan.
-let btmmRulesData = {};
+let btmmRulesData = {}, btmmForwardData = null;
+const BTMM_SF_MAJORS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD'];
 async function fetchBTMMRules() {
+  const base = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
-    const base = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
     const resp = await fetch(`${base}/btmm-rules`, { cache: 'no-store' });
     if (resp.ok) btmmRulesData = await resp.json();
   } catch (e) { console.warn('btmm rules unavailable', e); }
+  try {
+    const resp = await fetch(`${base}/btmm-forward`, { cache: 'no-store' });
+    if (resp.ok) btmmForwardData = await resp.json();
+  } catch (e) { console.warn('btmm forward test unavailable', e); }
 }
 
 async function fetchKeyLevels() {
@@ -3887,10 +3892,15 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   // trigger in a session, no news, score >= 40 toward it; A = trigger, weaker
   // score. Without a trigger a strong score is B (watch) at most — M/W, Half
   // Batman and the other patterns are confluence, never triggers.
+  // A/A+ only on the USD majors under forward test (= btmm_rules.SF_MAJORS):
+  // a Shark Fin elsewhere is B (watch) until the forward test says otherwise.
   const sfTrigger = !!(ruleShark && ruleShark.entry_ready && ruleShark.direction === bonusDir);
+  const sfMajor = BTMM_SF_MAJORS.includes(pair.symbol);
   const towardScore = scoreDir > 0 ? btmmCompositeScore : -btmmCompositeScore;
   let btmmGrade;
-  if (sfTrigger && activeZone && !newsBlocked) {
+  if (sfTrigger && !sfMajor) {
+    btmmGrade = { grade: 'B', cls: 'grade-b', title: 'Shark Fin on a non-major — not in the forward test, watch' };
+  } else if (sfTrigger && activeZone && !newsBlocked) {
     btmmGrade = towardScore >= 40 ? { grade: 'A+', cls: 'grade-a', title: 'Shark Fin trigger + score' }
                                   : { grade: 'A', cls: 'grade-a', title: 'Shark Fin trigger, weaker score' };
     if (towardScore >= 40) { btmmSignal = scoreDir > 0 ? 'A+ Buy' : 'A+ Sell'; btmmSignalClass = scoreDir > 0 ? 'strong-buy' : 'strong-sell'; }
@@ -4421,7 +4431,8 @@ function openModal(symbol) {
         <div class="detail-row"><span class="detail-label">MM Level</span><span class="detail-value mono">${lv.level ? `Level ${lv.level} ${lv.direction}${lv.resets ? ` · ${lv.resets} reset${lv.resets > 1 ? 's' : ''} (${lv.last_reset_confirmed ? 'confirmed' : 'unconfirmed'})` : ''}` : '—'}</span></div>
         <div class="detail-row"><span class="detail-label">Plan (${r.setup_bullish ? 'Buy' : 'Sell'})</span><span class="detail-value mono">Entry ${f(tp.entry)} · SL ${f(tp.sl)} (${pips(tp.sl)}p, ${tp.anchor})</span></div>
         <div class="detail-row"><span class="detail-label">Targets</span><span class="detail-value mono">TP1 ${f(tp.tp1)} (${pips(tp.tp1)}p, 1:${tp.rr_tp1}) · TP2 ${f(tp.tp2)} · BE at ${f(tp.break_even_at)}</span></div>
-        <div class="detail-row"><span class="detail-label">Exit</span><span class="detail-value mono" style="white-space:normal">${(tp.exit_rules || []).join(' · ')}</span></div>`; })()}
+        <div class="detail-row"><span class="detail-label">Exit</span><span class="detail-value mono" style="white-space:normal">${(tp.exit_rules || []).join(' · ')}</span></div>
+        ${btmmForwardData ? `<div class="detail-row"><span class="detail-label">Forward test</span><span class="detail-value mono" style="white-space:normal">Shark Fin, USD majors, since ${btmmForwardData.since}: ${btmmForwardData.closed} closed (${btmmForwardData.wins} won), ${btmmForwardData.open} open · ${btmmForwardData.avg_r_net === null ? 'no results yet' : `${btmmForwardData.avg_r_net > 0 ? '+' : ''}${btmmForwardData.avg_r_net}R avg net`} · replay +${btmmForwardData.replay_expectation_r}R${BTMM_SF_MAJORS.includes(pair.symbol) ? '' : ' · this pair is not in the test'}</span></div>` : ''}`; })()}
         <div class="detail-row"><span class="detail-label" style="color:var(--cyan)">Key Levels (MT5 days)</span></div>
         <div class="detail-row"><span class="detail-label">At Level</span><span class="detail-value mono" style="color:${pair.keyLevel && pair.keyLevel.cluster ? 'var(--green)' : 'var(--text-muted)'}">${pair.keyLevel && pair.keyLevel.cluster ? pair.keyLevel.at.map(l => l.name + ' ' + l.price.toFixed(pair.decimals)).join(' · ') : 'None'}</span></div>
         <div class="detail-row"><span class="detail-label">Next Above</span><span class="detail-value mono">${pair.keyLevel && pair.keyLevel.above ? pair.keyLevel.above.name + ' ' + pair.keyLevel.above.price.toFixed(pair.decimals) + ' (+' + Math.round((pair.keyLevel.above.price - pair.currentPrice) / pair.pip) + ' pips)' : '—'}</span></div>

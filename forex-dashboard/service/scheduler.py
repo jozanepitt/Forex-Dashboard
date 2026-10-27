@@ -321,6 +321,14 @@ def _refresh_all_inner():
     except Exception as e:
         log.warning("BTMM_ID50 alerts failed: %s", e)
 
+    # BTMM Shark Fin forward test (registered 2026-10-27): log new A/A+ on the
+    # USD majors and resolve open ones. Journal only -- no Discord.
+    try:
+        import btmm_forward
+        btmm_forward.run()
+    except Exception as e:
+        log.warning("BTMM forward test failed: %s", e)
+
     # Run VWAP Mean Reversion (M15) scanner + Discord alerts (real + watch)
     try:
         _run_vwap_mr_alerts()

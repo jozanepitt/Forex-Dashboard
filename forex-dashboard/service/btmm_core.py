@@ -1046,13 +1046,17 @@ def _composite_score(stack_score: int, checklist_score: float, bull: bool) -> in
 APLUS_MIN_SCORE = 40
 
 
-def _is_aplus(shark: dict, bull: bool, kz, score: int) -> bool:
+def _is_aplus(shark: dict, bull: bool, kz, score: int, symbol: Optional[str] = None) -> bool:
     """A+ needs a TRIGGER with a replay edge: a Shark Fin entry (it already
     requires the 800 EMA bias) in the trade direction, in a session, with the
     score at least APLUS_MIN_SCORE toward the trade. M/W, Half Batman and the
     rest of the checklist are confluence only and can never make A+ on their
     own (user decision 2026-10-27; replay: Shark Fin +0.10R gross, M/W and
-    Half Batman negative). Was: score >= 70 + 10/13 checklist + Level II."""
+    Half Batman negative). Was: score >= 70 + 10/13 checklist + Level II.
+    With a symbol, only the USD majors qualify (forward test, btmm_rules.SF_MAJORS)."""
+    import btmm_rules
+    if symbol is not None and symbol not in btmm_rules.SF_MAJORS:
+        return False
     toward = score if bull else -score
     return bool(kz) and toward >= APLUS_MIN_SCORE and bool(shark.get("entry_ready")) \
         and shark.get("direction") == ("bullish" if bull else "bearish")
@@ -1125,7 +1129,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     checklist_score = sum(checklist)
     score = _composite_score(stack["score"], _weighted_checklist(checklist), setup_bullish)
 
-    is_aplus = _is_aplus(shark, setup_bullish, kz, score)
+    is_aplus = _is_aplus(shark, setup_bullish, kz, score, symbol)
     signal = _signal_label(score, is_aplus, setup_bullish, kz)
 
     # ── Trade plan (course: stop 3-5 pips beyond the shift candle / HOD-LOD,
@@ -1135,7 +1139,9 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     if half_bat.get("detected") and half_bat.get("direction") == direction:
         anchor, anchor_kind = half_bat["shift_extreme"], f"Half Batman Type {half_bat['type']} shift candle"
     elif shark.get("entry_ready") and shark.get("direction") == direction:
-        anchor, anchor_kind = shark["spike_extreme"], "Shark Fin spike (stop hunt)"
+        extra = btmm_rules.SF_STOP_EXTRA_ADR * adr
+        anchor = shark["spike_extreme"] + (-extra if setup_bullish else extra)
+        anchor_kind = "Shark Fin spike + 0.1 ADR"
     elif hod_lod.get("at_lod" if setup_bullish else "at_hod"):
         anchor, anchor_kind = hod_lod["lod" if setup_bullish else "hod"], "LOD" if setup_bullish else "HOD"
     else:
