@@ -513,32 +513,7 @@ def detect_rsi_signal_cross(tdi: dict, lookback: int = 5) -> dict:
 
 # ── Straightaway ──────────────────────────────────────────────────────────────
 
-def detect_straightaway(bars: list[dict], lookback: int = 6, min_run: int = 3) -> dict:
-    """
-    3+ consecutive same-direction candles — momentum continuation / exhaustion signal.
-    """
-    if len(bars) < lookback:
-        return {"detected": False, "direction": None, "count": 0}
-
-    recent = bars[-lookback:]
-    bull_run = bear_run = 0
-    for b in reversed(recent):
-        if b["close"] > b["open"]:
-            if bear_run:
-                break
-            bull_run += 1
-        elif b["close"] < b["open"]:
-            if bull_run:
-                break
-            bear_run += 1
-        else:
-            break
-
-    if bull_run >= min_run:
-        return {"detected": True, "direction": "bullish", "count": bull_run}
-    if bear_run >= min_run:
-        return {"detected": True, "direction": "bearish", "count": bear_run}
-    return {"detected": False, "direction": None, "count": max(bull_run, bear_run)}
+# Straightaway: see btmm_rules.detect_straightaway (course: Level I continuation).
 
 
 # ── HOD / LOD proximity ───────────────────────────────────────────────────────
@@ -899,65 +874,7 @@ def detect_22_trade(bars: list[dict], asian: dict, hunt: dict, hod_lod: dict,
     return _gate_result(gates, direction, entry, sl, tp1, tp2)
 
 
-def detect_fifty_fifty_bounce(bars: list[dict], stack: dict, level: dict, tdi_leg: dict,
-                               h1mtf: dict, tdi: dict, symbol: Optional[str] = None) -> dict:
-    """
-    50/50 Bounce (== ID 50) — mid-day reversal off the 50 EMA in the lull
-    between London close and NY open.
-
-    TDI confirmation is a plain RSI/Signal-line cross (detect_rsi_signal_cross),
-    NOT a Bollinger-Band-extreme requirement. Per the trader's own reference
-    checklist for this exact setup: "TDI confirmation - RSI/Signal line cross"
-    — explicitly NOT gated on RSI being above/below the MBL/band the way other
-    BTMM setups are. Previously gated on tdi_leg.leg==1 (detect_tdi_leg), which
-    requires the fast line to be CURRENTLY OUTSIDE the band — the opposite of
-    what this setup's own rules ask for.
-    """
-    from datetime import datetime, timezone
-    current_price = bars[-1]["close"]
-    pip = instruments.pip_size(symbol, current_price)
-    e50 = stack["e50"]
-
-    direction = "neutral"
-    if h1mtf.get("valid") and h1mtf.get("trend") != "neutral":
-        direction = h1mtf["trend"]
-    elif tdi_leg.get("leg") == 1:
-        direction = tdi_leg["direction"]
-
-    dist50_pips  = abs(current_price - e50) / pip if e50 else 999
-    close_to_50  = dist50_pips <= 8
-    fresh_cross  = bool(level.get("level_i"))
-    rsi_sig_cross = detect_rsi_signal_cross(tdi)
-    tdi_confirmed = rsi_sig_cross["crossed"] and rsi_sig_cross["direction"] == direction
-    h1_aligned    = bool(h1mtf.get("valid")) and h1mtf.get("trend") == direction
-
-    gmt_hour = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc).hour
-    in_lull  = (11 <= gmt_hour < 14) or (16 <= gmt_hour < 22)
-
-    gates = [
-        {"name": "Price <= 8 pips from EMA(50)",       "pass": close_to_50},
-        {"name": "13/50 Cross Level I (fresh)",        "pass": fresh_cross},
-        {"name": "RSI/Signal Line Cross (no MBL req)", "pass": tdi_confirmed},
-        {"name": "H1 MTF Aligned",                     "pass": h1_aligned},
-        {"name": "Mid-Day Lull Window",                "pass": in_lull},
-    ]
-
-    entry = sl = tp1 = tp2 = 0.0
-    if direction != "neutral" and e50:
-        entry = current_price
-        risk  = instruments.min_sl_distance(symbol, entry)
-        if direction == "bullish":
-            sl  = e50 - risk
-            d   = max(abs(entry - sl), risk)
-            tp1 = entry + d * 1.5
-            tp2 = entry + d * 3
-        else:
-            sl  = e50 + risk
-            d   = max(abs(entry - sl), risk)
-            tp1 = entry - d * 1.5
-            tp2 = entry - d * 3
-
-    return _gate_result(gates, direction, entry, sl, tp1, tp2)
+# 50/50 Bounce: the ID50 checklist (btmm_id50) via _id50_as_setup.
 
 
 def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw: dict,
@@ -1053,6 +970,22 @@ def _composite_score(stack_score: int, checklist_score: float, bull: bool) -> in
     return max(-100, min(100, stack_score * 10 + sgn * round(checklist_score / 13 * 50)))
 
 
+def _id50_as_setup(id50: dict) -> dict:
+    """The ID50 checklist result in the named-setup shape. Grade A = all
+    checks (high), B = the required core only (medium)."""
+    grade = id50.get("grade")
+    tp = id50.get("trade_plan") or {}
+    active = grade in ("A+", "A", "B")
+    checks = id50.get("checks") or {}
+    gates = [{"name": "13/50 cross, move away, 50 EMA bounce, entry candle", "pass": active}] + \
+            [{"name": k, "pass": bool(v)} for k, v in checks.items()]
+    return {"active": active, "direction": id50.get("direction") or "neutral", "gates": gates,
+            "gatesPassed": sum(1 for g in gates if g["pass"]), "gatesTotal": len(gates),
+            "entry": tp.get("entry") or 0.0, "sl": tp.get("sl") or 0.0,
+            "tp1": tp.get("tp1") or tp.get("tp2") or 0.0, "tp2": tp.get("tp2") or 0.0,
+            "confidence": "high" if grade in ("A+", "A") else "medium" if active else "none"}
+
+
 APLUS_MIN_SCORE = 40
 
 
@@ -1115,12 +1048,12 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     unit      = btmm_rules.pip_unit(symbol, closes[-1], adr)
     tdi_s     = btmm_rules.tdi_series(closes)
     level     = detect_level_count(bars, closes)
-    mm_levels = btmm_rules.detect_mm_levels(bars, e13_arr, e50_arr, calc_ema(closes, 200),
-                                            calc_ema(closes, 800))
+    e200_arr  = calc_ema(closes, 200)
+    mm_levels = btmm_rules.detect_mm_levels(bars, e13_arr, e50_arr, e200_arr, calc_ema(closes, 800))
     mw        = btmm_rules.confirm_mw(bars, detect_mw_pattern(bars), e13_arr, tdi_s)
     shark     = btmm_rules.detect_shark_fin(bars, tdi_s, asian, unit,
                                             bias_bullish=closes[-1] > stack["e800"])
-    straight  = detect_straightaway(bars)
+    straight  = btmm_rules.detect_straightaway(bars, mm_levels, e13_arr, adr)
     hod_lod   = detect_hod_lod(bars, symbol=symbol)
     half_bat  = btmm_rules.detect_half_batman(bars, e13_arr, e50_arr, tdi_s, unit)
     # Information / confluence only: replayed 2026-10-27 at real spreads with
@@ -1130,6 +1063,14 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
                                                  mw=adv_mw if adv_mw["detected"] else mw)
     mm_levels.update(btmm_rules.level_context(bars, adr, mm_levels.get("direction"),
                                               mm_levels.get("origin_ts")))
+    mayo      = btmm_rules.detect_mayo_mw(bars, mw, e13_arr, e200_arr, tdi_s, mm_levels, unit)
+    nyc       = btmm_rules.detect_nyc_reversal(bars, adr, unit)
+    weekly    = btmm_rules.detect_weekly_cycle(bars)
+    # 50/50 Bounce = the ID50 checklist (course "ID 50": anchor + 13/50 cross,
+    # 25-50 pip move, bounce/trap off the 50, RR/star/COW/shift entry, TDI
+    # signal cross) -- the same rules the ID50 tab uses.
+    import btmm_id50
+    id50 = btmm_id50.analyze_pair(symbol, bars) if symbol else {"grade": "NO-DATA"}
     tdi_div   = detect_tdi_divergence(bars)
     push_hunt = detect_3push_stop_hunt(bars)
 
@@ -1195,7 +1136,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
             # Safety Trade's "Level 1" = the course's market-maker level (13/50 cross), not the EMA count
             ("safety",     detect_safety_trade(bars, stack, asian, tdi_leg, mm_levels, mw, nameable, h1mtf, kz, symbol)),
             ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol, h1mtf)),
-            ("bounce5050", detect_fifty_fifty_bounce(bars, stack, level, tdi_leg, h1mtf, tdi, symbol)),
+            ("bounce5050", _id50_as_setup(id50)),
             ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol, h1mtf)),
         ):
             if res["active"]:
@@ -1259,6 +1200,11 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         "mm_levels":       mm_levels,
         "advanced_mw":     adv_mw,
         "london_pattern":  london,
+        "mayo_mw":         mayo,
+        "nyc_reversal":    nyc,
+        "weekly_cycle":    weekly,
+        "id50":            {k: id50.get(k) for k in ("grade", "setup", "direction", "checks", "notes",
+                                                     "reason", "trade_plan", "entry_candle")},
         "trade_plan":      plan,
         "session":         btmm_rules.session(bars[-1]["ts_utc"]),
         "cycle":           btmm_rules.cycle_phase(bars[-1]["ts_utc"]),

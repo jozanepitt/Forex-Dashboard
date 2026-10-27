@@ -243,15 +243,148 @@ def detect_shark_fin(bars: list[dict], ts: dict, asian: dict, unit: float,
 
 # ── Confirmed M / W ───────────────────────────────────────────────────────────
 
+def mw_entry_candle(bars: list[dict], direction: str) -> Optional[str]:
+    """Course 2nd-leg candles for an M/W: RR (railroad tracks), morning /
+    evening star ("a 45 minute RRT") or COW, pointing the trade's way."""
+    from btmm_id50 import _detect_star
+    from btmm_core import detect_nameable_candle
+    if len(bars) < 3:
+        return None
+    star = _detect_star(bars)
+    if star.get("found") and star.get("direction") == direction:
+        return star["name"]
+    nc = detect_nameable_candle(bars[-2:])
+    if nc.get("found") and nc.get("name") in ("RRT", "COW") and nc.get("direction") == direction:
+        return nc["name"]
+    return None
+
+
 def confirm_mw(bars: list[dict], mw: dict, e13: list[float], ts: dict) -> dict:
-    """Course: 2nd leg closes back beyond the 13 EMA; TDI RSI beyond the MBL,
-    crossing the signal line."""
+    """Course "Confirmed M and W": the 2nd leg closes back beyond the 13 EMA
+    with a candlestick pattern (RR, morning/evening star, COW); TDI RSI
+    beyond the MBL, crossing the signal line."""
     if not mw.get("detected") or mw.get("pattern") not in ("M", "W"):
-        return {**mw, "confirmed": False, "close_beyond_13": False, "tdi_confirms": False}
+        return {**mw, "confirmed": False, "close_beyond_13": False, "tdi_confirms": False, "candle": None}
     sell = mw["pattern"] == "M"
+    d = "bearish" if sell else "bullish"
     beyond = bars[-1]["close"] < e13[-1] if sell else bars[-1]["close"] > e13[-1]
-    tdi_ok = tdi_confirms(ts, "bearish" if sell else "bullish")
-    return {**mw, "confirmed": beyond and tdi_ok, "close_beyond_13": beyond, "tdi_confirms": tdi_ok}
+    tdi_ok = tdi_confirms(ts, d)
+    candle = mw_entry_candle(bars, d)
+    return {**mw, "confirmed": bool(beyond and tdi_ok and candle), "close_beyond_13": beyond,
+            "tdi_confirms": tdi_ok, "candle": candle}
+
+
+# ── M / W off Mayo (200 EMA) ──────────────────────────────────────────────────
+
+MAYO_TOL_PIPS = 5.0
+MAYO_WINDOW = 24
+
+
+def detect_mayo_mw(bars: list[dict], mw: dict, e13: list[float], e200: list[float], ts: dict,
+                   mm_levels: dict, unit: float, window: int = MAYO_WINDOW) -> dict:
+    """Course "M and W off Mayo": an M/W reversal off the 200 EMA, mostly at
+    Level 2 -- never trade back an anchor (Level 1). Same M&W entry: the 2nd
+    leg closes beyond the 13 EMA with an RR/star/COW, TDI confirming."""
+    none = {"detected": False, "pattern": None, "direction": None}
+    if not mw.get("detected") or mw.get("pattern") not in ("M", "W") or len(bars) < window:
+        return none
+    sell = mw["pattern"] == "M"
+    d = "bearish" if sell else "bullish"
+    if mm_levels.get("direction") != d or (mm_levels.get("level") or 0) < 2:
+        return {**none, "reason": "not Level 2+ in the trade direction"}
+    tol = MAYO_TOL_PIPS * unit
+    seg, s200 = bars[-window:], e200[-window:]
+    touched = any((x["high"] >= e - tol and x["close"] <= e + tol) if sell
+                  else (x["low"] <= e + tol and x["close"] >= e - tol) for x, e in zip(seg, s200))
+    if not touched:
+        return {**none, "reason": "no test of the 200 EMA"}
+    beyond = bars[-1]["close"] < e13[-1] if sell else bars[-1]["close"] > e13[-1]
+    candle = mw_entry_candle(bars, d)
+    if beyond and candle and tdi_confirms(ts, d):
+        return {"detected": True, "pattern": mw["pattern"], "direction": d, "candle": candle,
+                "level": mm_levels.get("level")}
+    return {**none, "reason": "no 13 close / candle / TDI yet"}
+
+
+# ── Straightaway, NYC Reversal, weekly cycle ──────────────────────────────────
+
+SA_WINDOW = 12                # Level I consolidation looked at over 3h of M15
+SA_MAX_RANGE_ADR = 0.35       # "consolidation" = range within 0.35 ADR
+NYC_THR_PIPS = 15.0
+
+
+def detect_straightaway(bars: list[dict], mm_levels: dict, e13: list[float], adr: float,
+                        window: int = SA_WINDOW) -> dict:
+    """Course p.32: the Straight Away trade develops at the Level I
+    consolidation -- the market makers already have traders trapped from the
+    reversal, so there is no 2nd move; price breaks on in the new direction.
+    Never trade against the peak formation out of Level I."""
+    none = {"detected": False, "direction": None}
+    d = mm_levels.get("direction")
+    if mm_levels.get("level") != 1 or d not in ("bullish", "bearish") or len(bars) < window + 1 or not adr:
+        return none
+    box = bars[-window - 1:-1]
+    if mm_levels.get("origin_ts") and box[0]["ts_utc"] < mm_levels["origin_ts"]:
+        return none                                  # the consolidation must be after Level 1 began
+    hi, lo = max(x["high"] for x in box), min(x["low"] for x in box)
+    if hi - lo > SA_MAX_RANGE_ADR * adr:
+        return none
+    c = bars[-1]["close"]
+    breaks = (c > hi and c > e13[-1]) if d == "bullish" else (c < lo and c < e13[-1])
+    return {"detected": breaks, "direction": d if breaks else None,
+            "box_high": hi, "box_low": lo}
+
+
+def detect_nyc_reversal(bars: list[dict], adr: float, unit: float) -> dict:
+    """Course pp.30, 40: in the ~3 hours after the NY open (09:30-12:30 ET)
+    the opposite HOD/LOD is reached and price reverses -- more likely when
+    the day's range has met the ADR. Needs a reversal candle."""
+    none = {"detected": False, "direction": None}
+    if not bars or not (9.5 <= et_hour(bars[-1]["ts_utc"]) < 12.5):
+        return none
+    day_key = trading_day(bars[-1]["ts_utc"])
+    day = [x for x in bars[-200:] if trading_day(x["ts_utc"]) == day_key]
+    if len(day) < 8:
+        return none
+    hod_i = max(range(len(day)), key=lambda k: day[k]["high"])
+    lod_i = min(range(len(day)), key=lambda k: day[k]["low"])
+    hod, lod, c = day[hod_i]["high"], day[lod_i]["low"], bars[-1]["close"]
+    adr_met = bool(adr) and (hod - lod) >= 0.9 * adr
+    for sell in (True, False):
+        ext_i, ext = (hod_i, hod) if sell else (lod_i, lod)
+        fresh = len(day) - 1 - ext_i <= 6                # extreme made in the last 1.5h
+        near = abs(c - ext) <= NYC_THR_PIPS * unit
+        d = "bearish" if sell else "bullish"
+        if fresh and near and mw_entry_candle(bars, d):
+            return {"detected": True, "direction": d, "adr_met": adr_met, "extreme": ext}
+    return none
+
+
+def detect_weekly_cycle(bars: list[dict]) -> dict:
+    """Course pp.20-23: the weekly pattern on intraday charts -- the week's
+    peak formation high/low forms early in the week and the midweek reversal
+    turns it. From Wednesday: high made Mon/Tue and price back in the lower
+    half of the week's range = weekly M (bearish); the mirror = weekly W."""
+    none = {"detected": False, "pattern": None, "direction": None}
+    if not bars:
+        return none
+    today = trading_day(bars[-1]["ts_utc"])
+    if today.weekday() < 2:
+        return {**none, "reason": "before the midweek reversal"}
+    monday = today - timedelta(days=today.weekday())
+    week = [x for x in bars[-6 * 96:] if monday <= trading_day(x["ts_utc"]) <= today]
+    if len(week) < 96:
+        return none
+    hi_i = max(range(len(week)), key=lambda k: week[k]["high"])
+    lo_i = min(range(len(week)), key=lambda k: week[k]["low"])
+    hi, lo, c = week[hi_i]["high"], week[lo_i]["low"], bars[-1]["close"]
+    mid = (hi + lo) / 2
+    early = lambda k: trading_day(week[k]["ts_utc"]).weekday() <= 1
+    if early(hi_i) and c < mid and hi_i < lo_i:
+        return {"detected": True, "pattern": "M", "direction": "bearish", "week_high": hi}
+    if early(lo_i) and c > mid and lo_i < hi_i:
+        return {"detected": True, "pattern": "W", "direction": "bullish", "week_low": lo}
+    return none
 
 
 # ── Advanced M / W ────────────────────────────────────────────────────────────

@@ -134,14 +134,72 @@ def test_tdi_confirms_needs_baseline_side_and_signal_cross():
     assert not r.tdi_confirms(_tdi([55.0, 55.0, 51.0, 51.0], slow=52.0, mid=50.0), "bearish")  # above MBL
 
 
-def test_confirmed_mw_needs_close_beyond_13_and_tdi():
-    bars = [_bar(i, 1.10, 1.101, 1.099, 1.0995) for i in range(5)]
-    e13 = [1.1000] * 5
+def _rr_sell_bars(n=5):
+    """Ends in a bearish RR (railroad tracks): an up candle, then an equal down candle."""
+    bars = [_bar(i, 1.10, 1.101, 1.099, 1.0995) for i in range(n - 2)]
+    bars.append(_bar(n - 2, 1.0985, 1.1001, 1.0984, 1.0999))     # up 14 pips
+    bars.append(_bar(n - 1, 1.0999, 1.1000, 1.0983, 1.0985))     # down 14 pips
+    return bars
+
+
+def test_confirmed_mw_needs_close_beyond_13_tdi_and_a_2nd_leg_candle():
     ts = _tdi([55.0, 55.0, 48.0, 45.0, 44.0], slow=50.0, mid=52.0)
-    ok = r.confirm_mw(bars, {"detected": True, "pattern": "M"}, e13, ts)
-    assert ok["confirmed"]
-    above = r.confirm_mw(bars, {"detected": True, "pattern": "M"}, [1.0990] * 5, ts)
+    ok = r.confirm_mw(_rr_sell_bars(), {"detected": True, "pattern": "M"}, [1.1000] * 5, ts)
+    assert ok["confirmed"] and ok["candle"] == "RRT"
+    above = r.confirm_mw(_rr_sell_bars(), {"detected": True, "pattern": "M"}, [1.0980] * 5, ts)
     assert not above["confirmed"] and not above["close_beyond_13"]
+    plain = [_bar(i, 1.10, 1.101, 1.099, 1.0995) for i in range(5)]   # no RR / star / COW
+    no_candle = r.confirm_mw(plain, {"detected": True, "pattern": "M"}, [1.1000] * 5, ts)
+    assert not no_candle["confirmed"] and no_candle["candle"] is None
+
+
+def test_mayo_needs_level_2_a_200_test_and_the_m_w_entry():
+    ts = _tdi([55.0] * 22 + [45.0, 44.0], slow=50.0, mid=52.0)
+    bars = [_bar(i, 1.0990, 1.0995, 1.0985, 1.0990) for i in range(22)] + _rr_sell_bars(2)[-2:]
+    bars[10] = _bar(10, 1.0995, 1.1009, 1.0990, 1.0996)          # tests the 200 EMA at 1.1010
+    e13, e200 = [1.1000] * 24, [1.1010] * 24
+    lv2 = {"direction": "bearish", "level": 2}
+    mayo = r.detect_mayo_mw(bars, {"detected": True, "pattern": "M"}, e13, e200, ts, lv2, PIP)
+    assert mayo["detected"] and mayo["direction"] == "bearish"
+    lv1 = {"direction": "bearish", "level": 1}                    # never trade back an anchor
+    assert not r.detect_mayo_mw(bars, {"detected": True, "pattern": "M"}, e13, e200, ts, lv1, PIP)["detected"]
+    far = [1.1040] * 24                                           # 200 EMA never tested
+    assert not r.detect_mayo_mw(bars, {"detected": True, "pattern": "M"}, e13, far, ts, lv2, PIP)["detected"]
+
+
+def test_straightaway_is_a_level_1_consolidation_break():
+    box = [_bar(i, 1.1000, 1.1005, 1.0995, 1.1001) for i in range(12)]
+    brk = box + [_bar(12, 1.1002, 1.1012, 1.1001, 1.1010)]
+    lv1 = {"level": 1, "direction": "bullish", "origin_ts": 0}
+    sa = r.detect_straightaway(brk, lv1, [1.1000] * 13, adr=0.0060)
+    assert sa["detected"] and sa["direction"] == "bullish"
+    assert not r.detect_straightaway(brk, {**lv1, "level": 2}, [1.1000] * 13, adr=0.0060)["detected"]
+    wide = [_bar(i, 1.1000, 1.1030, 1.0970, 1.1001) for i in range(12)] + [brk[-1]]
+    assert not r.detect_straightaway(wide, lv1, [1.1000] * 13, adr=0.0060)["detected"]
+
+
+def test_nyc_reversal_at_the_hod_in_the_first_3_ny_hours():
+    t_end = _ts(2026, 10, 27, 15)                                 # 11:00 New York
+    t0 = t_end - 39 * 900
+    bars = [_bar(i, 1.0990 + i * 0.00005, 1.0993 + i * 0.00005, 1.0988 + i * 0.00005, 1.0991 + i * 0.00005, t0)
+            for i in range(38)]
+    bars.append(_bar(38, 1.1005, 1.1022, 1.1004, 1.1020, t0))     # up to the day's high
+    bars.append(_bar(39, 1.1020, 1.1021, 1.1007, 1.1008, t0))     # similar down candle = bearish RR
+    nyc = r.detect_nyc_reversal(bars, adr=0.0040, unit=PIP)
+    assert nyc["detected"] and nyc["direction"] == "bearish"
+    late = [dict(b, ts_utc=b["ts_utc"] + 3 * 3600) for b in bars]  # 14:00 New York: too late
+    assert not r.detect_nyc_reversal(late, adr=0.0040, unit=PIP)["detected"]
+
+
+def test_weekly_cycle_m_after_an_early_week_high():
+    t0 = _ts(2026, 10, 25, 21, 15)                                # Monday's trading day starts Sun 17:00 ET
+    bars = []
+    for i in range(3 * 96 + 40):                                  # Mon up, then down into Wednesday
+        p = 1.1000 + (0.00004 * i if i < 96 else 0.00384 - 0.00005 * (i - 96))
+        bars.append(_bar(i, p, p + 0.0002, p - 0.0002, p, t0))
+    wk = r.detect_weekly_cycle(bars)
+    assert wk["detected"] and wk["pattern"] == "M" and wk["direction"] == "bearish"
+    assert not r.detect_weekly_cycle(bars[:150])["detected"]      # Monday/Tuesday: too early
 
 
 # ── Advanced M / W ────────────────────────────────────────────────────────────
