@@ -7,7 +7,9 @@ service/candles.db-shm
 
 # Python
 service/__pycache__/
+service/**/__pycache__/
 service/*.pyc
+service/**/*.pyc
 service/.venv/
 service/venv/
 
@@ -42,3 +44,10 @@ Thumbs.db
 service/vwap9ema_backtest/data/*.csv
 service/vwap9ema_backtest/results/*.png
 service/vwap9ema_backtest/__pycache__/
+
+# Research backtest cache (re-downloadable Dukascopy M1) and bot runtime files
+service/research_backtest/data/*.npz
+service/research_backtest/data/*.tmp.npz
+service/bot/logs/
+service/bot/state.json
+service/bot/KILL_SWITCH
