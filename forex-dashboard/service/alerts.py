@@ -11,7 +11,7 @@ from typing import Optional
 import requests
 import instruments
 from config import (
-    DISCORD_WEBHOOK_URL, BTMM_APLUS_ONLY,
+    DISCORD_WEBHOOK_URL, DISCORD_SIGNALS, BTMM_APLUS_ONLY,
     CRT_5AM_GRADE_A_ONLY, TDI123_ALERTS_ENABLED, TDI123_GRADE_A_ONLY,
     TDI123_SESSION_FILTER, TDI123_ADR_FILTER,
     TDI123_NEWS_FILTER, TDI123_NEWS_WINDOW_MIN, TDI123_JOURNAL_ENABLED,
@@ -112,6 +112,22 @@ def _post_discord(embed: dict) -> bool:
         return False
 
 
+def _signal_allowed(strategy: str, timeframe: Optional[str] = None, grade: Optional[str] = None) -> bool:
+    """Is this trade signal on the DISCORD_SIGNALS allowlist? Entries are
+    STRATEGY[:TIMEFRAME[:GRADE]], '*' matches anything, a missing part
+    matches anything. Default (2026-10-21): only TDI123:M15:A."""
+    for entry in (DISCORD_SIGNALS or "").split(","):
+        parts = [p.strip().upper() for p in entry.split(":")]
+        if not parts or not parts[0]:
+            continue
+        want = [strategy, timeframe, grade]
+        if all(i >= len(parts) or parts[i] == "*" or (want[i] or "").upper() == parts[i]
+               for i in range(3)):
+            return True
+    log.debug("DISCORD_SIGNALS: %s %s %s not on the allowlist", strategy, timeframe, grade)
+    return False
+
+
 def _now_utc_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -164,6 +180,8 @@ def alert_strong_signal(pair: str, direction: str, score: float,
                         checklist: int, signal: str, price: Optional[float] = None,
                         asian_range: Optional[dict] = None):
     """Fire when EMA stack + checklist confirm a Strong Buy or Strong Sell."""
+    if not _signal_allowed("BTMM"):   # DISCORD_SIGNALS allowlist
+        return
     rule = f"strong_{direction}"
     if _is_throttled(pair, rule):
         return
@@ -252,6 +270,8 @@ def alert_aplus_setup(pair: str, score: float, checklist: int,
     Fire on A+ setups only — score ≥ 70, checklist ≥ 10/13, Level II confirmed.
     Uses a gold embed with a ⭐ A+ badge to distinguish from ordinary setups.
     """
+    if not _signal_allowed("BTMM"):   # DISCORD_SIGNALS allowlist
+        return
     rule = "aplus_setup"
     if _is_throttled(pair, rule):
         return
@@ -292,6 +312,8 @@ def alert_active_setup(pair: str, setup_key: str, gates_passed: int,
                        sl: float, tp1: float, tp2: Optional[float],
                        confidence: str, checklist: int = 0):
     """Fire when a named BTMM setup is confirmed — includes full trade plan."""
+    if not _signal_allowed("BTMM"):   # DISCORD_SIGNALS allowlist
+        return
     rule = f"setup_{setup_key}"
     if _is_throttled(pair, rule):
         return
@@ -322,6 +344,8 @@ def alert_active_setup(pair: str, setup_key: str, gates_passed: int,
 
 def alert_kill_zone_open(zone_name: str):
     """Fire once per kill zone opening."""
+    if not _signal_allowed("BTMM"):   # DISCORD_SIGNALS allowlist
+        return
     rule = f"kz_{zone_name.lower().replace(' ', '_')}"
     if _is_throttled("__kz__", rule):
         return
@@ -361,6 +385,8 @@ def alert_scheduler_stall(stale_minutes: int):
 
 def alert_adr_exhausted(pair: str, adr_pct: float):
     """Fire when ADR > 85% consumed — warns against new entries."""
+    if not _signal_allowed("BTMM"):   # DISCORD_SIGNALS allowlist
+        return
     rule = "adr_exhausted"
     if _is_throttled(pair, rule):
         return
@@ -377,6 +403,8 @@ def alert_adr_exhausted(pair: str, adr_pct: float):
 
 def alert_513_cross(pair: str, direction: str, price: float):
     """Fire when EMA(5) crosses EMA(13) inside a kill zone — the BTMM entry trigger."""
+    if not _signal_allowed("BTMM"):   # DISCORD_SIGNALS allowlist
+        return
     if direction is None:
         return
     rule   = f"cross_513_{direction}"
@@ -473,6 +501,8 @@ def alert_crt_5am_setup(pair: str, row: dict):
     wrongly claim). SAST shifts with US DST — row['key_time_window_sast'] is
     the live, DST-aware conversion actually shown in the Discord alert.
     """
+    if not _signal_allowed("CRT5AM", row.get("timeframe"), row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     setup   = row.get("setup")
     grade   = row.get("grade")
     kt      = row.get("key_time_status")
@@ -838,6 +868,8 @@ def alert_tdi123_setup(pair: str, row: dict):
 
     # Timeframe is part of the throttle key — an H1 and an M15 alert on the
     # same pair/direction/grade are distinct setups and must not collide.
+    if not _signal_allowed("TDI123", timeframe, grade):   # DISCORD_SIGNALS allowlist
+        return
     rule = f"tdi123_{timeframe.lower()}_{setup.lower()}_{grade}"
     if _is_throttled(pair, rule):
         return
@@ -996,6 +1028,8 @@ def alert_tdi123_watch(pair: str, row: dict):
     clear every gate in alert_tdi123_setup, so a setup can be monitored on
     Discord as it develops instead of only on the dashboard. Skips silently
     once everything passes — the real alert already covers that case."""
+    if not _signal_allowed("TDI123_WATCH", row.get("timeframe"), row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not TDI123_WATCH_ALERTS_ENABLED:
         return
     if instruments.asset_class(pair) in TDI123_EXCLUDED_CLASSES:
@@ -1077,6 +1111,8 @@ def alert_id50_setup(pair: str, row: dict):
         A+B convention as BTMM123); Grade C / NO-TRADE never
       - R:R sanity on trade plan (min 1:0.8 on TP1)
     """
+    if not _signal_allowed("ID50", row.get("timeframe"), row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not BTMM_ID50_ALERTS_ENABLED:
         return
     if row.get("model") == "checklist" and not BTMM_ID50_CHECKLIST_DISCORD:
@@ -1224,6 +1260,8 @@ def alert_id50_watch(pair: str, row: dict):
     """Post a 'still forming' embed for Grade A/B ID50 setups that don't yet
     clear every gate in alert_id50_setup. Independent of BTMM_ID50_ALERTS_
     ENABLED by design. M15-only, so no timeframe nesting needed."""
+    if not _signal_allowed("ID50_WATCH", row.get("timeframe"), row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not BTMM_ID50_WATCH_ALERTS_ENABLED:
         return
 
@@ -1292,6 +1330,8 @@ def alert_vwap_mr_setup(pair: str, row: dict, is_test: bool = False):
     rule as sent, so it never suppresses a real alert that follows) —
     matches the VWAP+9EMA convention this replaces.
     """
+    if not _signal_allowed("VWAP_MR", "M15", row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not is_test and not VWAP_MR_ALERTS_ENABLED:
         return
 
@@ -1437,6 +1477,8 @@ def alert_vwap_mr_watch(pair: str, row: dict):
     VWAP_MR_ALERTS_ENABLED by design, matching the TDI123/BTMM123 watch
     pattern (2026-09-10) -- including its Critical fix: skip on an all-pass
     result only when the real alert's own switch is actually enabled."""
+    if not _signal_allowed("VWAP_MR_WATCH", "M15", row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not VWAP_MR_WATCH_ALERTS_ENABLED:
         return
 
@@ -1486,6 +1528,8 @@ def alert_vwap9ema_setup(pair: str, row: dict):
     module docstring. Every embed carries a visible warning so this can
     never be confused with a proven Grade-A signal from another strategy.
     """
+    if not _signal_allowed("VWAP9EMA", "M5", row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not VWAP9EMA_ALERTS_ENABLED:
         return
     setup = row.get("setup")
@@ -1559,6 +1603,8 @@ def alert_ema1350_setup(pair: str, row: dict):
     (ema1350_cross.py). Its own path and throttle rule, separate from the
     VWAP+9EMA alert. Grades in EMA1350_ALERT_GRADES only (A+ and A by default).
     UNVALIDATED strategy."""
+    if not _signal_allowed("EMA1350", "M15", row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not EMA1350_ALERTS_ENABLED:
         return
     setup = row.get("setup")
@@ -1640,6 +1686,8 @@ def alert_vwap_bounce_setup(pair: str, row: dict):
     """Fire for a confirmed VWAP-bounce BUY/SELL (vwap_bounce_strategy.py).
     Off by default; grade A only unless VWAP_BOUNCE_GRADE_A_ONLY is disabled.
     UNVALIDATED strategy — every embed says so."""
+    if not _signal_allowed("VWAP_BOUNCE", "M15", row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not VWAP_BOUNCE_ALERTS_ENABLED:
         return
     setup = row.get("setup")
@@ -1724,6 +1772,8 @@ _engulf_last_alerted: dict[tuple[str, str], int] = {}
 
 
 def _alert_engulfing_leg(pair: str, row: dict):
+    if not _signal_allowed("ENGULF", row.get("timeframe"), row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     setup = row.get("setup")
     if setup not in ("BUY", "SELL"):
         return
@@ -1800,6 +1850,8 @@ _sweep_last_alerted: dict[str, int] = {}
 def alert_sweep_setup(pair: str, row: dict):
     """Fire for a confirmed sweep (sweep_strategy.py): grades A and B unless
     SWEEP_GRADE_A_ONLY. UNVALIDATED strategy — every embed says so."""
+    if not _signal_allowed("SWEEP", "M15", row.get("grade")):   # DISCORD_SIGNALS allowlist
+        return
     if not SWEEP_ALERTS_ENABLED:
         return
     setup = row.get("setup")

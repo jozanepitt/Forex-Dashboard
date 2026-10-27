@@ -15,6 +15,14 @@ DB_PATH = SERVICE_ROOT / "candles.db"
 SERVICE_PORT = int(os.environ.get("SERVICE_PORT", "3002"))
 SERVICE_HOST = os.environ.get("SERVICE_HOST", "127.0.0.1")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+# Which trade signals may reach Discord at all (user decision 2026-10-21: too
+# many signals; only the starred TDI Cycle 123 M15 grade-A setups for now).
+# Comma-separated STRATEGY[:TIMEFRAME[:GRADE]] entries, '*' = any. Strategy
+# names: TDI123, TDI123_WATCH, BTMM, CRT5AM, ID50, ID50_WATCH, VWAP_MR,
+# VWAP_MR_WATCH, VWAP9EMA, EMA1350, VWAP_BOUNCE, ENGULF, SWEEP. Each
+# strategy's own *_ALERTS_ENABLED flag still applies on top. The service
+# STALLED health warning is not a trade signal and is always sent.
+DISCORD_SIGNALS = os.environ.get("DISCORD_SIGNALS", "TDI123:M15:A")
 # Bot token for the on-demand /analyse slash command (discord_bot.py). Separate
 # credential from the webhook above -- a webhook URL can't authenticate a bot
 # gateway connection.
