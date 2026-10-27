@@ -63,6 +63,8 @@ def test_resolves_tp1_net_of_spread(db, monkeypatch):
     assert t["outcome"] == "tp1"
     assert t["r_gross"] == pytest.approx(1.0)
     assert t["r_net"] == pytest.approx(1.0 - fw.EXNESS_STANDARD_SPREAD["EUR/USD"] / 0.0020)
+    s = fw.stats()
+    assert s["avg_r_gross"] == pytest.approx(1.0) and s["wins"] == 1
 
 
 def test_open_trade_stays_open_until_resolved(db, monkeypatch):

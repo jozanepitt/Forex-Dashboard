@@ -145,13 +145,18 @@ def stats() -> dict:
         rows = [dict(r) for r in conn.execute("SELECT * FROM btmm_forward ORDER BY entry_ts DESC")]
     closed = [r for r in rows if r["outcome"] != "open"]
     net = [r["r_net"] for r in closed]
+    gross = [r["r_gross"] for r in closed]
+    # The user judges results before spread (2026-10-27): the headline is
+    # gross; net is kept alongside for reference.
     return {
         "rule": "Shark Fin + 800 EMA bias, stop 5p + 0.10 ADR beyond the spike, hold to SL/TP1, BE at 1:1, "
                 "USD majors, London/NY",
         "since": btmm_rules.FORWARD_TEST_START,
-        "replay_expectation_r": 0.19,
+        "replay_expectation_r": 0.28,          # gross, majors, replay 2026-10-27 (n=67)
         "open": len(rows) - len(closed), "closed": len(closed),
-        "wins": sum(1 for v in net if v > 0),
+        "wins": sum(1 for v in gross if v > 0),
+        "avg_r_gross": round(sum(gross) / len(gross), 3) if gross else None,
+        "total_r_gross": round(sum(gross), 2) if gross else 0.0,
         "avg_r_net": round(sum(net) / len(net), 3) if net else None,
         "total_r_net": round(sum(net), 2) if net else 0.0,
         "trades": rows[:100],
