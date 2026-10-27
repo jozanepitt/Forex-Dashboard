@@ -254,6 +254,99 @@ def confirm_mw(bars: list[dict], mw: dict, e13: list[float], ts: dict) -> dict:
     return {**mw, "confirmed": beyond and tdi_ok, "close_beyond_13": beyond, "tdi_confirms": tdi_ok}
 
 
+# ── Advanced M / W ────────────────────────────────────────────────────────────
+
+ADV_MIN_CONSOL = 8            # leg 1 holds 8+ candles on one side of the 13 EMA
+ADV_WINDOW = 60
+
+
+def detect_advanced_mw(bars: list[dict], e13: list[float], ts: dict,
+                       window: int = ADV_WINDOW, min_consol: int = ADV_MIN_CONSOL) -> dict:
+    """Course "Advanced M and W": leg 1 consolidates 8+ candles above (M) /
+    below (W) the 13 EMA without closing through it, with the TDI RSI line
+    outside the volatility band; then a shift candle closes through the 13.
+    Leg 2 comes back to or through the 13 without beating leg 1, and the
+    current bar closes back beyond the 13 with the RSI line beyond the MBL,
+    crossing the signal line."""
+    none = {"detected": False, "pattern": None, "direction": None}
+    m = min(window, len(ts["fast"]), len(bars), len(e13))
+    if m < min_consol + 4:
+        return none
+    b, c13 = bars[-m:], e13[-m:]
+    f, up, lo = ts["fast"][-m:], ts["upper"][-m:], ts["lower"][-m:]
+    last = m - 1
+    for sell in (True, False):
+        on_leg1 = (lambda i: b[i]["close"] >= c13[i]) if sell else (lambda i: b[i]["close"] <= c13[i])
+        shifts = [s for s in range(min_consol, last - 1)
+                  if not on_leg1(s) and all(on_leg1(k) for k in range(s - min_consol, s))]
+        if not shifts:
+            continue
+        s = shifts[-1]
+        k0 = s - 1
+        while k0 > 0 and on_leg1(k0 - 1):
+            k0 -= 1
+        leg1 = (max(b[k]["high"] for k in range(k0, s + 1)) if sell
+                else min(b[k]["low"] for k in range(k0, s + 1)))
+        tdi_out = any((f[k] > up[k]) if sell else (f[k] < lo[k]) for k in range(max(0, k0 - 2), s + 1))
+        leg2 = b[s + 1:last]
+        if not tdi_out or not leg2:
+            continue
+        leg2_ext = max(x["high"] for x in leg2) if sell else min(x["low"] for x in leg2)
+        if (leg2_ext > leg1 * 1.0002) if sell else (leg2_ext < leg1 * 0.9998):
+            continue                                   # leg 2 beat leg 1: not an M/W
+        retest = any(on_leg1(k) for k in range(s + 1, last))
+        closes_back = not on_leg1(last)
+        d = "bearish" if sell else "bullish"
+        if retest and closes_back and tdi_confirms(ts, d):
+            return {"detected": True, "pattern": "M" if sell else "W", "direction": d,
+                    "leg1": leg1, "leg2": leg2_ext, "consolidation_bars": s - k0}
+    return none
+
+
+# ── London patterns Type 1 / 2 / 3 ────────────────────────────────────────────
+
+L3_EMA50_TOL_PIPS = 3.0
+
+
+def detect_london_pattern(bars: list[dict], e50: list[float], ts: dict, asian: dict,
+                          unit: float, mw: Optional[dict] = None) -> dict:
+    """Course "London Patterns", London session only, same entry/exit as M&W:
+      Type 1: the M/W forms above (M) / below (W) the Asian range
+      Type 2: the M/W forms inside the Asian range
+      Type 3 "50/50/50": price bounces off the 50 EMA in the middle 50% of
+              the Asian range, RSI line beyond the MBL and the signal line
+              crossing the 50 level.
+    `mw` = a confirmed or advanced M/W for Types 1/2 (its 2nd leg = the
+    extreme of the last 8 bars)."""
+    none = {"detected": False, "type": None, "direction": None}
+    if len(bars) < 10 or not asian.get("valid") or session(bars[-1]["ts_utc"]) != "London":
+        return none
+    hi, lo = asian["high"], asian["low"]
+    if mw and mw.get("pattern") in ("M", "W") and (mw.get("confirmed") or mw.get("direction")):
+        sell = mw["pattern"] == "M"
+        ext = max(x["high"] for x in bars[-8:]) if sell else min(x["low"] for x in bars[-8:])
+        outside = ext > hi if sell else ext < lo
+        inside = lo <= ext <= hi
+        if outside or inside:
+            return {"detected": True, "type": 1 if outside else 2,
+                    "direction": "bearish" if sell else "bullish"}
+    rng = hi - lo
+    close = bars[-1]["close"]
+    if rng <= 0 or abs(close - (hi + lo) / 2) > 0.25 * rng:
+        return none
+    f, s, m = ts["fast"], ts["slow"], ts["mid"]
+    fifty = [50.0] * len(s)
+    tol = L3_EMA50_TOL_PIPS * unit
+    for sell in (True, False):
+        bounced = any((x["high"] >= e - tol and x["close"] < e) if sell else (x["low"] <= e + tol and x["close"] > e)
+                      for x, e in zip(bars[-4:], e50[-4:]))
+        rsi_side = f[-1] < m[-1] if sell else f[-1] > m[-1]
+        sig50 = _last_cross(s, fifty, len(s) - ENTRY_FRESH_BARS, down=sell) is not None
+        if bounced and rsi_side and sig50:
+            return {"detected": True, "type": 3, "direction": "bearish" if sell else "bullish"}
+    return none
+
+
 # ── Half Batman Type 1 / Type 2 ───────────────────────────────────────────────
 
 def detect_half_batman(bars: list[dict], e13: list[float], e50: list[float], ts: dict,
@@ -371,6 +464,44 @@ def detect_mm_levels(bars: list[dict], e13, e50, e200, e800) -> dict:
             "last_reset_confirmed": confirmed, "origin_ts": bars[origin]["ts_utc"]}
 
 
+def level_context(bars: list[dict], adr: float, direction: Optional[str],
+                  origin_ts: Optional[int] = None, days: int = 6) -> dict:
+    """The other two ways the course counts levels (pp.104-108):
+      asian_stack: consecutive daily Asian boxes stepping in the trend
+                   direction (each box's midpoint beyond the previous one)
+      adr_legs:    how many ADRs price has travelled since the level origin
+                   (each level is about 1x ADR)"""
+    out = {"asian_stack": 0, "adr_legs": None}
+    if not bars or direction not in ("bullish", "bearish"):
+        return out
+    boxes: dict = {}
+    for b in bars[-days * 96:]:
+        if session(b["ts_utc"]) == "Asian":
+            boxes.setdefault(trading_day(b["ts_utc"]), []).append(b)
+    mids = [(max(x["high"] for x in v) + min(x["low"] for x in v)) / 2
+            for k, v in sorted(boxes.items()) if len(v) >= 4]
+    stack = 0
+    for a, c in zip(reversed(mids[:-1]), reversed(mids[1:])):
+        if (c > a) if direction == "bullish" else (c < a):
+            stack += 1
+        else:
+            break
+    out["asian_stack"] = stack
+    if origin_ts is not None and adr:
+        start = next((b for b in bars if b["ts_utc"] >= origin_ts), None)
+        if start:
+            sgn = 1 if direction == "bullish" else -1
+            out["adr_legs"] = round(max(0.0, (bars[-1]["close"] - start["close"]) * sgn) / adr, 2)
+    return out
+
+
+def h1_trend(bars: list[dict]) -> str:
+    """Top-down bias from H1 (course pp.126-132: confirm a clear H1 cycle
+    before the M15 entry): H1 close vs its 50 and 200 EMA."""
+    from btmm_core import resample_to_h1
+    return resample_to_h1(bars).get("trend", "neutral")
+
+
 # ── Trade plan and management ─────────────────────────────────────────────────
 
 def trade_plan(entry: float, direction: str, anchor: float, unit: float,
@@ -396,18 +527,23 @@ def trade_plan(entry: float, direction: str, anchor: float, unit: float,
             "rr_tp1": round(t1 / risk, 2) if risk else None, "exit_13": exit_13,
             "exit_rules": ["stop to break-even at 1:1"]
                           + (["exit on a close back over the 13 EMA"] if exit_13 else ["hold to the stop or TP1"])
-                          + ["exit when the RSI line reaches the opposite band and re-crosses the signal line"]}
+                          + ["exit when the RSI line reaches the opposite band and re-crosses the signal line",
+                             "optional: exit if 61.8% of a 1R+ move is given back (Fib; replay: no change)"]}
 
 
-def manage_trade(plan: dict, direction: str, bars_after: list[dict], e13_after: list[float]) -> dict:
+def manage_trade(plan: dict, direction: str, bars_after: list[dict], e13_after: list[float],
+                 fib: Optional[float] = None) -> dict:
     """Walk the bars after entry: stop first (same-bar ties count against
     us), then TP1, then break-even at 1:1, then a close back over the 13 EMA
-    (skipped when the plan has exit_13=False)."""
+    (skipped when the plan has exit_13=False). With `fib` (course: Fib
+    38.2 / 61.8 breached): once the trade is 1R up, exit on a close that
+    gives back more than that share of the best move."""
     if not plan.get("exit_13", True):
         e13_after = []
     sell = direction == "bearish"
     entry, sl, tp1, be = plan["entry"], plan["sl"], plan["tp1"], plan["break_even_at"]
-    moved = False
+    risk = abs(entry - plan["sl"])
+    moved, best = False, entry
     for i, b in enumerate(bars_after):
         if (b["high"] >= sl) if sell else (b["low"] <= sl):
             return {"outcome": "breakeven" if moved else "stop", "exit": sl, "bars": i + 1}
@@ -415,6 +551,10 @@ def manage_trade(plan: dict, direction: str, bars_after: list[dict], e13_after: 
             return {"outcome": "tp1", "exit": tp1, "bars": i + 1}
         if not moved and ((b["low"] <= be) if sell else (b["high"] >= be)):
             sl, moved = entry, True
+        best = min(best, b["low"]) if sell else max(best, b["high"])
+        move = abs(best - entry)
+        if fib and risk and move >= risk and abs(b["close"] - best) > fib * move:
+            return {"outcome": "exit_fib", "exit": b["close"], "bars": i + 1}
         if i < len(e13_after) and ((b["close"] > e13_after[i]) if sell else (b["close"] < e13_after[i])):
             return {"outcome": "exit_13", "exit": b["close"], "bars": i + 1}
     return {"outcome": "open", "exit": bars_after[-1]["close"] if bars_after else entry,

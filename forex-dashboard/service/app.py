@@ -259,6 +259,7 @@ def btmm_rules_route():
         if a.get("signal") == "insufficient_data":
             continue
         out[sym] = {k: a.get(k) for k in ("shark_fin", "mw_pattern", "half_batman", "mm_levels",
+                                          "advanced_mw", "london_pattern",
                                           "trade_plan", "session", "cycle", "kz", "setup_bullish")}
     _BTMM_RULES_CACHE.update(ts=now, payload=out)
     return jsonify(out)

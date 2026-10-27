@@ -144,6 +144,117 @@ def test_confirmed_mw_needs_close_beyond_13_and_tdi():
     assert not above["confirmed"] and not above["close_beyond_13"]
 
 
+# ── Advanced M / W ────────────────────────────────────────────────────────────
+
+def _adv_case(leg2_high=1.1015, consol=10):
+    """M: `consol` closes above the 13 EMA (1.1000) with the RSI line out of
+    the band, a shift close below, a retest back over the 13, then a close
+    back below it with TDI under the MBL crossing the signal line."""
+    bars = [_bar(i, 1.1004, 1.1012, 1.1001, 1.1005) for i in range(consol)]
+    bars[consol // 2] = _bar(consol // 2, 1.1005, 1.1020, 1.1003, 1.1006)     # leg 1 high
+    s = consol
+    bars.append(_bar(s, 1.1004, 1.1006, 1.0993, 1.0995))                       # shift
+    bars.append(_bar(s + 1, 1.0995, 1.1000, 1.0992, 1.0998))
+    bars.append(_bar(s + 2, 1.0998, leg2_high, 1.0997, 1.1002))               # retest over the 13
+    bars.append(_bar(s + 3, 1.1002, 1.1004, 1.0996, 1.0999))
+    bars.append(_bar(s + 4, 1.0999, 1.1000, 1.0988, 1.0990))                   # closes back below
+    n = len(bars)
+    fast = [55.0] * n
+    fast[consol // 2] = 75.0
+    fast[-2], fast[-1] = 55.0, 45.0
+    return bars, [1.1000] * n, _tdi(fast, slow=50.0, mid=52.0)
+
+
+def test_advanced_m_detected():
+    am = r.detect_advanced_mw(*_adv_case())
+    assert am["detected"] and am["pattern"] == "M" and am["direction"] == "bearish"
+    assert am["leg1"] == 1.1020 and am["consolidation_bars"] >= 8
+
+
+def test_advanced_m_rejected_when_leg2_beats_leg1():
+    assert not r.detect_advanced_mw(*_adv_case(leg2_high=1.1030))["detected"]
+
+
+def test_advanced_m_needs_8_candles_of_consolidation():
+    assert not r.detect_advanced_mw(*_adv_case(consol=5))["detected"]
+
+
+# ── London patterns ───────────────────────────────────────────────────────────
+
+LONDON_T = _ts(2026, 10, 27, 8)          # 04:00 New York = London session
+
+
+def _london_bars(high, close=1.0985, n=12, t_end=LONDON_T):
+    t0 = t_end - (n - 1) * 900
+    return [_bar(i, close, high, close - 0.0005, close, t0) for i in range(n)]
+
+
+def test_london_type1_and_type2():
+    asian = {"valid": True, "high": 1.1000, "low": 1.0970}
+    ts = _tdi([50.0] * 12)
+    t1 = r.detect_london_pattern(_london_bars(1.1010), [1.0990] * 12, ts, asian, PIP,
+                                 mw={"pattern": "M", "confirmed": True})
+    assert t1["detected"] and t1["type"] == 1 and t1["direction"] == "bearish"
+    t2 = r.detect_london_pattern(_london_bars(1.0990), [1.0990] * 12, ts, asian, PIP,
+                                 mw={"pattern": "M", "confirmed": True})
+    assert t2["type"] == 2
+
+
+def test_london_type3_fifty_fifty_fifty():
+    asian = {"valid": True, "high": 1.1000, "low": 1.0970}
+    bars = _london_bars(1.0986, close=1.0984)
+    bars[-2] = _bar(10, 1.0985, 1.0989, 1.0982, 1.0984, bars[0]["ts_utc"])   # tags the 50 EMA, closes under
+    ts = _tdi([50.0] * 10 + [47.0, 45.0], slow=[52.0] * 10 + [51.0, 49.0], mid=50.0)
+    t3 = r.detect_london_pattern(bars, [1.0990] * 12, ts, asian, PIP)
+    assert t3["detected"] and t3["type"] == 3 and t3["direction"] == "bearish"
+
+
+def test_london_pattern_only_in_london():
+    asian = {"valid": True, "high": 1.1000, "low": 1.0970}
+    ny = _london_bars(1.1010, t_end=_ts(2026, 10, 27, 15))
+    assert not r.detect_london_pattern(ny, [1.0990] * 12, _tdi([50.0] * 12), asian, PIP,
+                                       mw={"pattern": "M", "confirmed": True})["detected"]
+
+
+# ── Level context, Fibonacci exit, H1 ─────────────────────────────────────────
+
+def test_level_context_asian_stack_and_adr_legs():
+    t0 = _ts(2026, 10, 19, 21)
+    bars = []
+    for i in range(5 * 96):
+        p = 1.1000 + 0.0010 * (i // 96) + 0.00001 * (i % 96)
+        bars.append(_bar(i, p, p + 0.0002, p - 0.0002, p, t0))
+    ctx = r.level_context(bars, adr=0.0010, direction="bullish", origin_ts=t0)
+    assert ctx["asian_stack"] >= 3
+    assert ctx["adr_legs"] >= 4
+    assert r.level_context(bars, adr=0.0010, direction="bearish", origin_ts=t0)["asian_stack"] == 0
+
+
+def test_fib_exit_gives_back_more_than_61_8():
+    p = {"entry": 1.1000, "sl": 1.1020, "tp1": 1.0960, "break_even_at": 1.0980, "exit_13": False}
+    after = [_bar(0, 1.0995, 1.0999, 1.0975, 1.0985), _bar(1, 1.0985, 1.0998, 1.0984, 1.0995)]
+    m = r.manage_trade(p, "bearish", after, [], fib=0.618)
+    assert m["outcome"] == "exit_fib" and m["exit"] == 1.0995 and m["bars"] == 2
+    assert r.manage_trade(p, "bearish", after, [], fib=0.382)["bars"] == 1
+    assert r.manage_trade(p, "bearish", after, [])["outcome"] == "open"
+
+
+def test_h1_gate_on_22_trade_and_three_drive():
+    assert core._h1_aligned({"valid": True, "trend": "bearish"}, "bearish")
+    assert core._h1_aligned({"valid": True, "trend": "neutral"}, "bullish")
+    assert not core._h1_aligned({"valid": True, "trend": "bearish"}, "bullish")
+    bars = [_bar(i, 1.1, 1.1, 1.1, 1.1) for i in range(5)]
+    td = core.detect_three_drive_pattern(bars, {"detected": True, "direction": "bullish"}, {"detected": False},
+                                         {"detected": False}, "EUR/USD", {"valid": True, "trend": "bearish"})
+    gate = next(g for g in td["gates"] if g["name"] == "H1 MTF Aligned")
+    assert gate["pass"] is False
+
+
+def test_h1_trend_reads_the_h1_stack():
+    bars = [_bar(i, 1 + i * 1e-5, 1 + i * 1e-5, 1 + i * 1e-5, 1 + i * 1e-5) for i in range(1200)]
+    assert r.h1_trend(bars) == "bullish"
+
+
 # ── Half Batman Type 1 / Type 2 ───────────────────────────────────────────────
 
 def _hb_case(type1: bool, retest_high=1.1038):

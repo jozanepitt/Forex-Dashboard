@@ -830,8 +830,16 @@ def detect_safety_trade(bars: list[dict], stack: dict, asian: dict, tdi_leg: dic
     return _gate_result(gates, direction, entry, sl, tp1, tp2)
 
 
+def _h1_aligned(h1mtf: Optional[dict], direction: str) -> bool:
+    """Course top-down rule (pp.126-132): the H1 cycle must not point the
+    other way. Same lenient test the Safety Trade uses (neutral passes)."""
+    h1mtf = h1mtf or {}
+    return (not h1mtf.get("valid") or h1mtf.get("trend") == direction
+            or h1mtf.get("trend") == "neutral")
+
+
 def detect_22_trade(bars: list[dict], asian: dict, hunt: dict, hod_lod: dict,
-                     tdi: dict, symbol: Optional[str] = None) -> dict:
+                     tdi: dict, symbol: Optional[str] = None, h1mtf: Optional[dict] = None) -> dict:
     """
     22 Trade — fires at 02:00 / 22:00 GMT (London prep + Asian open).
     Fade the manipulation push that hunts stops at the session boundary.
@@ -871,6 +879,7 @@ def detect_22_trade(bars: list[dict], asian: dict, hunt: dict, hod_lod: dict,
         {"name": "Stop Hunt Detected",        "pass": stop_hunt_active},
         {"name": "HOD/LOD Retest Fade",       "pass": hod_lod_fade},
         {"name": "TDI Not At Extreme",        "pass": tdi_agrees},
+        {"name": "H1 MTF Aligned",            "pass": _h1_aligned(h1mtf, direction)},
     ]
 
     entry = sl = tp1 = tp2 = 0.0
@@ -952,7 +961,7 @@ def detect_fifty_fifty_bounce(bars: list[dict], stack: dict, level: dict, tdi_le
 
 
 def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw: dict,
-                                symbol: Optional[str] = None) -> dict:
+                                symbol: Optional[str] = None, h1mtf: Optional[dict] = None) -> dict:
     """
     Three-Drive — refinement of Shark Fin: three pushes into a TDI extreme with
     diverging price. Reversal entry on 4th-push failure.
@@ -976,6 +985,7 @@ def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw:
         {"name": "Shark Fin Active",         "pass": bool(shark.get("detected"))},
         {"name": "TDI Divergence Confirmed", "pass": bool(tdi_div.get("detected"))},
         {"name": "M/W Pattern Aligned",      "pass": bool(mw.get("detected")) and mw_direction == direction},
+        {"name": "H1 MTF Aligned",           "pass": _h1_aligned(h1mtf, direction)},
     ]
 
     entry = sl = tp1 = tp2 = 0.0
@@ -1113,6 +1123,13 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     straight  = detect_straightaway(bars)
     hod_lod   = detect_hod_lod(bars, symbol=symbol)
     half_bat  = btmm_rules.detect_half_batman(bars, e13_arr, e50_arr, tdi_s, unit)
+    # Information / confluence only: replayed 2026-10-27 at real spreads with
+    # no edge (Advanced M/W -0.04R gross, London Types 1/2/3 -0.00/-0.01/-0.03R)
+    adv_mw    = btmm_rules.detect_advanced_mw(bars, e13_arr, tdi_s)
+    london    = btmm_rules.detect_london_pattern(bars, e50_arr, tdi_s, asian, unit,
+                                                 mw=adv_mw if adv_mw["detected"] else mw)
+    mm_levels.update(btmm_rules.level_context(bars, adr, mm_levels.get("direction"),
+                                              mm_levels.get("origin_ts")))
     tdi_div   = detect_tdi_divergence(bars)
     push_hunt = detect_3push_stop_hunt(bars)
 
@@ -1175,10 +1192,11 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         h1mtf = resample_to_h1(bars)
         nameable = detect_nameable_candle(bars)
         for setup_key, res in (
-            ("safety",     detect_safety_trade(bars, stack, asian, tdi_leg, level, mw, nameable, h1mtf, kz, symbol)),
-            ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol)),
+            # Safety Trade's "Level 1" = the course's market-maker level (13/50 cross), not the EMA count
+            ("safety",     detect_safety_trade(bars, stack, asian, tdi_leg, mm_levels, mw, nameable, h1mtf, kz, symbol)),
+            ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol, h1mtf)),
             ("bounce5050", detect_fifty_fifty_bounce(bars, stack, level, tdi_leg, h1mtf, tdi, symbol)),
-            ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol)),
+            ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol, h1mtf)),
         ):
             if res["active"]:
                 candidates.append({
@@ -1239,6 +1257,8 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         "push_hunt":       push_hunt,
         # Course rules (phase 2/3, btmm_rules)
         "mm_levels":       mm_levels,
+        "advanced_mw":     adv_mw,
+        "london_pattern":  london,
         "trade_plan":      plan,
         "session":         btmm_rules.session(bars[-1]["ts_utc"]),
         "cycle":           btmm_rules.cycle_phase(bars[-1]["ts_utc"]),
