@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent / "vwap9ema_backtest"))
 from backtest_mt5 import ema  # noqa: E402
 
 from config import PRIORITY_PAIRS  # noqa: E402
+import session_clock  # noqa: E402
 
 # Full PRIORITY_PAIRS universe per explicit user request (same pairs TDI123/
 # BTMM123 scan, including BTC/USD and ETH/USD). This simplified cross-only
@@ -136,17 +137,14 @@ def _in_session(ts_utc: int) -> bool:
 
 
 def _forex_day_start_utc(ts_utc: int) -> int:
-    """Most recent 00:00 UTC at or before ts_utc -- the VWAP accumulation
-    anchor. 00:00 UTC is MT5 server midnight on Exness (broker_offset_secs
-    == 0, and candles' ts_utc is already true UTC), so this VWAP resets
-    where the MT5 chart's own session VWAP does. Switched 2026-10-06 at the
-    user's request from 22:00 UTC (SAST midnight), which had been matched
-    on 2026-09-22 to a TradingView "VWAP Stdev Bands" chart; TradingView
-    resets 2h earlier than MT5. If the broker's server clock ever stops
-    being UTC this must become offset-aware. Deliberately independent of
+    """The VWAP accumulation anchor: 00:00 SAST (22:00 UTC), shared by every
+    dashboard VWAP via session_clock. History: 22:00 UTC (2026-09-22, matched
+    to TradingView) -> 00:00 UTC / MT5 midnight (2026-10-06) -> back to
+    00:00 SAST on 2026-10-21 at the user's request, after verifying their
+    TradingView session VWAP resets there. Deliberately independent of
     SESSION_START_UTC/SESSION_END_UTC below, which gate when signals are
     allowed to FIRE, not when the VWAP clock itself starts."""
-    return ts_utc - ts_utc % 86400
+    return session_clock.vwap_day_start(ts_utc)
 
 
 def _session_bars_for_today(m5_candles: list[dict]) -> list[dict]:

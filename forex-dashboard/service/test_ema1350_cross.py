@@ -204,8 +204,9 @@ def test_signal_does_not_repeat_on_later_bars():
     assert set(later) == {"NO-TRADE"}
 
 
-def test_daily_vwap_is_anchored_at_utc_midnight():
-    day = T0 + 86400
+def test_daily_vwap_is_anchored_at_sast_midnight():
+    """2026-10-21: one start of day for every VWAP, 00:00 SAST = 22:00 UTC."""
+    day = T0 + 86400 - 2 * 3600
     bars = [{"ts_utc": day - 900, "open": 9, "high": 9, "low": 9, "close": 9, "volume": 1000},   # yesterday: ignored
             {"ts_utc": day, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1},
             {"ts_utc": day + 900, "open": 4, "high": 4, "low": 4, "close": 4, "volume": 3}]

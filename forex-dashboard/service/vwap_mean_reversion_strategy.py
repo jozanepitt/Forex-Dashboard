@@ -65,19 +65,16 @@ MIN_CANDLES_REQUIRED = 40
 
 
 def _forex_day_of(ts_utc: int) -> int:
-    """Forex trading-day key: the most recent 00:00 UTC at or before
-    ts_utc. 00:00 UTC is MT5 server midnight on Exness (broker_offset_secs
-    == 0, and candles' ts_utc is already true UTC), so the VWAP resets
-    where the MT5 chart's own session VWAP does. Deviation from doc §2.1
-    (09:30 ET anchor): forex has no single market open. History: 00:00 UTC
-    originally; moved to 22:00 UTC (SAST midnight) on 2026-09-22 to match
-    a TradingView "VWAP Stdev Bands" chart; moved back to 00:00 UTC on
-    2026-10-06 at the user's request to match the MT5 chart instead
-    (TradingView resets 2h earlier). If the broker's server clock ever
-    stops being UTC this must become offset-aware. Used consistently here
-    and in _bars_into_session() below, so the "bars into session" gate
+    """Forex trading-day key: the most recent 00:00 SAST (22:00 UTC), the one
+    start of day every dashboard VWAP shares (session_clock). Deviation from
+    doc §2.1 (09:30 ET anchor): forex has no single market open. History:
+    00:00 UTC; 22:00 UTC (2026-09-22, TradingView); 00:00 UTC / MT5 midnight
+    (2026-10-06); 00:00 SAST again on 2026-10-21 at the user's request, after
+    verifying their TradingView session VWAP resets there. Used consistently
+    here and in _bars_into_session() below, so the "bars into session" gate
     lines up with the same boundary the VWAP itself resets on."""
-    return ts_utc - ts_utc % 86400
+    import session_clock
+    return session_clock.vwap_day_start(ts_utc)
 
 
 def _vwap_series(candles: list[dict]) -> list[float]:

@@ -16,8 +16,8 @@ evaluated on its own and can fire on its own. Rules, as confirmed with the user:
   Divergence  W/M only: RSI(13) (the TDI's RSI line) makes a higher low at leg
             2 (by DIV_MIN_RSI points) while price makes an equal-or-lower low,
             within 0.1 ATR (mirrored for M).
-  VWAP      Confluence: entry on the trade side of the daily VWAP (00:00 UTC
-            anchor) -- above it for BUY, below for SELL.
+  VWAP      Confluence: entry on the trade side of the daily VWAP (00:00 SAST
+            anchor, matching TradingView) -- above it for BUY, below for SELL.
   Grade     A+ = pattern extreme at the LOD/HOD, previous day's low/high or
             previous week's low/high, AND RSI divergence; A = previous day's/
             week's low/high without divergence; B = the rest. VWAP side and
@@ -174,11 +174,12 @@ _BEAR_NAMES = {"LOD": "HOD", "PDL": "PDH", "PWL": "PWH"}
 
 
 def daily_vwap(bars: list[dict]) -> Optional[float]:
-    """Volume-weighted (H+L+C)/3 since 00:00 UTC of the newest bar's day --
-    the same anchor as the VWAP+9EMA scanner (MT5 server midnight)."""
+    """Volume-weighted (H+L+C)/3 since the start of the trading day, 00:00
+    SAST (session_clock; matches the user's TradingView session VWAP)."""
     if not bars:
         return None
-    day0 = _day_start(bars[-1]["ts_utc"])
+    import session_clock
+    day0 = session_clock.vwap_day_start(bars[-1]["ts_utc"])
     pv = v = 0.0
     for b in bars:
         if b["ts_utc"] >= day0:

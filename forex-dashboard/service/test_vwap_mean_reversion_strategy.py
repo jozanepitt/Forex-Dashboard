@@ -179,25 +179,26 @@ def test_bars_into_session_crosses_calendar_day_boundary():
 # midnight / TradingView's reset) on 2026-10-06 at the user's request.
 
 def test_forex_day_boundary_is_midnight_utc():
-    midnight = _utc(5, 0)
-    for ts in (_utc(5, 0), _utc(5, 9, 30), _utc(5, 21, 55), _utc(5, 22, 0), _utc(5, 23, 45)):
-        assert m._forex_day_of(ts) == midnight, ts
-    assert m._forex_day_of(_utc(6, 0)) == _utc(6, 0)
-    assert m._forex_day_of(_utc(4, 23, 55)) == _utc(4, 0)
+    # 2026-10-21: the day starts at 00:00 SAST = 22:00 UTC
+    start = _utc(4, 22, 0)
+    for ts in (_utc(4, 22, 0), _utc(4, 23, 55), _utc(5, 0), _utc(5, 9, 30), _utc(5, 21, 55)):
+        assert m._forex_day_of(ts) == start, ts
+    assert m._forex_day_of(_utc(5, 22, 0)) == _utc(5, 22, 0)
+    assert m._forex_day_of(_utc(6, 0)) == _utc(5, 22, 0)
 
 
 def test_vwap_and_sigma_do_not_reset_at_2200_utc_but_do_at_midnight():
     candles = [
         _bar(_utc(5, 21, 45), 1.10, 1.10, 1.10, vol=1),
-        _bar(_utc(5, 22, 0), 1.20, 1.20, 1.20, vol=1),   # a 22:00 anchor would reset here
-        _bar(_utc(6, 0, 0), 1.30, 1.30, 1.30, vol=1),    # a 00:00 anchor resets here
+        _bar(_utc(5, 22, 0), 1.20, 1.20, 1.20, vol=1),   # 00:00 SAST: the day resets here
+        _bar(_utc(6, 0, 0), 1.30, 1.30, 1.30, vol=1),    # 00:00 UTC: no reset any more
     ]
     vwap = m._vwap_series(candles)
     sigma = m._sigma_series(candles, vwap)
-    assert vwap[1] == pytest.approx(1.15)   # blended with the 21:45 bar, not reset
-    assert sigma[1] == pytest.approx(0.05)  # two bars at 1.10/1.20 around 1.15
-    assert vwap[2] == pytest.approx(1.30)   # fresh day, not blended
-    assert sigma[2] == pytest.approx(0.0)
+    assert vwap[1] == pytest.approx(1.20)   # fresh day at 22:00 UTC, not blended
+    assert sigma[1] == pytest.approx(0.0)
+    assert vwap[2] == pytest.approx(1.25)   # blended with the 22:00 bar
+    assert sigma[2] == pytest.approx(0.05)
 
 
 def test_bars_into_session_counts_from_midnight_utc():
@@ -208,8 +209,9 @@ def test_bars_into_session_counts_from_midnight_utc():
         _bar(_utc(6, 0, 0), 1.1000, 1.0990, 1.0995, vol=10),
         _bar(_utc(6, 0, 15), 1.1000, 1.0990, 1.0995, vol=10),
     ]
-    assert m._bars_into_session(candles, 2) == 3   # 21:45, 22:00, 23:45 -- 22:00 no longer splits the day
-    assert m._bars_into_session(candles, 4) == 2   # 00:00, 00:15 -- the day starts at midnight
+    assert m._bars_into_session(candles, 0) == 1   # 21:45 belongs to the previous day
+    assert m._bars_into_session(candles, 2) == 2   # 22:00, 23:45 -- the day starts at 00:00 SAST
+    assert m._bars_into_session(candles, 4) == 4   # 22:00 .. 00:15 -- 00:00 UTC no longer splits it
 
 
 # ──────────────────────────────────────────────────────────────────────

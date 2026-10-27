@@ -11,7 +11,8 @@ import datetime as dt
 import vwap_bounce_strategy as vb
 
 STEP = 900
-DAY0 = int(dt.datetime(2026, 10, 6, 0, 0, tzinfo=dt.timezone.utc).timestamp())   # Tuesday 00:00 UTC
+# Tuesday 00:00 SAST = Monday 22:00 UTC: the dashboard's start of day (session_clock)
+DAY0 = int(dt.datetime(2026, 10, 5, 22, 0, tzinfo=dt.timezone.utc).timestamp())
 DAY1 = DAY0 + 86400
 
 
@@ -66,7 +67,7 @@ def _mirror(bars, pivot=1.1000):
 
 # ── indicators ───────────────────────────────────────────────────────────────
 
-def test_vwap_resets_at_midnight_utc():
+def test_vwap_resets_at_midnight_sast():
     bars = _flat_day(1.1000) + [_bar(DAY1, 1.2000, 1.2001, 1.1999, 1.2000)]
     vw = vb.vwap_series(bars)
     assert abs(vw[95] - 1.1000) < 1e-9

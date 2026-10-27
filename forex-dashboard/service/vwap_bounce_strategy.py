@@ -70,14 +70,16 @@ GRADE_B_SCORE = 5
 # ── indicators ───────────────────────────────────────────────────────────────
 
 def vwap_series(bars: list[dict]) -> list[float]:
-    """Session VWAP for every bar, re-anchored at each 00:00 UTC (the MT5
-    "Today's VWAP" line). Typical price (H+L+C)/3, weighted by tick volume;
-    a bar with no volume counts as 1 so a volumeless feed still gives a line."""
+    """Session VWAP for every bar, re-anchored at each 00:00 SAST (22:00 UTC,
+    session_clock: the user's TradingView session VWAP; was 00:00 UTC until
+    2026-10-21). Typical price (H+L+C)/3, weighted by tick volume; a bar
+    with no volume counts as 1 so a volumeless feed still gives a line."""
+    import session_clock
     out: list[float] = []
     day = None
     cum_pv = cum_v = 0.0
     for b in bars:
-        d = b["ts_utc"] - b["ts_utc"] % 86400
+        d = session_clock.vwap_day_start(b["ts_utc"])
         if d != day:
             day, cum_pv, cum_v = d, 0.0, 0.0
         vol = b.get("volume") or 0.0

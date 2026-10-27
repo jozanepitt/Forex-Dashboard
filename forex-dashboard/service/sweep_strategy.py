@@ -74,8 +74,8 @@ RR_B = 1.0
 STALE_AFTER_SECS = 2 * 900 + 600
 
 _NY = ZoneInfo("America/New_York")
-SESSION_HOUR_NY = 17    # VWAP anchor
-PROFILE_HOUR_NY = 18    # "Anchor Time Range 1800-1801, GMT-4"
+SESSION_HOUR_NY = 17    # no longer the VWAP anchor (session_clock is); kept for reference
+PROFILE_HOUR_NY = 18    # volume-profile anchor: the user's LuxAlgo "Anchor Time Range 1800-1801, GMT-4"
 
 
 def _anchor_start(ts_utc: int, hour_ny: int) -> int:
@@ -94,12 +94,15 @@ def _vol(b: dict) -> float:
 
 def session_vwap(bars: list[dict]) -> tuple[list[float], list[float]]:
     """VWAP and volume-weighted std dev for every bar, re-anchored at each
-    17:00 New York session open. Typical price (H+L+C)/3."""
+    00:00 SAST (session_clock; the dashboard's one start of day, matching the
+    user's TradingView session VWAP; was 17:00 New York until 2026-10-21).
+    Typical price (H+L+C)/3."""
+    import session_clock
     vwap, sd = [], []
     anchor = None
     pv = v = pv2 = 0.0
     for b in bars:
-        a = _anchor_start(b["ts_utc"], SESSION_HOUR_NY)
+        a = session_clock.vwap_day_start(b["ts_utc"])
         if a != anchor:
             anchor, pv, v, pv2 = a, 0.0, 0.0, 0.0
         tp = (b["high"] + b["low"] + b["close"]) / 3.0

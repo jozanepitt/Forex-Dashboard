@@ -251,11 +251,13 @@ def _utc(year, month, day, hour, minute=0):
 
 
 def test_forex_day_start_is_midnight_utc():
-    midnight = _utc(2026, 1, 5, 0, 0)
-    for ts in (_utc(2026, 1, 5, 0, 0), _utc(2026, 1, 5, 12, 30), _utc(2026, 1, 5, 21, 55),
-               _utc(2026, 1, 5, 22, 0), _utc(2026, 1, 5, 23, 55)):
-        assert m._forex_day_start_utc(ts) == midnight, ts
-    assert m._forex_day_start_utc(_utc(2026, 1, 4, 23, 55)) == _utc(2026, 1, 4, 0, 0)
+    # 2026-10-21: the day starts at 00:00 SAST = 22:00 UTC (the user's TradingView VWAP)
+    start = _utc(2026, 1, 4, 22, 0)
+    for ts in (_utc(2026, 1, 4, 22, 0), _utc(2026, 1, 4, 23, 55), _utc(2026, 1, 5, 0, 0),
+               _utc(2026, 1, 5, 12, 30), _utc(2026, 1, 5, 21, 55)):
+        assert m._forex_day_start_utc(ts) == start, ts
+    assert m._forex_day_start_utc(_utc(2026, 1, 5, 22, 0)) == _utc(2026, 1, 5, 22, 0)
+    assert m._forex_day_start_utc(_utc(2026, 1, 4, 21, 55)) == _utc(2026, 1, 3, 22, 0)
 
 
 def test_session_bars_start_at_midnight_not_2200():
@@ -263,16 +265,16 @@ def test_session_bars_start_at_midnight_not_2200():
     candles = [_bar(start + 300 * k, 1.1, 1.1, 1.1, 1.1, 100) for k in range(16 * 12 + 1)]  # 20:00 -> 12:00 next day
     assert candles[-1]["ts_utc"] == _utc(2026, 1, 5, 12, 0)
     session = m._session_bars_for_today(candles)
-    assert session[0]["ts_utc"] == _utc(2026, 1, 5, 0, 0)   # not 2026-01-04 22:00
-    assert len(session) == 12 * 12 + 1
+    assert session[0]["ts_utc"] == _utc(2026, 1, 4, 22, 0)   # 00:00 SAST, not 00:00 UTC
+    assert len(session) == 14 * 12 + 1
 
 
 def test_reported_vwap_is_the_volume_weighted_hlc3_since_midnight_utc():
-    """End-to-end: the same quantity verify_vwap.py checks. Bars before
-    midnight sit at a loud 2.0000; if the VWAP were still anchored at 22:00
-    UTC it would swallow the 22:00-23:55 bars and land nowhere near 1.1."""
+    """End-to-end: bars before 00:00 SAST (22:00 UTC) sit at a loud 2.0000;
+    if the VWAP were anchored anywhere earlier it would swallow them and land
+    nowhere near 1.1. (Anchor 00:00 SAST since 2026-10-21.)"""
     start = _utc(2026, 1, 4, 20, 0)
-    midnight = _utc(2026, 1, 5, 0, 0)
+    midnight = _utc(2026, 1, 4, 22, 0)
     candles = []
     for k in range(16 * 12 + 1):                      # 2026-01-04 20:00 -> 2026-01-05 12:00
         ts = start + 300 * k
