@@ -1,0 +1,398 @@
+"""
+BTMM course rules (phase 2 + 3, 2026-10-27), taken from the user's course PDFs
+as quoted in BTMM_CRT_STRATEGY_AUDIT.md (MMM Notes pp.6, 24-25, 45-47, the
+setups doc and "LONDON Setup BTMM"). btmm_core.analyze() wires these in; the
+dashboard tab reads them through GET /btmm-rules.
+
+  * Sessions in New York time, as the course gives them (DST handled):
+    Asian 20:30-03:00, London 03:30-09:00, NY 09:30-17:00 ET; the daily
+    high/low resets at 17:00 ET. Trades only in London and NY ("avoid night
+    hours"); the last two NY hours are the End of Day Reversal.
+  * TDI: overbought / oversold = 68 / 32 (user choice 2026-10-27).
+  * Shark Fin: RSI line breaks out of the volatility bands and reaches 68/32
+    while price is 25-50 pips beyond the Asian range; entry when it crosses
+    back through the signal line (1st entry) or the market baseline
+    ("Blood in the Water", 2nd entry).
+  * Confirmed M/W: 2nd leg closes back beyond the 13 EMA and the RSI line is
+    beyond the market baseline, crossing the signal line.
+  * Half Batman Type 1 / Type 2 with the shift-candle / apex entry.
+  * Trade plan: stop 3-5 pips beyond the shift candle or HOD/LOD, R:R at
+    least 1:1, break-even at 1:1, exit on a close back over the 13 EMA.
+  * Market-maker levels from EMA crosses (13/50, 50/200, 50|200/800) with
+    resets.
+
+Pip distances are forex pips; for gold, indices and crypto the same distance
+is scaled by the instrument's average daily range (median forex ADR = 56
+pips, the calibration ID50 uses), so the logic stays the same everywhere.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from zoneinfo import ZoneInfo
+
+import instruments
+
+ET = ZoneInfo("America/New_York")
+
+TDI_OB, TDI_OS = 68.0, 32.0
+TDI_TAIL = 120                # bars of band history kept (30h of M15)
+
+SF_LOOKBACK = 20              # the Shark Fin spike must be within 5h (M15)
+SF_LOC_MIN_PIPS, SF_LOC_MAX_PIPS = 25.0, 50.0
+ENTRY_FRESH_BARS = 4          # an entry cross older than 1h is no longer an entry
+
+HB_WINDOW = 40                # Half Batman structure window (10h of M15)
+HB_FAIL_PIPS = 10.0           # Type 1 retest must fall short of leg 1 by >= 10 pips
+HB_SHIFT_PIPS = 10.0          # shift candle range (course: a 10-12 pip candle)
+HB_EMA50_TOL_PIPS = 3.0       # Type 2: a low/high within 3 pips of the 50 EMA = trapped off it
+
+RESET_MIN_BARS = 8            # a reset pullback holds 13 < 50 (or >) for 2h of M15
+RESET_MIN_SPACING_BARS = 96   # and comes a day (M15) after the previous level
+
+SL_BUFFER_PIPS = 5.0         # course: 3-5 pips beyond the shift candle / HOD-LOD
+TP_PIPS_LOW_ADR, TP_PIPS_HIGH_ADR = 20.0, 30.0   # ADR < 100 pips / ADR >= 100 pips
+FX_MEDIAN_ADR_PIPS = 56.0
+
+
+# ── Sessions ──────────────────────────────────────────────────────────────────
+
+def et_hour(ts_utc: int) -> float:
+    d = datetime.fromtimestamp(ts_utc, timezone.utc).astimezone(ET)
+    return d.hour + d.minute / 60
+
+
+def session(ts_utc: int) -> Optional[str]:
+    """Course session for a bar's open time; None = the gaps between them."""
+    h = et_hour(ts_utc)
+    if h >= 20.5 or h < 3.0:
+        return "Asian"
+    if 3.5 <= h < 9.0:
+        return "London"
+    if 9.5 <= h < 17.0:
+        return "NY"
+    return None
+
+
+def kill_zone(ts_utc: int) -> Optional[str]:
+    s = session(ts_utc)
+    return s if s in ("London", "NY") else None
+
+
+def cycle_phase(ts_utc: int) -> str:
+    """Daily cycle in the course's own words."""
+    s = session(ts_utc)
+    if s == "London":
+        return "Stop Hunt"
+    if s == "NY":
+        return "End of Day Reversal" if et_hour(ts_utc) >= 15.0 else "Trend Move"
+    return "Accumulation"
+
+
+def trading_day(ts_utc: int):
+    """The trading day a bar belongs to: days start at 17:00 ET (the daily
+    high/low reset), so 17:00 ET Monday onwards is Tuesday's day."""
+    d = datetime.fromtimestamp(ts_utc, timezone.utc).astimezone(ET)
+    return (d + timedelta(hours=7)).date()
+
+
+# ── Units ─────────────────────────────────────────────────────────────────────
+
+def pip_unit(symbol: Optional[str], price: float, adr: float) -> float:
+    """Price distance of one forex pip of a rule on this instrument."""
+    if instruments.asset_class(symbol) in ("fx", "jpy") or not adr:
+        return instruments.pip_size(symbol, price)
+    return adr / FX_MEDIAN_ADR_PIPS
+
+
+# ── TDI series ────────────────────────────────────────────────────────────────
+
+def tdi_series(closes: list[float], tail: int = TDI_TAIL) -> dict:
+    """TDI lines per bar for the last `tail` bars: fast = RSI line (green,
+    SMA2 of RSI13), slow = trade signal line (red, SMA7), mid = market
+    baseline (yellow, SMA34), upper/lower = volatility bands (34, 1.6185 sd).
+    Same parameters as btmm_core.calc_tdi."""
+    from btmm_core import _rsi, _sma
+    rsi = _rsi(closes, 13)
+    fast, slow = _sma(rsi, 2), _sma(rsi, 7)
+    n = len(rsi)
+    start = max(0, n - tail)
+    mid, up, lo = [], [], []
+    for i in range(start, n):
+        w = rsi[max(0, i - 33):i + 1]
+        mu = sum(w) / len(w)
+        sd = (sum((v - mu) ** 2 for v in w) / len(w)) ** 0.5
+        mid.append(mu)
+        up.append(mu + 1.6185 * sd)
+        lo.append(mu - 1.6185 * sd)
+    return {"fast": fast[start:], "slow": slow[start:], "mid": mid, "upper": up, "lower": lo}
+
+
+def _crossed(a: list[float], b: list[float], i: int, down: bool) -> bool:
+    """a crossed b at bar i (from bar i-1)."""
+    if i < 1:
+        return False
+    return (a[i - 1] >= b[i - 1] and a[i] < b[i]) if down else (a[i - 1] <= b[i - 1] and a[i] > b[i])
+
+
+def _last_cross(a, b, start: int, down: bool) -> Optional[int]:
+    for i in range(len(a) - 1, max(start, 1) - 1, -1):
+        if _crossed(a, b, i, down):
+            return i
+    return None
+
+
+def tdi_confirms(ts: dict, direction: str, within: int = ENTRY_FRESH_BARS) -> bool:
+    """Course: 'RSI above/below the MBL, crossing the signal line'. The RSI
+    line is beyond the market baseline and the signal line now, and crossed
+    the signal line within the last `within` bars."""
+    f, s, m = ts["fast"], ts["slow"], ts["mid"]
+    if len(f) < 2:
+        return False
+    sell = direction == "bearish"
+    side = (f[-1] < m[-1] and f[-1] < s[-1]) if sell else (f[-1] > m[-1] and f[-1] > s[-1])
+    return side and _last_cross(f, s, len(f) - within, down=sell) is not None
+
+
+# ── Shark Fin / Blood in the Water ────────────────────────────────────────────
+
+def _no_fin(reason: str) -> dict:
+    return {"detected": False, "direction": None, "entry_ready": False, "entry": None,
+            "leg": 0, "confidence": "low", "reason": reason}
+
+
+def detect_shark_fin(bars: list[dict], ts: dict, asian: dict, unit: float,
+                     lookback: int = SF_LOOKBACK) -> dict:
+    """Course p.45-46. `direction` is the TRADE direction: a fin above the
+    upper band (overbought) is a sell."""
+    n = len(ts["fast"])
+    if n < lookback + 2 or not asian.get("valid"):
+        return _no_fin("no valid Asian range" if n >= lookback + 2 else "not enough bars")
+    b = bars[-n:]
+    f, s, m = ts["fast"], ts["slow"], ts["mid"]
+    best = None
+    for sell in (True, False):
+        out = [i for i in range(n - lookback, n)
+               if (f[i] > ts["upper"][i] if sell else f[i] < ts["lower"][i])]
+        if not out:
+            continue
+        last_out = out[-1]
+        # the excursion = the run of outside-band bars ending at last_out
+        first_out = last_out
+        while first_out - 1 in out:
+            first_out -= 1
+        peak = max(f[first_out:last_out + 1]) if sell else min(f[first_out:last_out + 1])
+        ext = (max(x["high"] for x in b[first_out:last_out + 2]) if sell
+               else min(x["low"] for x in b[first_out:last_out + 2]))
+        loc = ((ext - asian["high"]) if sell else (asian["low"] - ext)) / unit
+        fin = _last_cross(f, s, last_out + 1, down=sell)
+        bitw = _last_cross(f, m, last_out + 1, down=sell)
+        cand = {
+            "detected": True,
+            "direction": "bearish" if sell else "bullish",
+            "leg": 2 if last_out < n - 1 else 1,
+            "peak_rsi": round(peak, 1),
+            "overbought": peak >= TDI_OB if sell else peak <= TDI_OS,
+            "location_pips": round(loc, 1),
+            "location_ok": SF_LOC_MIN_PIPS <= loc <= SF_LOC_MAX_PIPS,
+            "spike_extreme": ext,
+            "fin_bars_ago": None if fin is None else n - 1 - fin,
+            "bitw_bars_ago": None if bitw is None else n - 1 - bitw,
+            "bars_ago": n - 1 - last_out,
+        }
+        if best is None or cand["bars_ago"] < best["bars_ago"]:
+            best = cand
+    if best is None:
+        return _no_fin("RSI line has not left the volatility bands")
+
+    sell = best["direction"] == "bearish"
+    still = f[-1] < s[-1] if sell else f[-1] > s[-1]          # not already reversed
+    fresh = lambda k: k is not None and k < ENTRY_FRESH_BARS
+    entry = ("Blood in the Water" if fresh(best["bitw_bars_ago"])
+             else "Shark Fin" if fresh(best["fin_bars_ago"]) else None)
+    best["blood_in_water"] = fresh(best["bitw_bars_ago"])
+    best["entry"] = entry
+    best["entry_ready"] = bool(entry and still and best["overbought"] and best["location_ok"])
+    best["confidence"] = ("high" if best["entry_ready"] and best["blood_in_water"]
+                          else "medium" if best["entry_ready"] else "low")
+    if not best["entry_ready"]:
+        best["reason"] = ("price not 25-50 pips beyond the Asian range" if not best["location_ok"]
+                          else f"RSI did not reach {TDI_OB:.0f}/{TDI_OS:.0f}" if not best["overbought"]
+                          else "no fresh signal-line or baseline cross" if not entry
+                          else "RSI already back the other way")
+    return best
+
+
+# ── Confirmed M / W ───────────────────────────────────────────────────────────
+
+def confirm_mw(bars: list[dict], mw: dict, e13: list[float], ts: dict) -> dict:
+    """Course: 2nd leg closes back beyond the 13 EMA; TDI RSI beyond the MBL,
+    crossing the signal line."""
+    if not mw.get("detected") or mw.get("pattern") not in ("M", "W"):
+        return {**mw, "confirmed": False, "close_beyond_13": False, "tdi_confirms": False}
+    sell = mw["pattern"] == "M"
+    beyond = bars[-1]["close"] < e13[-1] if sell else bars[-1]["close"] > e13[-1]
+    tdi_ok = tdi_confirms(ts, "bearish" if sell else "bullish")
+    return {**mw, "confirmed": beyond and tdi_ok, "close_beyond_13": beyond, "tdi_confirms": tdi_ok}
+
+
+# ── Half Batman Type 1 / Type 2 ───────────────────────────────────────────────
+
+def detect_half_batman(bars: list[dict], e13: list[float], e50: list[float], ts: dict,
+                       unit: float, window: int = HB_WINDOW) -> dict:
+    """Course ("Half a Batman", LONDON Setup BTMM): an incomplete M/W, the
+    market maker does not give the 2nd leg.
+      Type 1: price closes beyond the 13 EMA, retests back through it but
+              falls short of leg 1 by >= 10 pips.
+      Type 2: price closes beyond the 13 EMA, traps off the 50 EMA and never
+              goes back through the 13.
+    Entry (both): a 10-12 pip shift candle closing beyond the apex (the
+    structure's midpoint) and the 13 EMA, TDI RSI beyond its signal line and
+    the MBL. The current bar is the shift candle."""
+    none = {"detected": False, "type": None, "direction": None, "pattern": None}
+    if len(bars) < window or len(ts["fast"]) < 2:
+        return none
+    seg, s13, s50 = bars[-window:], e13[-window:], e50[-window:]
+    cur = seg[-1]
+    for sell in (True, False):
+        d = "bearish" if sell else "bullish"
+        last = len(seg) - 1
+        leg_i = (max(range(last - 3), key=lambda i: seg[i]["high"]) if sell
+                 else min(range(last - 3), key=lambda i: seg[i]["low"]))
+        leg1 = seg[leg_i]["high"] if sell else seg[leg_i]["low"]
+        c13 = next((i for i in range(leg_i + 1, last)
+                    if (seg[i]["close"] < s13[i] if sell else seg[i]["close"] > s13[i])), None)
+        if c13 is None or c13 >= last - 1:
+            continue
+        mid = seg[c13:last]
+        back_13 = [i for i in range(c13 + 1, last)
+                   if (seg[i]["close"] > s13[i] if sell else seg[i]["close"] < s13[i])]
+        far = (min(x["low"] for x in seg[leg_i + 1:last]) if sell
+               else max(x["high"] for x in seg[leg_i + 1:last]))
+        apex = (leg1 + far) / 2
+        hb_type = None
+        if back_13:
+            retest = (max(x["high"] for x in seg[back_13[0]:last]) if sell
+                      else min(x["low"] for x in seg[back_13[0]:last]))
+            if ((leg1 - retest) if sell else (retest - leg1)) >= HB_FAIL_PIPS * unit:
+                hb_type = 1
+        else:
+            tol = HB_EMA50_TOL_PIPS * unit
+            trapped = any((x["low"] <= s50[c13 + k] + tol) if sell else (x["high"] >= s50[c13 + k] - tol)
+                          for k, x in enumerate(mid))
+            if trapped:
+                hb_type = 2
+        if hb_type is None:
+            continue
+        shift = ((cur["close"] < cur["open"]) if sell else (cur["close"] > cur["open"])) \
+            and (cur["high"] - cur["low"]) >= HB_SHIFT_PIPS * unit \
+            and ((cur["close"] < apex and cur["close"] < s13[-1]) if sell
+                 else (cur["close"] > apex and cur["close"] > s13[-1]))
+        f, s, m = ts["fast"][-1], ts["slow"][-1], ts["mid"][-1]
+        tdi_ok = (f < s and f < m) if sell else (f > s and f > m)
+        if shift and tdi_ok:
+            return {"detected": True, "type": hb_type, "direction": d,
+                    "pattern": f"half_batman_type{hb_type}", "leg1": leg1, "apex": apex,
+                    "shift_extreme": cur["high"] if sell else cur["low"]}
+    return none
+
+
+# ── Market-maker levels and resets ────────────────────────────────────────────
+
+def detect_mm_levels(bars: list[dict], e13, e50, e200, e800) -> dict:
+    """Course pp.104-126: Level 1 = 13/50 EMA cross, Level 2 = 50/200 cross,
+    Level 3 = 50/800 or 200/800 cross. A Reset: the market maker books profit
+    and continues instead of reversing -- the 13/50 crosses back while the
+    50/200 stays in the trend -- and the count carries on (4 or 5 levels in
+    one trend). Confirmed when price then breaks the peak/trough made before
+    the reset."""
+    n = min(len(bars), len(e13), len(e50), len(e200), len(e800))
+    if n < 3:
+        return {"level": 0, "direction": None, "resets": 0, "last_reset_confirmed": None}
+    e13, e50, e200, e800, bars = e13[-n:], e50[-n:], e200[-n:], e800[-n:], bars[-n:]
+    bull = e13[-1] > e50[-1]
+    up = lambda a, b, i: a[i] > b[i] if bull else a[i] < b[i]
+    into = [i for i in range(1, n) if up(e13, e50, i) and not up(e13, e50, i - 1)]
+    if not into:
+        return {"level": 0, "direction": "bullish" if bull else "bearish",
+                "resets": 0, "last_reset_confirmed": None}
+    # origin = latest 13/50 cross into the trend made while the 50/200 was not yet with it
+    origin = next((i for i in reversed(into) if not up(e50, e200, i)), into[0])
+    # a reset needs a real profit-taking pullback: the 13 stays on the wrong
+    # side of the 50 for RESET_MIN_BARS bars, not a one-bar whipsaw
+    def pullback_bars(i):
+        k = i - 1
+        while k > origin and not up(e13, e50, k):
+            k -= 1
+        return i - 1 - k
+    base, l3 = 1, None
+    l2 = next((i for i in range(origin, n) if up(e50, e200, i)), None)
+    if l2 is not None:
+        base = 2
+        l3 = next((i for i in range(l2, n) if up(e50, e800, i) or up(e200, e800, i)), None)
+        if l3 is not None:
+            base = 3
+    # ...and, like every level (course: ~1 ADR, 3 levels in 2.5-5 days), comes
+    # at least RESET_MIN_SPACING_BARS after the previous level
+    events = [e for e in (origin, l2, l3) if e is not None]
+    resets = []
+    for i in into:
+        if i <= origin or not up(e50, e200, i) or pullback_bars(i) < RESET_MIN_BARS:
+            continue
+        if i - max(e for e in events + resets if e < i) >= RESET_MIN_SPACING_BARS:
+            resets.append(i)
+    confirmed = None
+    if resets:
+        r = resets[-1]
+        prior = bars[origin:r]
+        if prior:
+            peak = max(x["high"] for x in prior) if bull else min(x["low"] for x in prior)
+            confirmed = any((x["high"] > peak) if bull else (x["low"] < peak) for x in bars[r:])
+    return {"level": base + len(resets), "base_level": base,
+            "direction": "bullish" if bull else "bearish", "resets": len(resets),
+            "last_reset_confirmed": confirmed, "origin_ts": bars[origin]["ts_utc"]}
+
+
+# ── Trade plan and management ─────────────────────────────────────────────────
+
+def trade_plan(entry: float, direction: str, anchor: float, unit: float,
+               adr: float, e200: Optional[float] = None) -> dict:
+    """Stop 5 pips beyond `anchor` (shift candle / HOD-LOD / spike); TP1 = 20
+    pips (ADR < 100 pips) or 30 pips, never under 1:1; TP2 = the 200 EMA when
+    it is past TP1, else 2x TP1's distance; stop to break-even at 1:1."""
+    sell = direction == "bearish"
+    sgn = -1 if sell else 1
+    sl = anchor + SL_BUFFER_PIPS * unit if sell else anchor - SL_BUFFER_PIPS * unit
+    if (sl - entry) * sgn > -2 * unit:            # stop must sit beyond entry
+        sl = entry - sgn * 2 * unit
+    risk = abs(entry - sl)
+    adr_units = adr / unit if unit else 0       # forex: pips; scaled instruments: 56
+    target = (TP_PIPS_LOW_ADR if adr_units < 100 else TP_PIPS_HIGH_ADR) * unit
+    t1 = max(risk, target)
+    tp1 = entry + sgn * t1
+    tp2 = e200 if (e200 is not None and (e200 - tp1) * sgn > 0) else entry + sgn * 2 * t1
+    return {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+            "break_even_at": entry + sgn * risk, "risk": risk,
+            "rr_tp1": round(t1 / risk, 2) if risk else None,
+            "exit_rules": ["stop to break-even at 1:1",
+                           "exit on a close back over the 13 EMA",
+                           "exit when the RSI line reaches the opposite band and re-crosses the signal line"]}
+
+
+def manage_trade(plan: dict, direction: str, bars_after: list[dict], e13_after: list[float]) -> dict:
+    """Walk the bars after entry: stop first (same-bar ties count against
+    us), then TP1, then break-even at 1:1, then a close back over the 13 EMA."""
+    sell = direction == "bearish"
+    entry, sl, tp1, be = plan["entry"], plan["sl"], plan["tp1"], plan["break_even_at"]
+    moved = False
+    for i, b in enumerate(bars_after):
+        if (b["high"] >= sl) if sell else (b["low"] <= sl):
+            return {"outcome": "breakeven" if moved else "stop", "exit": sl, "bars": i + 1}
+        if (b["low"] <= tp1) if sell else (b["high"] >= tp1):
+            return {"outcome": "tp1", "exit": tp1, "bars": i + 1}
+        if not moved and ((b["low"] <= be) if sell else (b["high"] >= be)):
+            sl, moved = entry, True
+        if i < len(e13_after) and ((b["close"] > e13_after[i]) if sell else (b["close"] < e13_after[i])):
+            return {"outcome": "exit_13", "exit": b["close"], "bars": i + 1}
+    return {"outcome": "open", "exit": bars_after[-1]["close"] if bars_after else entry,
+            "bars": len(bars_after)}

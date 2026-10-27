@@ -178,48 +178,33 @@ def ema_stack(closes: list[float]) -> dict:
 
 def detect_amd(bars: list[dict]) -> dict:
     """
-    Session-based AMD — matches Steve Mauro's definition:
-      Accumulation  = Asian session  (00:00–07:00 UTC) — tight range builds
-      Manipulation  = London session (07:00–13:00 UTC) — false moves, stop hunts
-      Distribution  = NY session     (13:00–17:00 UTC) — real directional move
+    Session-based phase on the course's sessions (btmm_rules, New York time):
+      Accumulation  = Asian session and the gaps between sessions
+      Manipulation  = London session (03:30-09:00 ET) -- the stop hunt
+      Distribution  = NY session     (09:30-17:00 ET) -- the trend move
+    `cycle` gives the course's own words (Accumulation / Stop Hunt / Trend
+    Move / End of Day Reversal); `phase` keeps the names the checklist uses.
     """
+    import btmm_rules
     if len(bars) < 10:
         return {"phase": "Unknown"}
-    from datetime import datetime, timezone
-    dt       = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc)
-    utc_hour = dt.hour
-
-    if 13 <= utc_hour < 17:
-        phase = "Distribution"
-    elif 7 <= utc_hour < 13:
-        phase = "Manipulation"
-    else:                        # 00:00–07:00 and 17:00–00:00
-        phase = "Accumulation"
-
-    day = bars[-96:] if len(bars) >= 96 else bars
-    day_h = max(b["high"] for b in day)
-    day_l = min(b["low"]  for b in day)
-    return {"phase": phase, "day_high": day_h, "day_low": day_l}
+    ts = bars[-1]["ts_utc"]
+    s = btmm_rules.session(ts)
+    phase = {"London": "Manipulation", "NY": "Distribution"}.get(s, "Accumulation")
+    day_key = btmm_rules.trading_day(ts)
+    day = [b for b in bars[-200:] if btmm_rules.trading_day(b["ts_utc"]) == day_key] or bars[-96:]
+    return {"phase": phase, "cycle": btmm_rules.cycle_phase(ts), "session": s,
+            "day_high": max(b["high"] for b in day), "day_low": min(b["low"] for b in day)}
 
 
 # ── Kill zone ─────────────────────────────────────────────────────────────────
 
-KILL_ZONES = [
-    {"name": "London",  "start":  7.0,  "end": 10.0},   # 07:00–10:00 GMT
-    {"name": "Overlap", "start": 12.0,  "end": 13.0},   # 12:00–13:00 GMT
-    {"name": "NY",      "start": 13.0,  "end": 16.0},   # 13:00–16:00 GMT
-    {"name": "Asian",   "start": 19.0,  "end": 22.0},   # 19:00–22:00 GMT (22 Trade)
-]
-
-
 def active_kill_zone(ts_utc: int) -> Optional[str]:
-    from datetime import datetime, timezone
-    dt  = datetime.fromtimestamp(ts_utc, tz=timezone.utc)
-    gmt = dt.hour + dt.minute / 60
-    for kz in KILL_ZONES:
-        if kz["start"] <= gmt < kz["end"]:
-            return kz["name"]
-    return None
+    """'London' / 'NY' during the course's trading sessions, else None
+    (2026-10-27: was four short GMT windows covering 10h, one of them an
+    'Asian' window that actually fell inside the course's NY session)."""
+    import btmm_rules
+    return btmm_rules.kill_zone(ts_utc)
 
 
 # ── Stop hunt ─────────────────────────────────────────────────────────────────
@@ -244,13 +229,11 @@ def detect_stop_hunt(bars: list[dict], lookback: int = 20) -> dict:
 # ── Asian range ───────────────────────────────────────────────────────────────
 
 def detect_asian_range(bars: list[dict], symbol: Optional[str] = None) -> dict:
-    """Asian session = 00:00–07:00 GMT. Use last occurrence."""
-    from datetime import datetime, timezone
+    """The most recent Asian session (course: 20:30-03:00 New York time)."""
+    import btmm_rules
     asian = []
     for b in reversed(bars[-200:]):
-        dt  = datetime.fromtimestamp(b["ts_utc"], tz=timezone.utc)
-        gmt = dt.hour + dt.minute / 60
-        if 0 <= gmt < 7:
+        if btmm_rules.session(b["ts_utc"]) == "Asian":
             asian.append(b)
         elif asian:
             break  # past session
@@ -431,25 +414,24 @@ def detect_mw_pattern(bars: list[dict], lookback: int = 40) -> dict:
         if lows[i] <= min(lows[i-2:i]) and lows[i] <= min(lows[i+1:i+3]):
             swing_lows.append((i, lows[i]))
 
-    pattern, quality = None, 0.0
-
-    # M pattern: two swing highs separated by a swing low; second high ≤ first (double-top / lower high)
+    # 2026-10-27: M used to be checked first and always won, and "second high
+    # <= first" allowed +0.2% (~22 EUR/USD pips) -- 26 of 27 pairs read "M".
+    # Now both are judged, the most recent 2nd leg wins, and the 2nd leg may
+    # overshoot the 1st by at most 0.02% (~2 pips): an M is a lower/equal high.
+    tol = 0.0002
+    found = []
     if len(swing_highs) >= 2:
         (i1, h1), (i2, h2) = swing_highs[-2], swing_highs[-1]
-        mid_lows = [sl for sl in swing_lows if i1 < sl[0] < i2]
-        if mid_lows and h2 <= h1 * 1.002:
-            pattern = "M"
-            quality = 0.9 if h2 < h1 else 0.65   # lower high = stronger M
-
-    # W pattern: only set if M was not already found (avoids silent overwrite in choppy ranges)
-    if pattern is None and len(swing_lows) >= 2:
+        if any(i1 < sl[0] < i2 for sl in swing_lows) and h2 <= h1 * (1 + tol):
+            found.append((i2, "M", 0.9 if h2 < h1 else 0.65))   # lower high = stronger M
+    if len(swing_lows) >= 2:
         (i1, l1), (i2, l2) = swing_lows[-2], swing_lows[-1]
-        mid_highs = [sh for sh in swing_highs if i1 < sh[0] < i2]
-        if mid_highs and l2 >= l1 * 0.998:
-            pattern = "W"
-            quality = 0.9 if l2 > l1 else 0.65   # higher low = stronger W
-
-    return {"detected": pattern is not None, "pattern": pattern, "quality": quality}
+        if any(i1 < sh[0] < i2 for sh in swing_highs) and l2 >= l1 * (1 - tol):
+            found.append((i2, "W", 0.9 if l2 > l1 else 0.65))   # higher low = stronger W
+    if not found:
+        return {"detected": False, "pattern": None, "quality": 0.0}
+    _, pattern, quality = max(found)
+    return {"detected": True, "pattern": pattern, "quality": quality}
 
 
 # ── Nameable candle ────────────────────────────────────────────────────────────
@@ -498,37 +480,7 @@ def detect_nameable_candle(bars: list[dict]) -> dict:
     return {"found": False, "name": "None", "direction": "neutral"}
 
 
-# ── Shark Fin ─────────────────────────────────────────────────────────────────
-
-def detect_shark_fin(tdi: dict) -> dict:
-    """
-    Shark Fin: TDI fast line spikes outside BB bands (leg 1), curves back inside (leg 2).
-    Leg 2 + high/medium confidence = entry trigger.
-    """
-    leg      = detect_tdi_leg(tdi)
-    fast_arr = tdi.get("fast_arr", [])
-    upper    = tdi.get("bb_upper", 68.0)
-    lower    = tdi.get("bb_lower", 32.0)
-    band_w   = max(upper - lower, 1.0)
-
-    spike_depth = 0.0
-    if leg["leg"] == 2 and len(fast_arr) >= 10:
-        recent = fast_arr[-20:]
-        prior  = recent[:-3] if len(recent) > 3 else recent
-        if leg["direction"] == "bearish":
-            spike_depth = max(0.0, max(prior) - upper) / band_w * 100
-        else:
-            spike_depth = max(0.0, lower - min(prior)) / band_w * 100
-
-    return {
-        "detected":    leg["leg"] in (1, 2),
-        "direction":   leg["direction"],
-        "leg":         leg["leg"],
-        "confidence":  leg["confidence"],
-        "spike_depth": round(spike_depth, 1),
-        "entry_ready": leg["leg"] == 2 and leg["confidence"] in ("high", "medium"),
-    }
-
+# Shark Fin / Blood in the Water: see btmm_rules.detect_shark_fin (course p.45-46).
 
 def detect_rsi_signal_cross(tdi: dict, lookback: int = 5) -> dict:
     """
@@ -597,8 +549,8 @@ def detect_hod_lod(bars: list[dict], threshold_pips: int = 15,
     Detect a valid RETEST of the High/Low of Day (a BTMM sell/buy location).
 
     Two corrections over the naive version:
-      * The day is the current UTC trading day, not a rolling 96-bar window
-        (which straddled two sessions and overstated ADR/day-range).
+      * The day is the current trading day (from the 17:00 ET reset), not a
+        rolling 96-bar window (which straddled two sessions).
       * `at_hod`/`at_lod` require a RETEST: price must have pulled away from the
         extreme by `away_pips` earlier in the day and now returned to it. A fresh
         breakout push straight to a new HOD/LOD is the Manipulation trap
@@ -610,10 +562,10 @@ def detect_hod_lod(bars: list[dict], threshold_pips: int = 15,
                 "retest_hod": False, "retest_lod": False,
                 "pips_from_hod": 999, "pips_from_lod": 999}
 
-    from datetime import datetime, timezone
-    last_day = datetime.fromtimestamp(bars[-1]["ts_utc"], tz=timezone.utc).date()
-    day = [b for b in bars
-           if datetime.fromtimestamp(b["ts_utc"], tz=timezone.utc).date() == last_day]
+    # Trading day = from the 17:00 ET daily high/low reset (course p.24)
+    import btmm_rules
+    last_day = btmm_rules.trading_day(bars[-1]["ts_utc"])
+    day = [b for b in bars[-200:] if btmm_rules.trading_day(b["ts_utc"]) == last_day]
     if len(day) < 3:                       # too early in the day — fall back
         day = bars[-96:] if len(bars) >= 96 else bars
 
@@ -647,47 +599,8 @@ def detect_hod_lod(bars: list[dict], threshold_pips: int = 15,
     }
 
 
-# ── Half Batman ───────────────────────────────────────────────────────────────
-
-def detect_half_batman(bars: list[dict], asian: dict, symbol: Optional[str] = None) -> dict:
-    """
-    Half Batman: price breaks Asian range, extends 0.5× the range beyond the
-    Asian boundary, then retraces back to the boundary — BTMM continuation.
-    Full Batman = 1.0× extension. Both are high-probability re-entry setups.
-    """
-    if not asian.get("valid") or len(bars) < 10:
-        return {"detected": False, "pattern": None, "direction": None}
-
-    rng    = asian["high"] - asian["low"]
-    cur    = bars[-1]["close"]
-    pip    = instruments.pip_size(symbol, cur)
-    tol    = 5 * pip
-
-    half_h = asian["high"] + 0.5 * rng
-    half_l = asian["low"]  - 0.5 * rng
-
-    lookback = bars[-20:]
-    rec_hi   = max(b["high"] for b in lookback)
-    rec_lo   = min(b["low"]  for b in lookback)
-
-    near_ah = abs(cur - asian["high"]) <= tol
-    near_al = abs(cur - asian["low"])  <= tol
-
-    # Half Batman retrace complete:
-    # Bullish: price swept BELOW Asian low (stop hunt), recovered back to Asian low = BUY
-    # Bearish: price swept ABOVE Asian high (stop hunt), sold off back to Asian high = SELL
-    if near_al and rec_lo <= half_l:
-        return {"detected": True, "pattern": "half_batman", "direction": "bullish"}
-    if near_ah and rec_hi >= half_h:
-        return {"detected": True, "pattern": "half_batman", "direction": "bearish"}
-
-    # At the half-extension level (approaching reversal / re-entry zone)
-    if abs(cur - half_h) <= tol:
-        return {"detected": True, "pattern": "half_bat_resistance", "direction": "bearish"}
-    if abs(cur - half_l) <= tol:
-        return {"detected": True, "pattern": "half_bat_support",    "direction": "bullish"}
-
-    return {"detected": False, "pattern": None, "direction": None}
+# Half Batman Type 1 / Type 2: see btmm_rules.detect_half_batman (course
+# "Half a Batman"; the old Asian-range-extension version was a different pattern).
 
 
 # ── TDI divergence ────────────────────────────────────────────────────────────
@@ -1044,10 +957,9 @@ def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw:
     Three-Drive — refinement of Shark Fin: three pushes into a TDI extreme with
     diverging price. Reversal entry on 4th-push failure.
 
-    Mirrors the frontend's detectThreeDrivePattern() exactly, including its
-    inversion of the Shark Fin direction: shark['direction'] is the exhaustion
-    push's own side (e.g. 'bearish' = RSI spiked into overbought), and
-    Three-Drive trades the reversal AWAY from that push.
+    shark['direction'] is already the TRADE direction (a fin into overbought
+    = 'bearish' = sell). 2026-10-27: this used to flip it, so an overbought
+    fin produced a BUY.
     """
     current_price = bars[-1]["close"]
 
@@ -1058,7 +970,7 @@ def detect_three_drive_pattern(bars: list[dict], shark: dict, tdi_div: dict, mw:
     if mw.get("detected") and mw_direction:
         direction = mw_direction
     elif shark.get("detected") and shark.get("direction"):
-        direction = "bullish" if shark["direction"] == "bearish" else "bearish"
+        direction = shark["direction"]
 
     gates = [
         {"name": "Shark Fin Active",         "pass": bool(shark.get("detected"))},
@@ -1102,7 +1014,8 @@ def _btmm_checklist(bull: bool, *, stack, tdi, kz, adr_c, amd, asian, push_hunt,
              (hunt.get("active") and hunt.get("direction") == d)),                   # 7 stop hunt
         tdi_leg.get("leg") == 2 and tdi_leg.get("direction") == d,                   # 8 TDI 2nd leg
         bool(level.get("level_ii")) and level.get("direction") == d,                 # 9 Level II
-        bool(mw.get("detected") and mw.get("pattern") == ("W" if bull else "M")),    # 10 M/W
+        bool(mw.get("detected") and mw.get("pattern") == ("W" if bull else "M")
+             and mw.get("confirmed")),                                               # 10 confirmed M/W
         bool(shark.get("entry_ready")) and shark.get("direction") == d,              # 11 Shark Fin
         bool((hod_lod.get("at_lod") if bull else hod_lod.get("at_hod")) or
              (half_bat.get("detected") and half_bat.get("direction") == d)),         # 12 HOD/LOD / Half Batman
@@ -1157,12 +1070,18 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     tdi_leg = detect_tdi_leg(tdi)
 
     # New detectors
+    import btmm_rules
+    e13_arr, e50_arr = calc_ema(closes, 13), calc_ema(closes, 50)
+    unit      = btmm_rules.pip_unit(symbol, closes[-1], adr)
+    tdi_s     = btmm_rules.tdi_series(closes)
     level     = detect_level_count(bars, closes)
-    mw        = detect_mw_pattern(bars)
-    shark     = detect_shark_fin(tdi)
+    mm_levels = btmm_rules.detect_mm_levels(bars, e13_arr, e50_arr, calc_ema(closes, 200),
+                                            calc_ema(closes, 800))
+    mw        = btmm_rules.confirm_mw(bars, detect_mw_pattern(bars), e13_arr, tdi_s)
+    shark     = btmm_rules.detect_shark_fin(bars, tdi_s, asian, unit)
     straight  = detect_straightaway(bars)
     hod_lod   = detect_hod_lod(bars, symbol=symbol)
-    half_bat  = detect_half_batman(bars, asian, symbol)
+    half_bat  = btmm_rules.detect_half_batman(bars, e13_arr, e50_arr, tdi_s, unit)
     tdi_div   = detect_tdi_divergence(bars)
     push_hunt = detect_3push_stop_hunt(bars)
 
@@ -1185,67 +1104,23 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     is_aplus = (toward >= 70 and checklist_score >= 10 and checklist[8] and bool(kz))
     signal = _signal_label(score, is_aplus, setup_bullish, kz)
 
-    # ── Trade plan (SL/TP from Asian range or fallback) ───────────────────────
-    pip       = instruments.pip_size(symbol, closes[-1])
+    # ── Trade plan (course: stop 3-5 pips beyond the shift candle / HOD-LOD,
+    # R:R >= 1:1, break-even at 1:1, exit on a 13 EMA close) ──────────────────
     direction = "bullish" if setup_bullish else "bearish"
-
-    # For Half Batman setups the canonical entry is at the Asian boundary (return
-    # level), NOT the sweep-low/high close.  Using closes[-1] when price is still
-    # below the Asian low on a bullish setup would place the SL above the entry.
-    if half_bat.get("detected") and asian["valid"]:
-        if setup_bullish and half_bat.get("direction") == "bullish":
-            entry = asian["low"]       # limit entry at the return level
-        elif not setup_bullish and half_bat.get("direction") == "bearish":
-            entry = asian["high"]      # limit entry at the return level
-        else:
-            entry = closes[-1]
+    entry = closes[-1]
+    if half_bat.get("detected") and half_bat.get("direction") == direction:
+        anchor, anchor_kind = half_bat["shift_extreme"], f"Half Batman Type {half_bat['type']} shift candle"
+    elif shark.get("entry_ready") and shark.get("direction") == direction:
+        anchor, anchor_kind = shark["spike_extreme"], "Shark Fin spike (stop hunt)"
+    elif hod_lod.get("at_lod" if setup_bullish else "at_hod"):
+        anchor, anchor_kind = hod_lod["lod" if setup_bullish else "hod"], "LOD" if setup_bullish else "HOD"
     else:
-        entry = closes[-1]
-
-    if asian["valid"]:
-        asian_rng = asian["high"] - asian["low"]
-        if setup_bullish:
-            sl  = asian["low"]  - 2 * pip
-            tp1 = asian["high"] + 0.5 * asian_rng
-            tp2 = asian["high"] + asian_rng
-        else:
-            sl  = asian["high"] + 2 * pip
-            tp1 = asian["low"]  - 0.5 * asian_rng
-            tp2 = asian["low"]  - asian_rng
-    else:
-        # No valid Asian range → size the stop from volatility (ADR), floored at
-        # the instrument's per-asset minimum so indices/metals/crypto don't get a
-        # forex-sized (e.g. 20-pip) stop. Targets at 1:1.5 / 1:3 R:R.
-        risk = max(instruments.min_sl_distance(symbol, entry), adr * 0.15)
-        sl  = entry - risk       if setup_bullish else entry + risk
-        tp1 = entry + risk * 1.5 if setup_bullish else entry - risk * 1.5
-        tp2 = entry + risk * 3.0 if setup_bullish else entry - risk * 3.0
-
-    # Safety clamp: SL must always be on the correct side of entry regardless of
-    # how the Asian range and current price interact (guards against future regressions).
-    if setup_bullish:
-        sl = min(sl, entry - 2 * pip)
-    else:
-        sl = max(sl, entry + 2 * pip)
-
-    # ── TP sanity: if price already moved past Asian-range TPs, recalculate ──
-    # This happens when price breaks the Asian high/low before the alert fires.
-    # Without this fix, TP1 can end up behind entry → garbage R:R (e.g. 1:0.03).
-    sl_dist = abs(entry - sl)
-    if setup_bullish:
-        # TP1 must be above entry; TP2 must be above TP1
-        if tp1 <= entry + 2 * pip:
-            tp1 = entry + sl_dist          # 1:1 R:R minimum
-            tp2 = entry + sl_dist * 2      # 1:2 R:R
-        elif tp2 <= tp1 + 2 * pip:
-            tp2 = tp1 + sl_dist            # extend TP2 to at least SL-distance past TP1
-    else:
-        # TP1 must be below entry; TP2 must be below TP1
-        if tp1 >= entry - 2 * pip:
-            tp1 = entry - sl_dist          # 1:1 R:R minimum
-            tp2 = entry - sl_dist * 2      # 1:2 R:R
-        elif tp2 >= tp1 - 2 * pip:
-            tp2 = tp1 - sl_dist
+        last3 = bars[-3:]
+        anchor = min(b["low"] for b in last3) if setup_bullish else max(b["high"] for b in last3)
+        anchor_kind = "shift candle (last 3 bars)"
+    plan = btmm_rules.trade_plan(entry, direction, anchor, unit, adr, stack["e200"])
+    plan["anchor"] = anchor_kind
+    sl, tp1, tp2 = plan["sl"], plan["tp1"], plan["tp2"]
 
     # ── A+ setup detection ────────────────────────────────────────────────────
     active_setup = None
@@ -1331,4 +1206,9 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         "half_batman":     half_bat,
         "tdi_divergence":  tdi_div,
         "push_hunt":       push_hunt,
+        # Course rules (phase 2/3, btmm_rules)
+        "mm_levels":       mm_levels,
+        "trade_plan":      plan,
+        "session":         btmm_rules.session(bars[-1]["ts_utc"]),
+        "cycle":           btmm_rules.cycle_phase(bars[-1]["ts_utc"]),
     }

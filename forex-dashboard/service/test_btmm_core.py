@@ -72,7 +72,7 @@ def _ctx(direction):
         adr_c=40, amd={"phase": "Distribution"}, asian={"valid": True},
         push_hunt={"detected": True, "direction": direction}, hunt={"active": True, "direction": direction},
         tdi_leg={"leg": 2, "direction": direction}, level={"level_ii": True, "direction": direction},
-        mw={"detected": True, "pattern": "W" if bull else "M"},
+        mw={"detected": True, "pattern": "W" if bull else "M", "confirmed": True},
         shark={"entry_ready": True, "direction": direction},
         hod_lod={"at_lod": bull, "at_hod": not bull}, half_bat={"detected": True, "direction": direction},
         tdi_div={"detected": True, "direction": direction})

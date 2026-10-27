@@ -229,6 +229,34 @@ def key_levels_route():
                     for sym in PRIORITY_PAIRS})
 
 
+_BTMM_RULES_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+
+
+@app.get("/btmm-rules")
+def btmm_rules_route():
+    """BTMM course rules per pair (btmm_rules via btmm_core.analyze on the
+    cached M15 candles): Shark Fin / Blood in the Water, confirmed M/W, Half
+    Batman Type 1/2, MM levels and resets, session and the trade plan. The
+    BTMM tab merges these into its checklist. Cache-only, 60s TTL."""
+    import time as _t
+    now = _t.time()
+    if _BTMM_RULES_CACHE["payload"] is not None and now - _BTMM_RULES_CACHE["ts"] < 60:
+        return jsonify(_BTMM_RULES_CACHE["payload"])
+    out = {}
+    for sym in PRIORITY_PAIRS:
+        try:
+            a = btmm_core.analyze(cache.read_candles(sym, DEFAULT_INTERVAL, limit=DEFAULT_BACKFILL), symbol=sym)
+        except Exception as e:
+            log.warning("btmm-rules %s failed: %s", sym, e)
+            continue
+        if a.get("signal") == "insufficient_data":
+            continue
+        out[sym] = {k: a.get(k) for k in ("shark_fin", "mw_pattern", "half_batman", "mm_levels",
+                                          "trade_plan", "session", "cycle", "kz", "setup_bullish")}
+    _BTMM_RULES_CACHE.update(ts=now, payload=out)
+    return jsonify(out)
+
+
 _SWEEP_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
 _SWEEP_TTL_SECS = 60
 

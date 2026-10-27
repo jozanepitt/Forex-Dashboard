@@ -491,7 +491,7 @@ td.mono{font-family:var(--font-mono)}
     </div>
     <div class="sb-timer-item" id="sbOverlap">
       <div>
-        <div class="sb-timer-label" id="sbOverlapLabel">London/NY Overlap</div>
+        <div class="sb-timer-label" id="sbOverlapLabel">Asian Session (accumulation)</div>
         <div class="sb-timer-value" id="sbOverlapTimer">--:--:--</div>
       </div>
     </div>
@@ -1285,22 +1285,48 @@ const STRATEGY = {
   ]
 };
 
-const BTMM_KILL_ZONES = [
-  // BTMM Official Kill Zones — times in GMT (UTC), displayed as SAST (UTC+2, fixed, no DST)
-  // London Kill Zone:  07:00–10:00 GMT = 09:00–12:00 SAST
-  // LDN/NY Overlap:    12:00–13:00 GMT = 14:00–15:00 SAST
-  // NY Kill Zone:      13:00–16:00 GMT = 15:00–18:00 SAST
-  // Asian Kill Zone:   19:00–22:00 GMT = 21:00–00:00 SAST (22 Trade setup window)
-  { name: 'London Kill Zone', startGMT:  7.0,  endGMT: 10.0,  weight: 1.0,  session: 'london',  sastStart: '09:00', sastEnd: '12:00' },
-  { name: 'LDN/NY Overlap',   startGMT: 12.0,  endGMT: 13.0,  weight: 0.9,  session: 'overlap', sastStart: '14:00', sastEnd: '15:00' },
-  { name: 'NY Kill Zone',     startGMT: 13.0,  endGMT: 16.0,  weight: 0.85, session: 'ny',      sastStart: '15:00', sastEnd: '18:00' },
-  { name: 'Asian Kill Zone',  startGMT: 19.0,  endGMT: 22.0,  weight: 0.7,  session: 'asian',   sastStart: '21:00', sastEnd: '00:00' },
-];
+// BTMM course sessions (2026-10-27), New York time, same as service/btmm_rules.py:
+//   London 03:30–09:00 ET and NY 09:30–17:00 ET are the trade windows;
+//   Asian 20:30–03:00 ET is accumulation (no trades — "avoid night hours").
+// GMT/SAST times move with US daylight saving, so they are rebuilt from New
+// York's current UTC offset (SAST = UTC+2, no DST). Replaces four fixed GMT
+// windows (10h a day), one of them an "Asian" zone inside the course's NY session.
+function nyUtcOffsetHours(d = new Date()) {
+  const ny = new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const utc = new Date(d.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return Math.round((ny - utc) / 3600000);   // -4 (EDT) or -5 (EST)
+}
+function hhmm(h) { h = ((h % 24) + 24) % 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`; }
+function buildBTMMSession(name, session, etStart, etEnd, weight) {
+  const off = nyUtcOffsetHours();
+  const startGMT = etStart - off, endGMT = etEnd - off;
+  return { name, session, weight, startGMT, endGMT, gmtStart: hhmm(startGMT), gmtEnd: hhmm(endGMT),
+           sastStart: hhmm(startGMT + 2), sastEnd: hhmm(endGMT + 2) };
+}
+let BTMM_KILL_ZONES = [], BTMM_ASIAN_SESSION = null;
+function refreshBTMMSessions() {
+  BTMM_KILL_ZONES = [buildBTMMSession('London Session', 'london', 3.5, 9.0, 1.0),
+                     buildBTMMSession('NY Session', 'ny', 9.5, 17.0, 0.85)];
+  BTMM_ASIAN_SESSION = buildBTMMSession('Asian Session (accumulation)', 'asian', -3.5, 3.0, 0);
+}
+refreshBTMMSessions();
 
 let pairData = {};
 // Key levels (previous day + 2d..5d H/L/C, last week H/L) from the service's
 // MT5 daily candles (/key-levels), loaded once per fetchAllData cycle.
 let keyLevelsData = {};
+
+// BTMM course rules per pair from service/btmm_rules.py (2026-10-27): Shark Fin
+// (68/32, 25-50 pips beyond Asian, signal-line / baseline entries), confirmed
+// M/W, Half Batman Type 1/2, MM levels + resets, session and trade plan.
+let btmmRulesData = {};
+async function fetchBTMMRules() {
+  try {
+    const base = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+    const resp = await fetch(`${base}/btmm-rules`, { cache: 'no-store' });
+    if (resp.ok) btmmRulesData = await resp.json();
+  } catch (e) { console.warn('btmm rules unavailable', e); }
+}
 
 async function fetchKeyLevels() {
   try {
@@ -2399,17 +2425,19 @@ function detectAMDPhase(candles) {
   // Session-based AMD detection (uses real NY time when datetime is available)
   if (candles.length > 0 && candles[0].datetime) {
     const nyHour = getCurrentESTHour();
-    // Asian session (19:00–02:00 NY) = Accumulation: tight range, low volume
-    if (nyHour >= 19 || nyHour < 2) return { phase: 'Accumulation', score: -0.15 };
-    // London Open (02:00–05:00 NY) = Manipulation: false moves, stop hunts
-    if (nyHour >= 2 && nyHour < 5) {
+    // Course sessions (2026-10-27, = service/btmm_rules.py): Asian 20:30–03:00 NY and
+    // the gaps = Accumulation; London 03:30–09:00 NY = Manipulation (stop hunt);
+    // NY 09:30–17:00 = Distribution (trend move). Was 19–02 / 02–05 / 05–19.
+    const inLondon = nyHour >= 3.5 && nyHour < 9, inNY = nyHour >= 9.5 && nyHour < 17;
+    if (!inLondon && !inNY) return { phase: 'Accumulation', score: -0.15 };
+    if (inLondon) {
       const recent12 = candles.slice(-12); // ~3 hours of 15-min candles
       const baseline = candles.slice(-72).map(c => c.high - c.low).reduce((a,b)=>a+b,0) / Math.min(72, candles.length);
       const spikeDetected = recent12.some(c => (c.high - c.low) > baseline * 2.2);
       return { phase: 'Manipulation', score: spikeDetected ? 0.4 : 0.15 };
     }
-    // NY Morning (05:00–12:00 NY) = Distribution: price-based confirmation
-    if (nyHour >= 5 && nyHour < 12) {
+    // NY morning (09:30–12:00 NY) = Distribution: price-based confirmation
+    if (nyHour < 12) {
       const todayDate = candles[candles.length - 1].datetime.split(' ')[0];
       const todayCandles = candles.filter(c => c.datetime && c.datetime.split(' ')[0] === todayDate);
       if (todayCandles.length > 0) {
@@ -2422,8 +2450,8 @@ function detectAMDPhase(candles) {
       }
       return { phase: 'Distribution', score: 0.3 };
     }
-    // NY Afternoon / Asian transition (12:00–19:00 NY) = late distribution or new accumulation
-    if (nyHour >= 12 && nyHour < 19) {
+    // NY afternoon (12:00–17:00 NY) = late distribution / end-of-day reversal
+    {
       const todayDate = candles[candles.length - 1].datetime.split(' ')[0];
       const todayCandles = candles.filter(c => c.datetime && c.datetime.split(' ')[0] === todayDate);
       if (todayCandles.length > 0) {
@@ -2741,11 +2769,13 @@ function detectThreeDrivePattern(pair, ctx) {
   const pip = (pair && pair.pip) ? pair.pip : 0.0001;
   const { btmmSharkFin, btmmTDIDivergence, btmmMWPattern, currentPrice, btmmAsianRange } = ctx;
 
-  // Direction: opposite of MW pattern bias (reversal of trend)
+  // Direction: the M/W, else the Shark Fin's own direction — it is already the
+  // trade side ('Shark Fin Short' = bearish). 2026-10-27: this used to flip it,
+  // so an overbought fin produced a buy.
   let direction = 'neutral';
   if (btmmMWPattern && btmmMWPattern.formed) direction = btmmMWPattern.direction;
   else if (btmmSharkFin && btmmSharkFin.active && btmmSharkFin.direction)
-    direction = btmmSharkFin.direction === 'bearish' ? 'bullish' : 'bearish';
+    direction = btmmSharkFin.direction;
 
   const sharkActive = !!(btmmSharkFin && btmmSharkFin.active);
   const divActive = !!(btmmTDIDivergence && btmmTDIDivergence.active);
@@ -3745,6 +3775,12 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     .filter(s => s.active)
     .sort((a, b) => b.gatesPassed - a.gatesPassed)[0] || null;
   const keyLevel = keyLevelNear(pair.symbol, currentPrice);
+  // Course rules from the service (null if /btmm-rules is unavailable)
+  const rules = btmmRulesData[pair.symbol] || null;
+  const tradeDirStr = setupBullish ? 'bullish' : 'bearish';
+  const ruleShark = rules && rules.shark_fin;
+  const ruleMW = rules && rules.mw_pattern;
+  const ruleHB = rules && rules.half_batman;
   const btmmChecklist = [
     { name: `Price ${setupBullish ? 'Above' : 'Below'} 800 EMA${!ema800Warm ? ' ⚠' : ''}`, pass: setupBullish ? priceAbove800 : !priceAbove800 },
     { name: `5/13 Cross Fresh (${lastCross.candlesAgo}c ago)`, pass: lastCross.candlesAgo <= 20 },
@@ -3764,6 +3800,15 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     { name: 'TDI 2nd Leg Confirmed', pass: !!(btmmTDILeg && btmmTDILeg.leg === 2 && btmmTDILeg.direction === (setupBullish ? 'bullish' : 'bearish') && btmmTDILeg.confidence !== 'low') },
     { name: 'Named Setup Active', pass: !!(activeSetup && activeSetup.direction === (setupBullish ? 'bullish' : 'bearish')) },
     { name: 'No High-Impact News Block', pass: !isNewsBlocked(pair, blockedCurrencies) },
+    // Course rules (2026-10-27, service/btmm_rules.py)
+    { name: ruleShark && ruleShark.entry_ready && ruleShark.direction === tradeDirStr
+        ? `Shark Fin — ${ruleShark.entry} (RSI ${ruleShark.peak_rsi}, ${ruleShark.location_pips}p beyond Asian)`
+        : 'Shark Fin (RSI 68/32, 25-50p beyond Asian, signal/baseline cross)',
+      pass: !!(ruleShark && ruleShark.entry_ready && ruleShark.direction === tradeDirStr) },
+    { name: `Confirmed ${setupBullish ? 'W' : 'M'} (2nd leg closes beyond 13, TDI over MBL + signal)`,
+      pass: !!(ruleMW && ruleMW.confirmed && ruleMW.pattern === (setupBullish ? 'W' : 'M')) },
+    { name: ruleHB && ruleHB.detected && ruleHB.direction === tradeDirStr ? `Half Batman Type ${ruleHB.type} (shift candle past apex)` : 'Half Batman Type 1/2',
+      pass: !!(ruleHB && ruleHB.detected && ruleHB.direction === tradeDirStr) },
   ];
   const newsBlocked = isNewsBlocked(pair, blockedCurrencies);
   const checklistScore = btmmChecklist.filter(c => c.pass).length;
@@ -3788,9 +3833,12 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   // Core patterns (1-3 points each)
   if (btmmAsianRange && btmmAsianRange.valid) patternBonus += 1; // Valid Asian range < 50 pips
   if (btmmStopHunt && btmmStopHunt.active && huntDir === bonusDir) patternBonus += 2; // Stop hunt detected
-  if (btmmMWPattern && btmmMWPattern.formed && agrees(btmmMWPattern)) patternBonus += 2; // M/W pattern forming
+  // M/W, Shark Fin and Half Batman use the course rules when the service has them
+  if (ruleMW) { if (ruleMW.confirmed && ruleMW.pattern === (bonusDir === 'bullish' ? 'W' : 'M')) patternBonus += 2; }
+  else if (btmmMWPattern && btmmMWPattern.formed && agrees(btmmMWPattern)) patternBonus += 2; // M/W pattern forming
   if (btmmLevelCount && btmmLevelCount.level === 3) patternBonus += 1; // Level 3 - reversal imminent
-  if (btmmSharkFin && btmmSharkFin.active && agrees(btmmSharkFin)) patternBonus += 3; // Shark Fin - high probability entry
+  if (ruleShark) { if (ruleShark.entry_ready && agrees(ruleShark)) patternBonus += ruleShark.blood_in_water ? 4 : 3; }
+  else if (btmmSharkFin && btmmSharkFin.active && agrees(btmmSharkFin)) patternBonus += 3; // Shark Fin - high probability entry
   if (btmmEMA200Bounce && btmmEMA200Bounce.active && agrees(btmmEMA200Bounce)) patternBonus += 3; // 200 EMA Bounce - very high probability
   // Setup confirmations (2 points each)
   if (nearEMA50Setup) patternBonus += 2; // Setup 6/8 - price 6-8 pips from EMA 50
@@ -3801,7 +3849,8 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   if (btmmStraightaway && btmmStraightaway.active && agrees(btmmStraightaway)) patternBonus += 3; // Straightaway - clean break
   if (btmmNYCReversal && btmmNYCReversal.active) patternBonus += 3; // NYC Reversal - high probability
   if (btmmTDIDivergence && btmmTDIDivergence.active && agrees(btmmTDIDivergence)) patternBonus += 2; // TDI Divergence - key confirmation
-  if (btmmHalfBatman && btmmHalfBatman.active) patternBonus += 2; // Half Batman - Level I consolidation
+  if (ruleHB) { if (ruleHB.detected && agrees(ruleHB)) patternBonus += 2; }
+  else if (btmmHalfBatman && btmmHalfBatman.active) patternBonus += 2; // Half Batman - Level I consolidation
   if (btmmPivots && btmmPivots.nearest) patternBonus += 1; // Near pivot point - target zone
   if (btmmHODLOD && btmmHODLOD.retestingHOD && bonusDir === 'bearish') patternBonus += 2; // HOD retest — bearish setup
   if (btmmHODLOD && btmmHODLOD.retestingLOD && bonusDir === 'bullish') patternBonus += 2; // LOD retest — bullish setup
@@ -3970,7 +4019,7 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
     wyckoffScore, wyckoffCompositeScore, wyckoffSignal, wyckoffSignalClass,
     btmmCompositeScore, btmmSignal, btmmSignalClass,
     combinedScore, combinedSignal, combinedSignalClass,
-    tdi, adr, adrConsumed, adrRemaining, pfLevels, keyLevel, amd, fibs,
+    tdi, adr, adrConsumed, adrRemaining, pfLevels, keyLevel, btmmRules: rules, amd, fibs,
     activeZone, isRealData,
     emaScore, tdiScore, adrScore, amdScore, killZoneScore,
     dist800Pips, ema800Val,
@@ -4035,7 +4084,7 @@ async function fetchAllData() {
 
   // Fetch news once per cycle (non-blocking)
   fetchNewsData();
-  await fetchKeyLevels();
+  await Promise.all([fetchKeyLevels(), fetchBTMMRules()]);
 
   // Fetch priority pairs (11 majors) for live data - like v6/v7/v8
   for (const pair of FOREX_PAIRS) {
@@ -4283,7 +4332,7 @@ function renderTable() {
       <td><div style="display:flex;align-items:center;gap:8px"><div class="score-bar"><div class="score-fill" style="width:${Math.min(scoreWidth, 100)}%;background:${scoreColor}"></div></div><span class="score-value" style="color:${scoreColor}">${pair[scoreKey] >= 0 ? '+' : ''}${pair[scoreKey].toFixed(0)}</span></div></td>
       <td>${indicatorsHTML}</td>
       <td>${currentMode === 'indicator' && pair.checklistScore !== undefined
-        ? `<span class="confidence ${pair.checklistScore >= 8 ? 'high' : pair.checklistScore >= 6 ? 'medium' : 'low'}">${pair.checklistScore}/13</span>`
+        ? `<span class="confidence ${pair.checklistScore >= Math.round(pair.btmmChecklist.length * 8 / 13) ? 'high' : pair.checklistScore >= Math.round(pair.btmmChecklist.length * 6 / 13) ? 'medium' : 'low'}">${pair.checklistScore}/${pair.btmmChecklist.length}</span>`
         : `<span class="confidence ${confidenceClass}">${pair.confidence}</span>`}</td>
       ${extraCells}
     `;
@@ -4342,6 +4391,20 @@ function openModal(symbol) {
         <div class="detail-row"><span class="detail-label">ADR Remaining</span><span class="detail-value mono">${Math.round(pair.adrRemaining / pair.pip)} pips</span></div>
         <div class="detail-row"><span class="detail-label">AMD Phase</span><span class="detail-value mono"><span class="amd-badge ${pair.amd.phase.toLowerCase()}">${pair.amd.phase}</span></span></div>
         <div class="detail-row"><span class="detail-label">Kill Zone</span><span class="detail-value mono">${pair.activeZone ? pair.activeZone.name : 'Inactive'}</span></div>
+        ${(() => { const r = pair.btmmRules; if (!r) return '';
+          const f = v => (typeof v === 'number' ? v.toFixed(pair.decimals) : '—');
+          const sf = r.shark_fin || {}, mw = r.mw_pattern || {}, hb = r.half_batman || {}, lv = r.mm_levels || {}, tp = r.trade_plan || {};
+          const pips = v => Math.round(Math.abs(v - tp.entry) / pair.pip);
+          return `
+        <div class="detail-row"><span class="detail-label" style="color:var(--cyan)">BTMM Course Rules</span></div>
+        <div class="detail-row"><span class="detail-label">Session / Cycle</span><span class="detail-value mono">${r.session || 'Gap'} · ${r.cycle}</span></div>
+        <div class="detail-row"><span class="detail-label">Shark Fin</span><span class="detail-value mono" style="color:${sf.entry_ready ? 'var(--green)' : 'var(--text-muted)'}">${sf.detected ? `${sf.direction} · RSI ${sf.peak_rsi} · ${sf.location_pips}p beyond Asian · ${sf.entry_ready ? sf.entry : (sf.reason || 'forming')}` : (sf.reason || 'None')}</span></div>
+        <div class="detail-row"><span class="detail-label">M / W</span><span class="detail-value mono" style="color:${mw.confirmed ? 'var(--green)' : 'var(--text-muted)'}">${mw.detected ? `${mw.pattern} · ${mw.confirmed ? 'confirmed' : `not confirmed${mw.close_beyond_13 ? '' : ' (no 13 close)'}${mw.tdi_confirms ? '' : ' (TDI)'}`}` : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">Half Batman</span><span class="detail-value mono" style="color:${hb.detected ? 'var(--green)' : 'var(--text-muted)'}">${hb.detected ? `Type ${hb.type} ${hb.direction} · apex ${f(hb.apex)}` : 'None'}</span></div>
+        <div class="detail-row"><span class="detail-label">MM Level</span><span class="detail-value mono">${lv.level ? `Level ${lv.level} ${lv.direction}${lv.resets ? ` · ${lv.resets} reset${lv.resets > 1 ? 's' : ''} (${lv.last_reset_confirmed ? 'confirmed' : 'unconfirmed'})` : ''}` : '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Plan (${r.setup_bullish ? 'Buy' : 'Sell'})</span><span class="detail-value mono">Entry ${f(tp.entry)} · SL ${f(tp.sl)} (${pips(tp.sl)}p, ${tp.anchor})</span></div>
+        <div class="detail-row"><span class="detail-label">Targets</span><span class="detail-value mono">TP1 ${f(tp.tp1)} (${pips(tp.tp1)}p, 1:${tp.rr_tp1}) · TP2 ${f(tp.tp2)} · BE at ${f(tp.break_even_at)}</span></div>
+        <div class="detail-row"><span class="detail-label">Exit</span><span class="detail-value mono" style="white-space:normal">${(tp.exit_rules || []).join(' · ')}</span></div>`; })()}
         <div class="detail-row"><span class="detail-label" style="color:var(--cyan)">Key Levels (MT5 days)</span></div>
         <div class="detail-row"><span class="detail-label">At Level</span><span class="detail-value mono" style="color:${pair.keyLevel && pair.keyLevel.cluster ? 'var(--green)' : 'var(--text-muted)'}">${pair.keyLevel && pair.keyLevel.cluster ? pair.keyLevel.at.map(l => l.name + ' ' + l.price.toFixed(pair.decimals)).join(' · ') : 'None'}</span></div>
         <div class="detail-row"><span class="detail-label">Next Above</span><span class="detail-value mono">${pair.keyLevel && pair.keyLevel.above ? pair.keyLevel.above.name + ' ' + pair.keyLevel.above.price.toFixed(pair.decimals) + ' (+' + Math.round((pair.keyLevel.above.price - pair.currentPrice) / pair.pip) + ' pips)' : '—'}</span></div>
@@ -4547,7 +4610,9 @@ function openModal(symbol) {
       </div>
     </div>
     <div class="signal-breakdown" style="margin-top:16px">
-      <h3>BTMM Setup Checklist — <span style="color:${pair.checklistScore >= 9 ? 'var(--green)' : pair.checklistScore >= 7 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore}/13</span> <span style="font-size:.75rem;font-weight:400;color:${pair.checklistScore >= 9 ? 'var(--green)' : pair.checklistScore >= 7 ? 'var(--yellow)' : 'var(--red)'}">${pair.checklistScore >= 9 ? '— High Probability Setup' : pair.checklistScore >= 7 ? '— Consider Setup' : '— Wait for More Confluence'}</span></h3>
+      ${(() => { const n = pair.btmmChecklist.length, hi = Math.round(n * 9 / 13), mid = Math.round(n * 7 / 13);
+                 const col = pair.checklistScore >= hi ? 'var(--green)' : pair.checklistScore >= mid ? 'var(--yellow)' : 'var(--red)';
+                 return `<h3>BTMM Setup Checklist — <span style="color:${col}">${pair.checklistScore}/${n}</span> <span style="font-size:.75rem;font-weight:400;color:${col}">${pair.checklistScore >= hi ? '— High Probability Setup' : pair.checklistScore >= mid ? '— Consider Setup' : '— Wait for More Confluence'}</span></h3>`; })()}
       ${pair.btmmChecklist.map(c => `
         <div class="signal-item">
           <div class="signal-item-left">
@@ -4708,11 +4773,14 @@ function closeModal() {
 }
 
 function updateSBTimer() {
-  // BTMM_KILL_ZONES has exactly 3 zones indexed 0–2 — safe destructure
+  // London / NY trade sessions + the Asian accumulation session (middle tile)
+  refreshBTMMSessions();
   const londonZone  = BTMM_KILL_ZONES[0];
-  const overlapZone = BTMM_KILL_ZONES[1];
-  const nyZone      = BTMM_KILL_ZONES[2];
+  const overlapZone = BTMM_ASIAN_SESSION;
+  const nyZone      = BTMM_KILL_ZONES[1];
   const activeZone  = getActiveBTMMKillZone();
+  const gmtNow = getCurrentGMTHour();
+  const inAsian = gmtNow >= overlapZone.startGMT && gmtNow < overlapZone.endGMT;
 
   // Update SAST clock in header
   const sastEl = document.getElementById('sastClock');
@@ -4722,19 +4790,20 @@ function updateSBTimer() {
   const londonLbl  = document.getElementById('sbLondonLabel');
   const overlapLbl = document.getElementById('sbOverlapLabel');
   const nyLbl      = document.getElementById('sbNyLabel');
-  if (londonLbl)  londonLbl.textContent  = `${londonZone.name}  ${londonZone.sastStart}–${londonZone.sastEnd} SAST  (${pad2(londonZone.startGMT)}:${londonZone.startGMT % 1 ? '15' : '00'}–${pad2(londonZone.endGMT)}:${londonZone.endGMT % 1 ? '15' : '00'} GMT)`;
-  if (overlapLbl) overlapLbl.textContent = `${overlapZone.name}  ${overlapZone.sastStart}–${overlapZone.sastEnd} SAST  (${pad2(overlapZone.startGMT)}:00–${pad2(overlapZone.endGMT)}:00 GMT)`;
-  if (nyLbl)      nyLbl.textContent      = `${nyZone.name}  ${nyZone.sastStart}–${nyZone.sastEnd} SAST  (${pad2(nyZone.startGMT)}:${nyZone.startGMT % 1 ? '15' : '00'}–${pad2(nyZone.endGMT)}:${nyZone.endGMT % 1 ? '15' : '00'} GMT)`;
+  const zoneLabel = z => `${z.name}  ${z.sastStart}–${z.sastEnd} SAST  (${z.gmtStart}–${z.gmtEnd} GMT)`;
+  if (londonLbl)  londonLbl.textContent  = zoneLabel(londonZone);
+  if (overlapLbl) overlapLbl.textContent = zoneLabel(overlapZone);
+  if (nyLbl)      nyLbl.textContent      = zoneLabel(nyZone);
 
   document.getElementById('sbLondon').className  = `sb-timer-item ${activeZone && activeZone.session === 'london'  ? 'active-window' : ''}`;
-  document.getElementById('sbOverlap').className = `sb-timer-item ${activeZone && activeZone.session === 'overlap' ? 'active-window' : ''}`;
+  document.getElementById('sbOverlap').className = `sb-timer-item ${inAsian ? 'active-window' : ''}`;
   document.getElementById('sbNy').className      = `sb-timer-item ${activeZone && activeZone.session === 'ny'      ? 'active-window' : ''}`;
   document.getElementById('sbLondonTimer').textContent  = formatTimeUntil(getTimeUntilKillZone(londonZone));
   document.getElementById('sbOverlapTimer').textContent = formatTimeUntil(getTimeUntilKillZone(overlapZone));
   document.getElementById('sbNyTimer').textContent      = formatTimeUntil(getTimeUntilKillZone(nyZone));
 
   const nextZone = getNextBTMMKillZone();
-  document.getElementById('sbNext').innerHTML = `Next Kill Zone: <strong>${nextZone.name} &mdash; ${nextZone.sastStart} SAST / ${pad2(nextZone.startGMT)}:${nextZone.startGMT % 1 ? '15' : '00'} GMT</strong>`;
+  document.getElementById('sbNext').innerHTML = `Next Session: <strong>${nextZone.name} &mdash; ${nextZone.sastStart} SAST / ${nextZone.gmtStart} GMT</strong>`;
 }
 
 function updateRiskCalc() {
