@@ -103,6 +103,26 @@ def test_shark_fin_buy_is_the_mirror():
     assert sf["direction"] == "bullish" and sf["entry_ready"] and sf["location_pips"] == 35.0
 
 
+def test_shark_fin_only_ready_with_the_800_ema_bias():
+    fast = [50.0] * 24 + [72.0, 75.0, 64.0, 58.0]
+    bars = _fin_bars(28, (24, 25), 1.1030)
+    against = r.detect_shark_fin(bars, _tdi(fast), ASIAN, PIP, bias_bullish=True)   # sell vs bullish bias
+    assert not against["entry_ready"] and against["reason"] == "against the 800 EMA bias"
+    assert r.detect_shark_fin(bars, _tdi(fast), ASIAN, PIP, bias_bullish=False)["entry_ready"]
+
+
+def test_shark_fin_plan_holds_without_the_13_exit():
+    p = r.trade_plan(1.1000, "bearish", 1.1010, PIP, adr=60 * PIP, exit_13=False)
+    m = r.manage_trade(p, "bearish", [_bar(0, 1.0998, 1.1004, 1.0996, 1.1003)], [1.1001])
+    assert m["outcome"] == "open" and "hold to the stop or TP1" in p["exit_rules"]
+
+
+def test_confirmed_mw_counts_half_in_the_score():
+    items = [False] * 13
+    items[9] = True                                            # only the M/W item
+    assert core._weighted_checklist(items) < 1 and core._weighted_checklist([True] * 13) == 13
+
+
 def test_shark_fin_needs_a_valid_asian_range():
     fast = [50.0] * 24 + [72.0, 75.0, 64.0, 58.0]
     sf = r.detect_shark_fin(_fin_bars(28, (24, 25), 1.1030), _tdi(fast), {"valid": False}, PIP)

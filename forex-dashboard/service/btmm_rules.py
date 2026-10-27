@@ -162,9 +162,11 @@ def _no_fin(reason: str) -> dict:
 
 
 def detect_shark_fin(bars: list[dict], ts: dict, asian: dict, unit: float,
-                     lookback: int = SF_LOOKBACK) -> dict:
+                     lookback: int = SF_LOOKBACK, bias_bullish: Optional[bool] = None) -> dict:
     """Course p.45-46. `direction` is the TRADE direction: a fin above the
-    upper band (overbought) is a sell."""
+    upper band (overbought) is a sell. With `bias_bullish` (price above the
+    800 EMA) a fin only becomes entry_ready in the bias direction (user
+    decision 2026-10-27: replay +0.15R gross with the bias vs +0.10R)."""
     n = len(ts["fast"])
     if n < lookback + 2 or not asian.get("valid"):
         return _no_fin("no valid Asian range" if n >= lookback + 2 else "not enough bars")
@@ -212,13 +214,16 @@ def detect_shark_fin(bars: list[dict], ts: dict, asian: dict, unit: float,
              else "Shark Fin" if fresh(best["fin_bars_ago"]) else None)
     best["blood_in_water"] = fresh(best["bitw_bars_ago"])
     best["entry"] = entry
-    best["entry_ready"] = bool(entry and still and best["overbought"] and best["location_ok"])
+    best["with_bias"] = bias_bullish is None or bias_bullish == (not sell)
+    best["entry_ready"] = bool(entry and still and best["overbought"] and best["location_ok"]
+                               and best["with_bias"])
     best["confidence"] = ("high" if best["entry_ready"] and best["blood_in_water"]
                           else "medium" if best["entry_ready"] else "low")
     if not best["entry_ready"]:
         best["reason"] = ("price not 25-50 pips beyond the Asian range" if not best["location_ok"]
                           else f"RSI did not reach {TDI_OB:.0f}/{TDI_OS:.0f}" if not best["overbought"]
                           else "no fresh signal-line or baseline cross" if not entry
+                          else "against the 800 EMA bias" if not best["with_bias"]
                           else "RSI already back the other way")
     return best
 
@@ -356,10 +361,12 @@ def detect_mm_levels(bars: list[dict], e13, e50, e200, e800) -> dict:
 # ── Trade plan and management ─────────────────────────────────────────────────
 
 def trade_plan(entry: float, direction: str, anchor: float, unit: float,
-               adr: float, e200: Optional[float] = None) -> dict:
+               adr: float, e200: Optional[float] = None, exit_13: bool = True) -> dict:
     """Stop 5 pips beyond `anchor` (shift candle / HOD-LOD / spike); TP1 = 20
     pips (ADR < 100 pips) or 30 pips, never under 1:1; TP2 = the 200 EMA when
-    it is past TP1, else 2x TP1's distance; stop to break-even at 1:1."""
+    it is past TP1, else 2x TP1's distance; stop to break-even at 1:1.
+    exit_13=False (Shark Fin, user decision 2026-10-27) holds to the stop or
+    TP1: the 13 EMA exit cut the fin's replay edge from +0.10R to +0.01R."""
     sell = direction == "bearish"
     sgn = -1 if sell else 1
     sl = anchor + SL_BUFFER_PIPS * unit if sell else anchor - SL_BUFFER_PIPS * unit
@@ -373,15 +380,18 @@ def trade_plan(entry: float, direction: str, anchor: float, unit: float,
     tp2 = e200 if (e200 is not None and (e200 - tp1) * sgn > 0) else entry + sgn * 2 * t1
     return {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
             "break_even_at": entry + sgn * risk, "risk": risk,
-            "rr_tp1": round(t1 / risk, 2) if risk else None,
-            "exit_rules": ["stop to break-even at 1:1",
-                           "exit on a close back over the 13 EMA",
-                           "exit when the RSI line reaches the opposite band and re-crosses the signal line"]}
+            "rr_tp1": round(t1 / risk, 2) if risk else None, "exit_13": exit_13,
+            "exit_rules": ["stop to break-even at 1:1"]
+                          + (["exit on a close back over the 13 EMA"] if exit_13 else ["hold to the stop or TP1"])
+                          + ["exit when the RSI line reaches the opposite band and re-crosses the signal line"]}
 
 
 def manage_trade(plan: dict, direction: str, bars_after: list[dict], e13_after: list[float]) -> dict:
     """Walk the bars after entry: stop first (same-bar ties count against
-    us), then TP1, then break-even at 1:1, then a close back over the 13 EMA."""
+    us), then TP1, then break-even at 1:1, then a close back over the 13 EMA
+    (skipped when the plan has exit_13=False)."""
+    if not plan.get("exit_13", True):
+        e13_after = []
     sell = direction == "bearish"
     entry, sl, tp1, be = plan["entry"], plan["sl"], plan["tp1"], plan["break_even_at"]
     moved = False

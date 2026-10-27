@@ -3834,7 +3834,8 @@ function analyzePair(pair, candles, isRealData, blockedCurrencies) {
   if (btmmAsianRange && btmmAsianRange.valid) patternBonus += 1; // Valid Asian range < 50 pips
   if (btmmStopHunt && btmmStopHunt.active && huntDir === bonusDir) patternBonus += 2; // Stop hunt detected
   // M/W, Shark Fin and Half Batman use the course rules when the service has them
-  if (ruleMW) { if (ruleMW.confirmed && ruleMW.pattern === (bonusDir === 'bullish' ? 'W' : 'M')) patternBonus += 2; }
+  // confirmed M/W counts for less (+1): it fires often and showed no replay edge (2026-10-27)
+  if (ruleMW) { if (ruleMW.confirmed && ruleMW.pattern === (bonusDir === 'bullish' ? 'W' : 'M')) patternBonus += 1; }
   else if (btmmMWPattern && btmmMWPattern.formed && agrees(btmmMWPattern)) patternBonus += 2; // M/W pattern forming
   if (btmmLevelCount && btmmLevelCount.level === 3) patternBonus += 1; // Level 3 - reversal imminent
   if (ruleShark) { if (ruleShark.entry_ready && agrees(ruleShark)) patternBonus += ruleShark.blood_in_water ? 4 : 3; }

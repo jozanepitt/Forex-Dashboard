@@ -1023,7 +1023,18 @@ def _btmm_checklist(bull: bool, *, stack, tdi, kz, adr_c, amd, asian, push_hunt,
     ]
 
 
-def _composite_score(stack_score: int, checklist_score: int, bull: bool) -> int:
+# Score weight per checklist item. Confirmed M/W (item 10) counts half: it
+# fires on most bars and the 2026-10-27 replay found no edge in it
+# (-0.03R gross over 8,091 trades). User decision 2026-10-27.
+CHECKLIST_WEIGHTS = (1, 1, 1, 1, 1, 1, 1, 1, 1, 0.5, 1, 1, 1)
+
+
+def _weighted_checklist(items: list[bool]) -> float:
+    """Weighted checklist points, rescaled to the 13-point range."""
+    return sum(w for w, ok in zip(CHECKLIST_WEIGHTS, items) if ok) * 13 / sum(CHECKLIST_WEIGHTS)
+
+
+def _composite_score(stack_score: int, checklist_score: float, bull: bool) -> int:
     """-100..+100, signed by the trade direction: EMA stack (-50..+50) plus the
     checklist (0..50 toward the trade). Audit 2026-10-15: the checklist part
     used to always count upward, so a sell topped out at about +30 and an A+
@@ -1078,7 +1089,8 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     mm_levels = btmm_rules.detect_mm_levels(bars, e13_arr, e50_arr, calc_ema(closes, 200),
                                             calc_ema(closes, 800))
     mw        = btmm_rules.confirm_mw(bars, detect_mw_pattern(bars), e13_arr, tdi_s)
-    shark     = btmm_rules.detect_shark_fin(bars, tdi_s, asian, unit)
+    shark     = btmm_rules.detect_shark_fin(bars, tdi_s, asian, unit,
+                                            bias_bullish=closes[-1] > stack["e800"])
     straight  = detect_straightaway(bars)
     hod_lod   = detect_hod_lod(bars, symbol=symbol)
     half_bat  = btmm_rules.detect_half_batman(bars, e13_arr, e50_arr, tdi_s, unit)
@@ -1096,7 +1108,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         push_hunt=push_hunt, hunt=hunt, tdi_leg=tdi_leg, level=level, mw=mw, shark=shark,
         hod_lod=hod_lod, half_bat=half_bat, tdi_div=tdi_div)
     checklist_score = sum(checklist)
-    score = _composite_score(stack["score"], checklist_score, setup_bullish)
+    score = _composite_score(stack["score"], _weighted_checklist(checklist), setup_bullish)
 
     # A+ = strong score toward the trade + most of the checklist + an in-direction
     # Level II cascade + a kill zone. Symmetric for buys and sells.
@@ -1118,7 +1130,8 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         last3 = bars[-3:]
         anchor = min(b["low"] for b in last3) if setup_bullish else max(b["high"] for b in last3)
         anchor_kind = "shift candle (last 3 bars)"
-    plan = btmm_rules.trade_plan(entry, direction, anchor, unit, adr, stack["e200"])
+    plan = btmm_rules.trade_plan(entry, direction, anchor, unit, adr, stack["e200"],
+                                 exit_13=not anchor_kind.startswith("Shark Fin"))
     plan["anchor"] = anchor_kind
     sl, tp1, tp2 = plan["sl"], plan["tp1"], plan["tp2"]
 
