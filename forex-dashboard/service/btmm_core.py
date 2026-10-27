@@ -727,82 +727,7 @@ def _gate_result(gates: list[dict], direction: str,
     }
 
 
-def detect_safety_trade(bars: list[dict], stack: dict, asian: dict, tdi_leg: dict,
-                         level: dict, mw: dict, nameable: dict, h1mtf: dict,
-                         kz: Optional[str], symbol: Optional[str] = None) -> dict:
-    """
-    Safety Trade — the canonical BTMM setup (dashboard's default for alerting
-    and backtesting). Real port of the frontend's detectSafetyTrade, replacing
-    the legacy "safety" proxy that derived direction from EMA800 bias alone
-    and had no candlestick, Level, or M/W confirmation of any kind.
-    """
-    current_price = bars[-1]["close"]
-    pip = instruments.pip_size(symbol, current_price)
-
-    # Direction: TDI 2nd leg drives bias; nameable candle must agree.
-    direction = "neutral"
-    if tdi_leg.get("leg") == 2:
-        direction = tdi_leg["direction"]
-
-    asian_valid = bool(asian.get("valid"))
-    in_kz = kz in ("London", "NY", "Overlap")   # excludes Asian, matching the frontend
-    pierced_asian = asian_valid and (
-        current_price <= asian["low"] + 5 * pip or current_price >= asian["high"] - 5 * pip
-    )
-    tdi_2nd = tdi_leg.get("leg") == 2 and tdi_leg.get("confidence") != "low"
-
-    dist50_pips = abs(current_price - stack["e50"]) / pip if stack.get("e50") else 999
-    dist200_pips = abs(current_price - stack["e200"]) / pip if stack.get("e200") else 999
-    ema_bounce = (6 <= dist50_pips <= 8) or dist200_pips < 25
-
-    candle_agrees = (nameable.get("found") and nameable.get("name") in ("RRT", "Hammer", "Doji")
-                      and nameable.get("direction") == direction)
-
-    # Checklist wants Level 1 specifically (the early, freshest level), not a
-    # matured II/III cascade, and — same as btmm_123's _level_score — the
-    # cascade's own direction must match this setup's direction.
-    fresh_level = level.get("level") == 1 and level.get("direction") == direction
-
-    # Checklist rule 4's trailing "...forming M or W" clause; the Shark-Fin/
-    # band half is covered by tdi_2nd above.
-    mw_confirms = mw.get("detected") and (
-        (mw.get("pattern") == "W" and direction == "bullish") or
-        (mw.get("pattern") == "M" and direction == "bearish")
-    )
-
-    # PDF pairs "pullback to 50 EMA" with "and the 50% level of the Asian
-    # range" as a joint confluence (pp.227-231).
-    near_50_level = asian_valid and abs(current_price - asian["mid"]) / pip <= 10
-
-    h1_aligned = (not h1mtf.get("valid") or h1mtf.get("trend") == direction
-                  or h1mtf.get("trend") == "neutral")
-
-    gates = [
-        {"name": "Kill Zone Active",       "pass": in_kz},
-        {"name": "Asian Range Valid",      "pass": asian_valid},
-        {"name": "Asian Box Pierce/Touch", "pass": pierced_asian},
-        {"name": "TDI 2nd Leg Confirmed",  "pass": tdi_2nd},
-        {"name": "50/200 EMA Bounce Zone", "pass": ema_bounce},
-        {"name": "Nameable Candle Agrees", "pass": candle_agrees},
-        {"name": "Level 1 (Fresh)",        "pass": fresh_level},
-        {"name": "M/W Pattern Confirms",   "pass": mw_confirms},
-        {"name": "Near Asian 50% Level",   "pass": near_50_level},
-        {"name": "H1 MTF Aligned",         "pass": h1_aligned},
-    ]
-
-    entry = sl = tp1 = tp2 = 0.0
-    if direction != "neutral" and asian_valid:
-        entry = current_price
-        if direction == "bullish":
-            sl  = asian["low"] - 5 * pip
-            tp1 = asian["high"]
-            tp2 = asian["high"] + (asian["high"] - asian["low"])
-        else:
-            sl  = asian["high"] + 5 * pip
-            tp1 = asian["low"]
-            tp2 = asian["low"] - (asian["high"] - asian["low"])
-
-    return _gate_result(gates, direction, entry, sl, tp1, tp2)
+# Safety Trade: see btmm_rules.detect_safety_trade (the course checklist, all five items).
 
 
 def _h1_aligned(h1mtf: Optional[dict], direction: str) -> bool:
@@ -1071,6 +996,8 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     # signal cross) -- the same rules the ID50 tab uses.
     import btmm_id50
     id50 = btmm_id50.analyze_pair(symbol, bars) if symbol else {"grade": "NO-DATA"}
+    safety = btmm_rules.detect_safety_trade(bars, mw, mm_levels, tdi_leg, e13_arr, e50_arr, e200_arr,
+                                            unit, adr)
     tdi_div   = detect_tdi_divergence(bars)
     push_hunt = detect_3push_stop_hunt(bars)
 
@@ -1129,12 +1056,10 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
     else:
         candidates = []
 
-        # Safety Trade / 22 Trade / 50-50 Bounce / Three-Drive — real detector ports (see above).
+        # Safety Trade (course checklist) / 22 Trade / 50-50 Bounce (ID50) / Three-Drive
         h1mtf = resample_to_h1(bars)
-        nameable = detect_nameable_candle(bars)
         for setup_key, res in (
-            # Safety Trade's "Level 1" = the course's market-maker level (13/50 cross), not the EMA count
-            ("safety",     detect_safety_trade(bars, stack, asian, tdi_leg, mm_levels, mw, nameable, h1mtf, kz, symbol)),
+            ("safety",     safety),
             ("trade22",    detect_22_trade(bars, asian, hunt, hod_lod, tdi, symbol, h1mtf)),
             ("bounce5050", _id50_as_setup(id50)),
             ("threeDrive", detect_three_drive_pattern(bars, shark, tdi_div, mw, symbol, h1mtf)),
@@ -1201,6 +1126,7 @@ def analyze(bars: list[dict], symbol: Optional[str] = None) -> dict:
         "advanced_mw":     adv_mw,
         "london_pattern":  london,
         "mayo_mw":         mayo,
+        "safety":          safety,
         "nyc_reversal":    nyc,
         "weekly_cycle":    weekly,
         "id50":            {k: id50.get(k) for k in ("grade", "setup", "direction", "checks", "notes",

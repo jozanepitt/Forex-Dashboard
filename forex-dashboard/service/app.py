@@ -260,7 +260,7 @@ def btmm_rules_route():
             continue
         out[sym] = {k: a.get(k) for k in ("shark_fin", "mw_pattern", "half_batman", "mm_levels",
                                           "advanced_mw", "london_pattern", "mayo_mw", "nyc_reversal",
-                                          "weekly_cycle", "straightaway", "id50",
+                                          "weekly_cycle", "straightaway", "id50", "safety",
                                           "trade_plan", "session", "cycle", "kz", "setup_bullish")}
     _BTMM_RULES_CACHE.update(ts=now, payload=out)
     return jsonify(out)

@@ -167,6 +167,32 @@ def test_mayo_needs_level_2_a_200_test_and_the_m_w_entry():
     assert not r.detect_mayo_mw(bars, {"detected": True, "pattern": "M"}, e13, far, ts, lv2, PIP)["detected"]
 
 
+def _safety_case(level=1, leg=2, rrt=True):
+    """M: high at bar 5, then the 13 crosses under the 50 at bar 20 (the lock)."""
+    n = 40
+    bars = [_bar(i, 1.0996, 1.1005, 1.0995, 1.1000) for i in range(n)]   # plain up candles, not dojis
+    bars[5] = _bar(5, 1.1000, 1.1030, 1.0998, 1.1010)          # leg 1 high
+    if rrt:
+        bars[-2] = _bar(n - 2, 1.0985, 1.1001, 1.0984, 1.0999)
+        bars[-1] = _bar(n - 1, 1.0999, 1.1000, 1.0983, 1.0985)
+    e13 = [1.1010] * 20 + [1.0990] * 20
+    e50, e200 = [1.1000] * n, [1.0950] * n
+    lv = {"level": level, "direction": "bearish"}
+    tl = {"leg": leg, "direction": "bearish"}
+    return r.detect_safety_trade(bars, {"detected": True, "pattern": "M"}, lv, tl, e13, e50, e200, PIP, 0.0060)
+
+
+def test_safety_trade_needs_all_five_course_checks():
+    ok = _safety_case()
+    assert ok["active"] and ok["direction"] == "bearish" and ok["gatesPassed"] == 5
+    assert ok["sl"] > ok["entry"] > ok["tp1"]
+    assert not _safety_case(level=2)["active"]                  # Level 1 only
+    assert not _safety_case(leg=1)["active"]                    # TDI 2nd leg back inside the band
+    assert not _safety_case(rrt=False)["active"]                # nameable 2nd leg
+    names = [g["name"] for g in ok["gates"]]
+    assert not any("Kill Zone" in g or "Asian" in g or "H1" in g for g in names)
+
+
 def test_straightaway_is_a_level_1_consolidation_break():
     box = [_bar(i, 1.1000, 1.1005, 1.0995, 1.1001) for i in range(12)]
     brk = box + [_bar(12, 1.1002, 1.1012, 1.1001, 1.1010)]

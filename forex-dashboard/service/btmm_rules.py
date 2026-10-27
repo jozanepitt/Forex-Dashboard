@@ -306,6 +306,65 @@ def detect_mayo_mw(bars: list[dict], mw: dict, e13: list[float], e200: list[floa
     return {**none, "reason": "no 13 close / candle / TDI yet"}
 
 
+# ── Safety Trade ──────────────────────────────────────────────────────────────
+
+SAFETY_CROSS_BARS = 40        # the lock / EMA cross must be this recent (10h of M15)
+
+
+def _recent_cross(fast: list[float], slow: list[float], bull: bool, within: int) -> Optional[int]:
+    n = min(len(fast), len(slow))
+    for i in range(n - 1, max(0, n - within) - 1, -1):
+        if i >= 1 and ((fast[i - 1] <= slow[i - 1] and fast[i] > slow[i]) if bull
+                       else (fast[i - 1] >= slow[i - 1] and fast[i] < slow[i])):
+            return i
+    return None
+
+
+def detect_safety_trade(bars: list[dict], mw: dict, mm_levels: dict, tdi_leg: dict,
+                        e13: list[float], e50: list[float], e200: list[float],
+                        unit: float, adr: float) -> dict:
+    """Course Safety Trade checklist (its dedicated PDF, p.3), all five must pass:
+      1. the Anchor / Peak Formation "locked" -- the 13/50 cross after the
+         M/W's 1st leg
+      2. Level 1 (the early, freshest level)
+      3. a 13/50 or 50/200 EMA cross
+      4. TDI Shark Fin: 1st leg outside the band, 2nd leg inside forming M/W
+      5/6. price formed the M (short) / W (long) with a nameable 2nd leg:
+         RRT, hammer or doji
+    2026-10-27: replaces a version with extra gates the checklist never asks
+    for (kill zone, Asian pierce, 50/200 bounce zone, Asian 50%, H1)."""
+    from btmm_core import detect_nameable_candle, _gate_result
+    if not mw.get("detected") or mw.get("pattern") not in ("M", "W") or len(bars) < SAFETY_CROSS_BARS:
+        return {**_gate_result([], "neutral", 0.0, 0.0, 0.0, 0.0), "active": False}
+    sell = mw["pattern"] == "M"
+    d = "bearish" if sell else "bullish"
+    win = bars[-SAFETY_CROSS_BARS:]
+    leg1_i = (max(range(len(win)), key=lambda k: win[k]["high"]) if sell
+              else min(range(len(win)), key=lambda k: win[k]["low"]))
+    lock = _recent_cross(e13, e50, not sell, SAFETY_CROSS_BARS)
+    locked = lock is not None and lock - (len(bars) - SAFETY_CROSS_BARS) > leg1_i
+    any_cross = locked or _recent_cross(e50, e200, not sell, SAFETY_CROSS_BARS) is not None
+    level1 = mm_levels.get("level") == 1 and mm_levels.get("direction") == d
+    tdi_ok = tdi_leg.get("leg") == 2 and tdi_leg.get("direction") == d
+    nc = detect_nameable_candle(bars[-2:])
+    names = ("RRT", "Doji", "Shooting Star") if sell else ("RRT", "Doji", "Hammer")
+    candle = nc.get("found") and nc.get("name") in names and nc.get("direction") in (d, "neutral")
+    gates = [
+        {"name": "Anchor / Peak Formation locked (13/50 cross after leg 1)", "pass": bool(locked)},
+        {"name": "Level 1",                                                 "pass": bool(level1)},
+        {"name": "13/50 or 50/200 EMA cross",                               "pass": bool(any_cross)},
+        {"name": "TDI Shark Fin: leg 1 outside, leg 2 inside (M/W)",        "pass": bool(tdi_ok)},
+        {"name": f"{mw['pattern']} with nameable 2nd leg (RRT/hammer/doji)", "pass": bool(candle)},
+    ]
+    entry = bars[-1]["close"]
+    anchor = max(x["high"] for x in bars[-8:]) if sell else min(x["low"] for x in bars[-8:])
+    plan = trade_plan(entry, d, anchor, unit, adr, e200[-1])
+    res = _gate_result(gates, d, entry, plan["sl"], plan["tp1"], plan["tp2"])
+    res["active"] = all(g["pass"] for g in gates)             # a checklist: every item
+    res["confidence"] = "high" if res["active"] else "none"
+    return res
+
+
 # ── Straightaway, NYC Reversal, weekly cycle ──────────────────────────────────
 
 SA_WINDOW = 12                # Level I consolidation looked at over 3h of M15
