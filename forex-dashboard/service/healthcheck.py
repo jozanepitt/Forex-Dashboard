@@ -87,7 +87,7 @@ def main() -> int:
         check("Discord webhook valid", False, str(e))
 
     # 4. Dashboard endpoints return data
-    for ep in ("/engulfing", "/id50", "/vwap9ema", "/tdi123", "/vwap-mr"):
+    for ep in ("/engulfing", "/id50", "/hodlob", "/tdi123", "/vwap-mr"):
         try:
             st, body = _get(ep, timeout=180)
             n = len(body.get("pairs", []))
@@ -101,7 +101,7 @@ def main() -> int:
         import cache
         import engulfing_strategy
         import btmm_id50
-        import vwap9ema_strategy
+        import hodlob_strategy
         import tdi_cycle_123
         import vwap_mean_reversion_strategy
         from config import DEFAULT_BACKFILL
@@ -132,9 +132,9 @@ def main() -> int:
                {"m15": ("15min", DEFAULT_BACKFILL), "1h": ("1h", DEFAULT_BACKFILL)},
                (btmm_id50.analyze_universe, alerts.alert_id50_setup))
 
-        _drive(vwap9ema_strategy.VWAP9EMA_UNIVERSE,
-               {"m5": ("5min", vwap9ema_strategy.M5_FETCH_LIMIT)},
-               (vwap9ema_strategy.analyze_universe, alerts.alert_vwap9ema_setup))
+        _drive(hodlob_strategy.HODLOB_UNIVERSE,
+               {"m15": ("15min", hodlob_strategy.M15_LIMIT)},
+               (hodlob_strategy.analyze_universe, alerts.alert_hodlob_setup))
 
         _drive(tdi_cycle_123.TDI123_UNIVERSE,
                {"1h": ("1h", DEFAULT_BACKFILL), "4h": ("4h", 200), "1d": ("1day", 60), "m15": ("15min", DEFAULT_BACKFILL)},

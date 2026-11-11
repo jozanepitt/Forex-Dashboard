@@ -462,7 +462,7 @@ td.mono{font-family:var(--font-mono)}
 
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
-  <button class="mode-tab" data-mode="vwap9ema">⚠ VWAP+9EMA</button>
+  <button class="mode-tab" data-mode="hodlob">🎯 HOD/LOB</button>
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="vwap_bounce">🪃 VWAP Bounce</button>
   <button class="mode-tab" data-mode="engulfing">🕯 Engulfing</button>
@@ -797,51 +797,43 @@ td.mono{font-family:var(--font-mono)}
     <div class="last-updated" id="lastUpdated">Last updated: --</div>
   </div>
 
-  <!-- ── VWAP+9EMA (live, UNVALIDATED — failed backtest 0/48) ──────────────── -->
-  <div class="table-container" id="vwap9emaContainer" style="display:none">
-    <div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:var(--red);padding:10px 14px;border-radius:6px;margin-bottom:12px;font-weight:600">
-      ⚠ Unvalidated — failed the honest MT5 backtest (0/48 combinations passed). Trade at your own judgment.
+  <!-- ── HOD/LOB + LOD/HOB (setup alerts, untested, not signals) ──────────── -->
+  <div class="table-container" id="hodlobContainer" style="display:none">
+    <div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.45);color:var(--yellow);padding:10px 14px;border-radius:6px;margin-bottom:12px;font-weight:600">
+      Setup alert, untested, not a signal. The research pass was negative after costs. This tab does not place a trade.
     </div>
     <div class="trend-controls">
-      <button class="trend-refresh-btn" id="vwap9emaRefreshBtn">Refresh Scanner</button>
-      <div class="trend-meta">VWAP+9EMA cross · full pair universe incl. BTC/USD, ETH/USD (same as TDI123) · London+NY session only</div>
+      <button class="trend-refresh-btn" id="hodlobRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta">HOD/LOB long · LOD/HOB short · M15 main, M5 on the main book · grades A and B · last 3 days</div>
     </div>
-    <div class="trend-summary" id="vwap9emaSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <div class="trend-summary" id="hodlobSummary">Click <b>Refresh Scanner</b> to compute.</div>
     <table class="trend-table">
       <thead>
         <tr>
+          <th>Time (UTC)</th>
+          <th>Time (SAST)</th>
           <th>Pair</th>
-          <th>Setup</th>
+          <th>TF</th>
+          <th>Direction</th>
           <th>Grade</th>
           <th>Entry</th>
           <th>Stop</th>
           <th>Target</th>
-          <th>VWAP</th>
-          <th>±1σ Band</th>
-          <th>±2σ Band</th>
-          <th>Session</th>
+          <th>Opposite side</th>
+          <th>Conditions</th>
         </tr>
       </thead>
-      <tbody id="vwap9emaTableBody"><tr><td colspan="10"style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+      <tbody id="hodlobTableBody"><tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>VWAP+9EMA (cross-only, ema=9, rr=2.0):</b> fires purely on the 9 EMA crossing the
-      session VWAP on the M5 chart — no pullback pattern, no volume-profile filter, no
-      volume-climax filter. Deliberately simplified per explicit user request; check volume/
-      context yourself before trading. London+NY session (UTC 09:00–23:00) only.
-      A cross is reported for up to 15 minutes (the last three closed M5 candles). Entry shown is the
-      newest candle's close, raw mid-price; real fills will differ slightly.
-      The VWAP and ±1σ/±2σ standard-deviation band columns are shown for your own reference
-      only — session-anchored, (H+L+C)/3 source, same as the VWAP line itself — and play no
-      part in the BUY/SELL signal.
-      <br><b>Grade A</b> (the only grade sent to Discord) = no opposite cross on the pair in the previous 2 hours,
-      stop no wider than 1.5× the M15 ATR, and on the right side of the H1 200 EMA; Discord also skips it within
-      60 minutes of high-impact news. Every other cross is <b>grade B</b> (shown here only). Hover a row for what an
-      A was missing.
-      <br><b>⚠ This exact rule has never been backtested</b> — it replaces the earlier
-      "vp-climax" variant (which failed its own honest backtest, 0/48) with a completely
-      different, simpler rule, not a re-tuned version of it. Zero historical validation on
-      any pair, including BTC/USD and ETH/USD.
+      <b>HOD/LOB</b> is a long: Asia hugs the high of day with a Bollinger squeeze, a London-morning
+      spike closes below the lower band and breaks the Asian low, TDI makes a lower low than price,
+      and the entry is the close back inside the bands. <b>LOD/HOB</b> is the short mirror.
+      The stop is beyond the spike. The target is the opposite band (the Asian far side is shown beside it).
+      <br><b>Grade A</b> = hug, squeeze, spike outside the band, Asian range break, TDI divergence, re-entry, and the 07:00–09:45 London window.
+      <b>Grade B</b> = the spike, the range break and the re-entry, with one soft check missing.
+      Anything weaker is not listed and not sent. Hover a condition for the detail.
+      Levels the videos never measured (hug 25%, squeeze vs the Asia-range median, the London clock) are written up in <b>service/hodlob_strategy.py</b>.
     </div>
   </div>
 
@@ -5509,7 +5501,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'engulfing' || mode === 'tdi123' || mode === 'vwap9ema' || mode === 'id50' || mode === 'vwap_bounce' || mode === 'sweep';
+    const isScanner = mode === 'vwap_mr' || mode === 'engulfing' || mode === 'tdi123' || mode === 'hodlob' || mode === 'id50' || mode === 'vwap_bounce' || mode === 'sweep';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -5542,7 +5534,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     const engulfingContainer = document.getElementById('engulfingContainer');
     const tdi123Container  = document.getElementById('tdi123Container');
     const id50Container    = document.getElementById('id50Container');
-    const vwap9emaContainer = document.getElementById('vwap9emaContainer');
+    const hodlobContainer = document.getElementById('hodlobContainer');
     const vwapBounceContainer = document.getElementById('vwapBounceContainer');
     if (vwapBounceContainer) vwapBounceContainer.style.display = (mode === 'vwap_bounce') ? 'block' : 'none';
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
@@ -5550,7 +5542,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (engulfingContainer) engulfingContainer.style.display = (mode === 'engulfing') ? 'block' : 'none';
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
     if (id50Container)    id50Container.style.display    = (mode === 'id50')      ? 'block' : 'none';
-    if (vwap9emaContainer) vwap9emaContainer.style.display = (mode === 'vwap9ema') ? 'block' : 'none';
+    if (hodlobContainer) hodlobContainer.style.display = (mode === 'hodlob') ? 'block' : 'none';
     const sweepContainer = document.getElementById('sweepContainer');
     if (sweepContainer) sweepContainer.style.display = (mode === 'sweep') ? 'block' : 'none';
 
@@ -5561,7 +5553,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'engulfing') loadEngulfing();
     if (mode === 'tdi123')    loadTdi123();
     if (mode === 'id50')      loadId50();
-    if (mode === 'vwap9ema')  loadVwap9ema();
+    if (mode === 'hodlob')    loadHodlob();
     if (mode === 'vwap_bounce') loadVwapBounce();
     if (mode === 'sweep')     loadSweep();
   });
@@ -6215,68 +6207,64 @@ function _crtGradeCell(g) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// VWAP+9EMA (live, UNVALIDATED — failed backtest 0/48) — loader + renderer
+// HOD/LOB + LOD/HOB — recent graded setups
 // ═════════════════════════════════════════════════════════════════════════════
 
-async function loadVwap9ema() {
-  const tbody   = document.getElementById('vwap9emaTableBody');
-  const summary = document.getElementById('vwap9emaSummary');
-  const btn     = document.getElementById('vwap9emaRefreshBtn');
+async function loadHodlob() {
+  const tbody   = document.getElementById('hodlobTableBody');
+  const summary = document.getElementById('hodlobSummary');
+  const btn     = document.getElementById('hodlobRefreshBtn');
   if (btn) btn.disabled = true;
-  summary.textContent = 'Fetching M5 candles…';
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  summary.textContent = 'Reading cached M15 / M5 candles…';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
 
   const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
   try {
-    const resp = await fetch(`${baseUrl}/vwap9ema`);
+    const resp = await fetch(`${baseUrl}/hodlob`);
     if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
-    const data = await resp.json();
-    renderVwap9emaTable(data);
+    renderHodlobTable(await resp.json());
   } catch (err) {
-    console.error('VWAP+9EMA load failed', err);
-    summary.innerHTML = `<span style="color:var(--red)">Failed to load VWAP+9EMA scanner: ${err.message}</span>`;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+    console.error('HOD/LOB load failed', err);
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load HOD/LOB scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
   } finally {
     if (btn) btn.disabled = false;
   }
 }
 
-function renderVwap9emaTable(data) {
-  const tbody   = document.getElementById('vwap9emaTableBody');
-  const summary = document.getElementById('vwap9emaSummary');
-
-  const rows = (data.pairs || []).map(p => {
-    const sessionCell = p.in_active_session
-      ? '<span style="color:var(--green)">London — active</span>'
-      : '<span style="color:var(--text-muted)">Outside session</span>';
-    // VWAP +-1sigma/+-2sigma bands -- visual reference only, no bearing on the
-    // BUY/SELL signal (still purely the 9EMA/VWAP cross).
-    const band1 = (p.vwap_lower_1 != null && p.vwap_upper_1 != null)
-      ? `${_crtFmtPrice(p.vwap_lower_1, p.symbol)} / ${_crtFmtPrice(p.vwap_upper_1, p.symbol)}` : '—';
-    const band2 = (p.vwap_lower_2 != null && p.vwap_upper_2 != null)
-      ? `${_crtFmtPrice(p.vwap_lower_2, p.symbol)} / ${_crtFmtPrice(p.vwap_upper_2, p.symbol)}` : '—';
-    return `<tr title="${(p.notes || '').replace(/"/g, '&quot;')}">
+function renderHodlobTable(data) {
+  const tbody   = document.getElementById('hodlobTableBody');
+  const summary = document.getElementById('hodlobSummary');
+  const setups = (data.setups || []).filter(p => p.grade === 'A' || p.grade === 'B');
+  const checks = (p) => (p.conditions || []).map(c => {
+    const detail = String(c.detail || '').replace(/"/g, '&quot;');
+    const col = c.pass ? 'var(--green)' : 'var(--red)';
+    return `<span style="color:${col}" title="${detail}">${c.pass ? '✓' : '✗'} ${c.name}</span>`;
+  }).join('<br>');
+  const rows = setups.map(p => `<tr title="${String(p.notes || '').replace(/"/g, '&quot;')}">
+      <td style="color:var(--text-muted)">${p.time_utc || '—'}</td>
+      <td style="color:var(--text-muted)">${p.time_sast || '—'}</td>
       <td><b>${p.symbol}</b></td>
-      <td>${_crtSetupCell(p)}</td>
-      <td>${(p.grade === 'A' || p.grade === 'B') ? _crtGradeCell(p.grade) : '—'}</td>
+      <td>${p.timeframe || 'M15'}</td>
+      <td>${p.setup === 'BUY'
+        ? '<span style="color:var(--green);font-weight:700">HOD/LOB long</span>'
+        : '<span style="color:var(--red);font-weight:700">LOD/HOB short</span>'}</td>
+      <td>${_crtGradeCell(p.grade)}</td>
       <td>${p.entry != null ? _crtFmtPrice(p.entry, p.symbol) : '—'}</td>
       <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
       <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
-      <td>${p.vwap != null ? _crtFmtPrice(p.vwap, p.symbol) : '—'}</td>
-      <td style="color:var(--text-muted)">${band1}</td>
-      <td style="color:var(--text-muted)">${band2}</td>
-      <td>${sessionCell}</td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = rows || '<tr><td colspan="10" style="text-align:center;padding:24px">No data.</td></tr>';
-
-  const stale = (data.stale_pairs && data.stale_pairs.length)
-    ? ` <span style="color:var(--yellow)">⚠ ${data.stale_pairs.length} stale</span>` : '';
-  summary.innerHTML = `<span style="color:var(--green);font-weight:600">${data.buys || 0} BUY</span> · ` +
-    `<span style="color:var(--red);font-weight:600">${data.sells || 0} SELL</span>${stale}`;
+      <td>${p.opposite != null ? _crtFmtPrice(p.opposite, p.symbol) : '—'}</td>
+      <td style="font-size:.72rem;line-height:1.35">${checks(p)}</td>
+    </tr>`).join('');
+  tbody.innerHTML = rows || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">No HOD/LOB or LOD/HOB setup in the last 3 days.</td></tr>';
+  summary.innerHTML = `Scanned <b>${data.scanned || 0}</b> symbols · ` +
+    `<span style="color:var(--green);font-weight:600">${data.grade_a || 0} grade A</span> · ` +
+    `<span style="color:var(--cyan);font-weight:600">${data.grade_b || 0} grade B</span> · ` +
+    `<span style="color:var(--green)">${data.buys || 0} long</span> · ` +
+    `<span style="color:var(--red)">${data.sells || 0} short</span>`;
 }
 
-document.getElementById('vwap9emaRefreshBtn')?.addEventListener('click', loadVwap9ema);
+document.getElementById('hodlobRefreshBtn')?.addEventListener('click', loadHodlob);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // VWAP Bounce (M15, UNVALIDATED) — loader + renderer
@@ -6902,7 +6890,7 @@ if (id50Btn) id50Btn.addEventListener('click', loadId50);
       id50: typeof loadId50 === 'function' ? loadId50 : null,
       vwap_mr: typeof loadVwapMr === 'function' ? loadVwapMr : null,
       vwap_bounce: typeof loadVwapBounce === 'function' ? loadVwapBounce : null,
-      vwap9ema: typeof loadVwap9ema === 'function' ? loadVwap9ema : null,
+      hodlob: typeof loadHodlob === 'function' ? loadHodlob : null,
       sweep: typeof loadSweep === 'function' ? loadSweep : null,
     };
     const loader = (typeof currentMode !== 'undefined') ? scannerLoaders[currentMode] : null;

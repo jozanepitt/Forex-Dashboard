@@ -21,7 +21,7 @@ from config import (
     BTMM_ID50_GRADE_A_ONLY, BTMM_ID50_WATCH_ALERTS_ENABLED, BTMM_ID50_CHECKLIST_DISCORD,
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
-    VWAP9EMA_ALERTS_ENABLED, VWAP9EMA_GRADE_A_ONLY, VWAP9EMA_NEWS_FILTER,
+    HODLOB_ALERTS_ENABLED, HODLOB_GRADE_A_ONLY,
     EMA1350_ALERTS_ENABLED, EMA1350_ALERT_GRADES, EMA1350_NEWS_FILTER,
     SWEEP_ALERTS_ENABLED, SWEEP_GRADE_A_ONLY, SWEEP_NEWS_FILTER,
     VWAP_BOUNCE_ALERTS_ENABLED, VWAP_BOUNCE_GRADE_A_ONLY, VWAP_BOUNCE_NEWS_FILTER,
@@ -1522,76 +1522,133 @@ def alert_vwap_mr_watch(pair: str, row: dict):
         log.info("VWAP_MR watch alert sent: %s %s", pair, setup)
 
 
-def alert_vwap9ema_setup(pair: str, row: dict):
-    """Fire when the live VWAP+9EMA scanner (vp-climax variant) confirms a
-    BUY/SELL setup. UNVALIDATED strategy -- see vwap9ema_strategy.py's
-    module docstring. Every embed carries a visible warning so this can
-    never be confused with a proven Grade-A signal from another strategy.
+# One Discord post per symbol + direction + trading day. The file is the
+# record across restarts; the jsonl next to it is the review log.
+HODLOB_SEEN_FILE = Path(__file__).parent / "hodlob_seen.json"
+HODLOB_LOG_FILE = Path(__file__).parent / "hodlob_alerts.jsonl"
+_HODLOB_SEEN_CAP = 4000
+
+
+def _hodlob_seen() -> set:
+    try:
+        return set(json.loads(HODLOB_SEEN_FILE.read_text()))
+    except Exception:
+        return set()
+
+
+def _hodlob_mark(key: str) -> None:
+    seen = list(_hodlob_seen())
+    if key not in seen:
+        seen.append(key)
+    try:
+        HODLOB_SEEN_FILE.write_text(json.dumps(seen[-_HODLOB_SEEN_CAP:]))
+    except Exception:
+        log.debug("hodlob seen file not written", exc_info=True)
+
+
+def _hodlob_log(record: dict) -> None:
+    try:
+        with HODLOB_LOG_FILE.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except Exception:
+        log.warning("hodlob alert log failed", exc_info=True)
+
+
+def alert_hodlob_setup(pair: str, row: dict):
+    """Post one HOD/LOB or LOD/HOB setup. Setup alert only — not an order.
+
+    A and B both go out unless HODLOB_GRADE_A_ONLY is set. The same spike
+    is not posted twice: the key is symbol + trading day + pattern, so an
+    M5 reading of a day that M15 already sent is dropped too.
     """
-    if not _signal_allowed("VWAP9EMA", "M5", row.get("grade")):   # DISCORD_SIGNALS allowlist
+    if not _signal_allowed("HODLOB", row.get("timeframe") or "M15", row.get("grade")):
         return
-    if not VWAP9EMA_ALERTS_ENABLED:
+    if not HODLOB_ALERTS_ENABLED:
+        return
+    grade = row.get("grade")
+    if grade not in ("A", "B"):
+        return
+    if HODLOB_GRADE_A_ONLY and grade != "A":
         return
     setup = row.get("setup")
-    if setup not in ("BUY", "SELL"):
+    if setup not in ("BUY", "SELL") or not row.get("fresh"):
+        return
+    entry, sl = row.get("entry"), row.get("sl")
+    if entry is None or sl is None or row.get("spike_ts") is None:
+        log.debug("HODLOB SUPPRESSED %s: incomplete setup", pair)
+        return
+    if setup == "BUY" and not sl < entry:
+        return
+    if setup == "SELL" and not sl > entry:
         return
 
-    entry, sl, tp1 = row.get("entry"), row.get("sl"), row.get("tp1")
-    if not (entry and sl and tp1):
-        log.debug("VWAP9EMA SUPPRESSED %s: incomplete trade plan", pair)
+    import session_clock
+    day = session_clock.vwap_day_start(int(row["spike_ts"]))
+    key = f"{pair}|{day}|{row.get('pattern')}"
+    if key in _hodlob_seen():
         return
 
-    grade = row.get("grade")
-    if grade != "A" and (VWAP9EMA_GRADE_A_ONLY or grade != "B"):
-        log.debug("VWAP9EMA FILTERED %s: grade %s", pair, grade)
-        return
-
-    if not _check_rr(entry, sl, tp1, "buy" if setup == "BUY" else "sell", min_rr=0.8, symbol=pair):
-        log.warning("VWAP9EMA alert BLOCKED for %s: bad R:R", pair)
-        return
-
-    if VWAP9EMA_NEWS_FILTER:
-        try:
-            blocked = forexfactory.currencies_in_window(60, high_only=True)
-        except Exception as e:  # noqa: BLE001
-            blocked = set()
-            log.debug("VWAP9EMA news check failed for %s (fail-open): %s", pair, e)
-        if _news_blocks_pair(pair, blocked):
-            log.info("VWAP9EMA SUPPRESSED %s: high-impact news within 60m", pair)
-            return
-
-    rule = f"vwap9ema_{setup.lower()}"
-    if _is_throttled(pair, rule):
-        return
-
+    label = row.get("direction_label") or ("HOD/LOB long" if setup == "BUY" else "LOD/HOB short")
     arrow = "📈" if setup == "BUY" else "📉"
     colour = _COLOURS["strong_buy"] if setup == "BUY" else _COLOURS["strong_sell"]
-
-    vwap_u1, vwap_l1 = row.get("vwap_upper_1"), row.get("vwap_lower_1")
-    vwap_u2, vwap_l2 = row.get("vwap_upper_2"), row.get("vwap_lower_2")
-    bands_str = (
-        f"±1σ `{_fmt_price(vwap_l1, pair)}` / `{_fmt_price(vwap_u1, pair)}`\n"
-        f"±2σ `{_fmt_price(vwap_l2, pair)}` / `{_fmt_price(vwap_u2, pair)}`"
-        if vwap_u1 is not None and vwap_u2 is not None else "—"
-    )
+    lines = []
+    for c in row.get("conditions") or []:
+        mark = "✅" if c.get("pass") else "❌"
+        lines.append(f"{mark} {c.get('name')} — {c.get('detail')}")
+    target = row.get("tp1")
+    opposite = row.get("opposite")
+    target_txt = f"opposite band `{_fmt_price(target, pair)}`" if target is not None else "—"
+    if opposite is not None:
+        target_txt += f"\nAsian opposite side `{_fmt_price(opposite, pair)}`"
 
     embed = {
-        "title": f"{arrow} {pair} — VWAP+9EMA {setup}",
-        "description": row.get("notes") or "",
+        "title": f"{arrow} {pair} — {label} · grade {grade}",
+        "description": (
+            "**Setup alert, untested, not a signal.**\n"
+            "The research pass on this pattern was negative after costs. "
+            "Watch only. This does not place a trade.\n"
+            + (row.get("notes") or "")
+        ),
         "color": colour,
         "fields": [
-            {"name": "Setup", "value": f"**{setup}**", "inline": True},
+            {"name": "Symbol", "value": f"**{pair}**", "inline": True},
+            {"name": "Direction", "value": f"**{label}**", "inline": True},
             {"name": "Grade", "value": f"**{grade}**", "inline": True},
-            {"name": "Entry", "value": f"`{_fmt_price(entry, pair)}`" if entry is not None else "—", "inline": True},
-            {"name": "Stop Loss", "value": f"`{_fmt_price(sl, pair)}`" if sl is not None else "—", "inline": True},
-            {"name": "Target", "value": f"`{_fmt_price(tp1, pair)}`" if tp1 is not None else "—", "inline": True},
-            {"name": "VWAP Bands", "value": bands_str, "inline": True},
+            {"name": "Timeframe", "value": row.get("timeframe") or "M15", "inline": True},
+            {"name": "Time", "value": f"{row.get('time_utc') or '—'}\n{row.get('time_sast') or '—'}", "inline": True},
+            {"name": "Entry", "value": f"`{_fmt_price(entry, pair)}`", "inline": True},
+            {"name": "Stop", "value": f"`{_fmt_price(sl, pair)}` (beyond the spike)", "inline": True},
+            {"name": "Target reference", "value": target_txt, "inline": True},
+            {"name": "Conditions", "value": ("\n".join(lines) or "—")[:1000], "inline": False},
         ],
-        "footer": {"text": f"VWAP+9EMA (unvalidated) · entry is raw mid-price, no spread adjustment · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+        "footer": {"text": f"HOD/LOB setup alert, untested, not a signal · re-entry is raw mid-price · {_now_utc_str()} ({_now_sast_str()} SAST)"},
     }
-    if _post_discord(embed):
-        _mark_sent(pair, rule)
-        log.info("VWAP9EMA alert sent: %s %s grade %s (UNVALIDATED strategy)", pair, setup, grade)
+    ok = _post_discord(embed)
+    # Log every attempt. Only a delivered post is remembered, so a webhook
+    # failure can try again on the next cycle while the setup is still fresh.
+    _hodlob_log({
+        "logged_at": _now_utc_str(),
+        "symbol": pair,
+        "timeframe": row.get("timeframe"),
+        "pattern": row.get("pattern"),
+        "direction": label,
+        "grade": grade,
+        "entry": entry,
+        "stop": sl,
+        "target": target,
+        "opposite": opposite,
+        "time_utc": row.get("time_utc"),
+        "time_sast": row.get("time_sast"),
+        "spike_ts": row.get("spike_ts"),
+        "entry_ts": row.get("entry_ts"),
+        "conditions": row.get("conditions"),
+        "discord_ok": bool(ok),
+        "label": "setup alert, untested, not a signal",
+    })
+    if ok:
+        _hodlob_mark(key)
+        _mark_sent(pair, f"hodlob_{setup.lower()}")
+        log.info("HODLOB setup alert sent: %s %s grade %s (untested, not a signal)", pair, label, grade)
 
 
 # (pair, setup, pattern extreme_ts) -> time sent. One alert per W/M anchor.
@@ -1600,8 +1657,8 @@ _ema1350_alerted_anchors: dict[tuple, float] = {}
 
 def alert_ema1350_setup(pair: str, row: dict):
     """Fire for a confirmed M15 13/50 EMA cross anchored on a W/M/half batman
-    (ema1350_cross.py). Its own path and throttle rule, separate from the
-    VWAP+9EMA alert. Grades in EMA1350_ALERT_GRADES only (A+ and A by default).
+    (ema1350_cross.py). Its own path and throttle rule. Grades in
+    EMA1350_ALERT_GRADES only (A+ and A by default).
     UNVALIDATED strategy."""
     if not _signal_allowed("EMA1350", "M15", row.get("grade")):   # DISCORD_SIGNALS allowlist
         return

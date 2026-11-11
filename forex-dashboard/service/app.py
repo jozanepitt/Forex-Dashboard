@@ -23,8 +23,7 @@ import btmm_id50
 import cache
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
-import vwap9ema_strategy
-import ema1350_cross
+import hodlob_strategy
 import vwap_bounce_strategy
 import sweep_strategy
 import fetcher
@@ -152,44 +151,34 @@ def candles(symbol: str):
     })
 
 
-# 5-minute TTL cache for /vwap9ema — M5-based, matches the VWAP+9EMA scanner's
-# own timeframe. UNVALIDATED strategy — see vwap9ema_strategy.py's docstring.
-_VWAP9EMA_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
-_VWAP9EMA_TTL_SECS = 300
+# Short TTL for /hodlob. The scan reads the candle cache only.
+_HODLOB_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_HODLOB_TTL_SECS = 60
 
 
-@app.get("/vwap9ema")
-def vwap9ema():
-    """Live VWAP+9EMA scanner (vp-climax variant) — UNVALIDATED, failed its
-    own honest backtest (0/48). Narrow universe (2 symbols), London session
-    only. See vwap9ema_strategy.py's module docstring for the full caveat.
+@app.get("/hodlob")
+def hodlob():
+    """HOD/LOB and LOD/HOB setups from cached M15 (and M5 where it exists).
+
+    Setup alerts, untested, not signals. See hodlob_strategy.py.
     """
     import time as _t
 
     now = _t.time()
-    if _VWAP9EMA_CACHE["payload"] is not None and (now - _VWAP9EMA_CACHE["ts"]) < _VWAP9EMA_TTL_SECS:
-        return jsonify(_VWAP9EMA_CACHE["payload"])
+    if _HODLOB_CACHE["payload"] is not None and (now - _HODLOB_CACHE["ts"]) < _HODLOB_TTL_SECS:
+        return jsonify(_HODLOB_CACHE["payload"])
 
     candles_by_pair: dict[str, dict] = {}
-    stale_set: set[str] = set()
-    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
-        bars, stale = fetcher.get_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT)
-        candles_by_pair[sym] = {"m5": bars,
-                                "1h": cache.read_candles(sym, "1h", limit=vwap9ema_strategy.H1_FETCH_LIMIT)}
-        if stale:
-            stale_set.add(sym)
-
-    result = vwap9ema_strategy.analyze_universe(candles_by_pair)
-    # Standalone M15 13/50 EMA cross check — reported alongside, never mixed
-    # into the 9EMA/VWAP rows above (see ema1350_cross.py).
-    result["ema13_50"] = ema1350_cross.analyze_universe({
-        sym: {"m15": cache.read_candles(sym, "15min", limit=ema1350_cross.M15_FETCH_LIMIT),
-              "1d": cache.read_candles(sym, "1day", limit=ema1350_cross.D1_FETCH_LIMIT)}
-        for sym in ema1350_cross.EMA1350_UNIVERSE})
-    result["stale_pairs"] = sorted(stale_set)
+    m5_book = set(hodlob_strategy.M5_SYMBOLS)
+    for sym in hodlob_strategy.HODLOB_UNIVERSE:
+        candles_by_pair[sym] = {
+            "m15": cache.read_candles(sym, "15min", limit=hodlob_strategy.M15_LIMIT),
+            "m5": cache.read_candles(sym, "5min", limit=hodlob_strategy.M5_LIMIT) if sym in m5_book else [],
+        }
+    result = hodlob_strategy.analyze_universe(candles_by_pair)
     result["cached_at"] = int(now)
-    _VWAP9EMA_CACHE["payload"] = result
-    _VWAP9EMA_CACHE["ts"] = now
+    _HODLOB_CACHE["payload"] = result
+    _HODLOB_CACHE["ts"] = now
     return jsonify(result)
 
 

@@ -21,7 +21,6 @@ import alerts
 import fetcher
 import market_hours
 from btmm_core import active_kill_zone
-import vwap9ema_strategy
 from config import (BTMM_ALERTS_ENABLED, BTMM_APLUS_ONLY, DEFAULT_BACKFILL, DEFAULT_INTERVAL,
                     INTERVAL_SECS, PRIORITY_PAIRS, SERVICE_ROOT)
 
@@ -58,7 +57,7 @@ def last_refresh_ts() -> float:
 
 
 def _fetch_guarded(sym: str, interval: str, limit: Optional[int] = None,
-                   timeout: float = FETCH_TIMEOUT_SECS) -> None:
+                   timeout: float = FETCH_TIMEOUT_SECS, mt5_only: bool = False) -> None:
     """Run one fetch in a daemon thread and abandon it if it exceeds `timeout`.
 
     MT5's copy_rates is a blocking C call with no timeout; without this guard a
@@ -68,9 +67,9 @@ def _fetch_guarded(sym: str, interval: str, limit: Optional[int] = None,
     def _do():
         try:
             if limit is not None:
-                fetcher.get_candles(sym, interval, limit=limit)
+                fetcher.get_candles(sym, interval, limit=limit, mt5_only=mt5_only)
             else:
-                fetcher.get_candles(sym, interval)
+                fetcher.get_candles(sym, interval, mt5_only=mt5_only)
             box["ok"] = True
         except Exception as e:  # noqa: BLE001 — propagate to caller below
             box["err"] = e
@@ -265,16 +264,25 @@ def _refresh_all_inner():
         except Exception as e:
             log.warning("Sweep extra fetch failed for %s: %s", sym, e)
 
-    # Fetch M5 candles for the VWAP+9EMA universe (full PRIORITY_PAIRS list --
-    # paced same as the main fetch loop above so this doesn't hammer MT5).
-    # No other live strategy uses M5; every other fetch above is M15/1h/4h/1day.
-    for i, sym in enumerate(vwap9ema_strategy.VWAP9EMA_UNIVERSE):
+    # HOD/LOB: M5 for the main book (the fetcher already speaks 5min), and M15
+    # for the exotics / oil that are not in PRIORITY_PAIRS. A symbol the
+    # broker does not list fails this fetch and is skipped by the scanner.
+    import hodlob_strategy
+    for i, sym in enumerate(hodlob_strategy.M5_SYMBOLS):
         if i > 0:
             time.sleep(FANOUT_DELAY_SECS)
         try:
-            _fetch_guarded(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT)
+            _fetch_guarded(sym, "5min", limit=hodlob_strategy.M5_LIMIT)
         except Exception as e:
-            log.warning("VWAP9EMA M5 fetch failed for %s: %s", sym, e)
+            log.warning("HODLOB M5 fetch failed for %s: %s", sym, e)
+    for sym in hodlob_strategy.EXTRA_M15:
+        time.sleep(FANOUT_DELAY_SECS)
+        try:
+            # MT5 only: a symbol Exness does not list must not fall through to a
+            # paid Twelve Data backfill of a pair that is not in the main book.
+            _fetch_guarded(sym, "15min", limit=hodlob_strategy.M15_LIMIT, mt5_only=True)
+        except Exception as e:
+            log.warning("HODLOB M15 fetch failed for %s: %s", sym, e)
 
     # Fire kill zone open alert on session transitions.
     # Suppressed in BTMM A+-only mode (user wants A+ setups only, nothing else).
@@ -342,11 +350,11 @@ def _refresh_all_inner():
     except Exception as e:
         log.warning("VWAP Bounce alerts failed: %s", e)
 
-    # Run live VWAP+9EMA scanner (UNVALIDATED — failed backtest 0/48) + Discord alerts
+    # HOD/LOB + LOD/HOB setup alerts (untested; not orders).
     try:
-        _run_vwap9ema_alerts()
+        _run_hodlob_alerts()
     except Exception as e:
-        log.warning("VWAP9EMA alerts failed: %s", e)
+        log.warning("HODLOB alerts failed: %s", e)
 
     # Standalone M15 13/50 EMA cross check (its own alert path and grades).
     try:
@@ -474,26 +482,36 @@ def _run_vwap_bounce_alerts():
             log.debug("VWAP_BOUNCE alert eval failed for %s: %s", row.get("symbol"), e)
 
 
-def _run_vwap9ema_alerts():
-    """Run the live VWAP+9EMA scanner (UNVALIDATED — failed backtest 0/48)
-    against the cache and fire Discord alerts for confirmed setups."""
+def _run_hodlob_alerts():
+    """Scan HOD/LOB + LOD/HOB and post fresh A/B setups. M15 is the main
+    feed; M5 is included where those bars were fetched. One bad symbol is
+    dropped by the live gate, not by letting the runner throw."""
     import cache
+    import hodlob_strategy
 
     candles_by_pair: dict[str, dict] = {}
-    for sym in vwap9ema_strategy.VWAP9EMA_UNIVERSE:
+    for sym in hodlob_strategy.HODLOB_UNIVERSE:
         candles_by_pair[sym] = {
-            "m5": cache.read_candles(sym, "5min", limit=vwap9ema_strategy.M5_FETCH_LIMIT),
-            "1h": cache.read_candles(sym, "1h", limit=vwap9ema_strategy.H1_FETCH_LIMIT),
+            "m15": cache.read_candles(sym, "15min", limit=hodlob_strategy.M15_LIMIT),
+            "m5": cache.read_candles(sym, "5min", limit=hodlob_strategy.M5_LIMIT),
         }
-    live = _live_symbols("VWAP9EMA", candles_by_pair, [("m5", "5min")])
-    result = vwap9ema_strategy.analyze_universe(candles_by_pair)
-    for row in result.get("pairs", []):
-        if row.get("symbol") not in live:
+    live_m15 = _live_symbols("HODLOB", candles_by_pair, [("m15", "15min")])
+    live_m5 = _live_symbols("HODLOB-M5", candles_by_pair, [("m5", "5min")])
+    result = hodlob_strategy.analyze_universe(candles_by_pair)
+    rows = result["setups"] if "setups" in result else result.get("pairs", [])
+    rows = sorted(rows, key=lambda r: (
+        0 if (r.get("timeframe") or "M15") == "M15" else 1,
+        -(r.get("entry_ts") or 0),
+    ))
+    for row in rows:
+        sym = row.get("symbol")
+        tf = row.get("timeframe") or "M15"
+        if sym not in (live_m15 if tf == "M15" else live_m5):
             continue
         try:
-            alerts.alert_vwap9ema_setup(row["symbol"], row)
+            alerts.alert_hodlob_setup(sym, row)
         except Exception as e:
-            log.debug("VWAP9EMA alert eval failed for %s: %s", row.get("symbol"), e)
+            log.debug("HODLOB alert eval failed for %s: %s", sym, e)
 
 
 def _mt5_ready() -> bool:
@@ -527,9 +545,9 @@ def _quick_m15_ema1350():
 
 
 def _run_ema1350_alerts():
-    """Run the standalone M15 13/50 EMA cross check (ema1350_cross.py, beside
-    the VWAP+9EMA scanner but separate from it) and fire its own Discord
-    alerts. M15 and D1 are already fetched for every PRIORITY_PAIRS symbol."""
+    """Run the standalone M15 13/50 EMA cross check (ema1350_cross.py) and
+    fire its own Discord alerts. M15 and D1 are already fetched for every
+    PRIORITY_PAIRS symbol."""
     import cache
     import ema1350_cross
 

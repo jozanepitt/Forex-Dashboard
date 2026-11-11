@@ -1,4 +1,6 @@
 .env
+hodlob_seen.json
+hodlob_alerts.jsonl
 candles.db
 candles.db-journal
 candles.db-wal

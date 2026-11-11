@@ -246,4 +246,4 @@ def test_config_defaults_send_a_and_b():
     src = inspect.getsource(config)
     assert 'SWEEP_ALERTS_ENABLED", "true"' in src
     assert 'SWEEP_GRADE_A_ONLY", "false"' in src
-    assert 'VWAP9EMA_GRADE_A_ONLY", "true"' in src
+    assert 'HODLOB_GRADE_A_ONLY", "false"' in src
