@@ -1,7 +1,7 @@
 """HOD/LOB and LOD/HOB setup scanner (Xtrillions / BTMM market-maker pattern).
 
 HOD/LOB is a long. Through Asia, price hugs the high of day and the Bollinger
-Bands are tight. Around the London morning stop-hunt, a spike closes below the
+Bands are tight. Around the morning stop-hunt, a spike closes below the
 lower band and breaks the Asian low while TDI makes a lower low than price
 (divergence). The entry is the first close back inside the bands. The stop
 sits beyond the spike. LOD/HOB is the mirror, a short.
@@ -25,24 +25,26 @@ Thresholds the videos left open (each one is a constant below):
   compare "TDI" being lower than yesterday, which is that price line.
 * "Near the high of day" was never a number. The Asia close must sit in the
   top 25% of the box from min(prior-day low, Asia low) to max(prior-day high,
-  Asia high). The bottom 25% is the short. 60% is enough to pick a direction
-  ("weak hug") but not enough to pass the hug check.
+  Asia high). The bottom 25% is the short. Outside the middle 20% (above 60%
+  or below 40%) is a directional lean: enough for a B if the hug itself
+  fails, not enough for an A. A close in the middle 20% is not a setup.
 * "A squeeze" was never a number. The Asian range must be at or under the
   median of the previous Asia sessions (up to 20, at least 8). Up to 1.25x
   that median is a weak squeeze: the check fails, and it can be the one soft
   miss that makes a B.
-* Asia is this dashboard's trading day (00:00 SAST) up to 06:00 London.
-  Closing the box an hour before 7 lets a slightly early spike break a
-  finished range. The 7-8-9 clock was never given a timezone; London is the
-  reading used here. Preferred spike window is 07:00-09:45 London. Spikes
-  from 06:00 to 12:00 are still scanned. Outside 07:00-09:45 the window
-  check fails and the grade drops, it does not delete the setup.
+* The 7-8-9 clock is SAST (Africa/Johannesburg, UTC+2, no daylight saving).
+  Jo-zane, 2026-11-12. Asia is 00:00-06:00 SAST, so the box is closed before
+  the stop-hunt. Spikes are scanned from 06:00 to 11:00 SAST (by 11 he gives
+  up). The preferred window, which changes the grade and does not delete a
+  setup, is 07:00-09:45 SAST. These hours are ASIA_END_HM, SEARCH_*_HM and
+  PREFER_*_HM below. All of them are SAST.
 * Divergence is the one-day reading: at the spike the green TDI line is
   beyond the whole previous day's TDI, and price has not taken that day's
   high or low. "Three days divergence" is mentioned and never defined, so
   it is not a separate rule.
-* Re-entry is the first close back inside the band, within 8 bars (2 hours
-  on M15, 40 minutes on M5).
+* Re-entry is the first close back inside the band. It has to happen within
+  8 bars and the candle must close by 11:00 SAST, whichever comes first.
+  The time on the alert is that candle's close, not its open.
 * The stop is the spike extreme (the worst price from the spike bar through
   the re-entry bar) plus a buffer of one pip or 0.10 ATR, whichever is
   larger. "Midway past the spike" was not a measurable level.
@@ -50,15 +52,17 @@ Thresholds the videos left open (each one is a constant below):
   The far side of the Asian range is reported next to it. The videos' "G-spot"
   was never defined, and this scanner does not invent a 2R order.
 * M15 is the main timeframe. M5 is scanned for the pairs the scheduler
-  already fetches at 5 minutes. One Discord alert per symbol, direction and
-  trading day; M15 wins if both timeframes qualify together.
+  already fetches at 5 minutes. One Discord alert per symbol, direction,
+  trading day and timeframe, so an earlier M5 B cannot block the M15 alert.
+* Monday's prior day is the last session with at least PRIOR_DAY_MIN_BARS
+  bars. From March to November Exness reopens Sunday at 21:00 UTC, and those
+  few bars would otherwise be "yesterday".
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 import instruments
 import market_hours
@@ -79,8 +83,16 @@ EXOTICS = [
     "USD/HKD",
     "USD/SGD", "EUR/SGD",
 ]
-# Oil and EUR/CAD are already on other scanners. Scan them here too.
-_ALSO = ["USOIL", "UKOIL", "EUR/CAD"]
+# G10 crosses missing from PRIORITY_PAIRS, plus GBP/NOK and GBP/SEK.
+# The USD/EUR/GBP/AUD/NZD/CAD/CHF/JPY cross matrix is otherwise already in
+# PRIORITY_PAIRS or EUR/CAD. Oil is already on other scanners.
+CROSSES = [
+    "CHF/JPY", "NZD/JPY",
+    "GBP/CAD", "EUR/NZD", "GBP/NZD",
+    "NZD/CAD", "NZD/CHF", "CAD/CHF",
+    "GBP/NOK", "GBP/SEK",
+]
+_ALSO = ["USOIL", "UKOIL", "EUR/CAD"] + CROSSES
 
 def _dedupe(symbols: list[str]) -> list[str]:
     out: list[str] = []
@@ -111,17 +123,21 @@ TDI_FAST = 2              # green price line; this is the line divergence reads
 TDI_SLOW = 7              # red signal line, on the chart, not a gate
 TDI_BAND = 34             # yellow baseline / volatility-band length
 
-# --- session ---
-ASIA_END_HM = (6, 0)      # 06:00 London: Asia box is closed
-SEARCH_START_HM = (6, 0)  # earliest spike we will still look at
-SEARCH_END_HM = (12, 0)   # latest. Videos give up around 11; 12 is the outer edge
-PREFER_START_HM = (7, 0)  # 7-8-9 window
+# --- session, all SAST (Africa/Johannesburg, UTC+2, no DST) ---
+# Jo-zane, 2026-11-12: "7-8-9" is his clock, not London. One place for the hours.
+ASIA_END_HM = (6, 0)       # Asia box is 00:00-06:00 SAST, closed before the stop-hunt
+SEARCH_START_HM = (6, 0)   # first spike we will look at
+SEARCH_END_HM = (11, 0)    # by 11:00 he gives up; a bar that opens at 11:00 is not scanned
+PREFER_START_HM = (7, 0)   # preferred grade window, not a hard filter
 PREFER_END_HM = (9, 45)
-ASIA_MIN_BARS = 16        # under four hours of M15 is not an Asia session
+ASIA_MIN_BARS = 16         # under four hours of M15 is not an Asia session
+# A day shorter than this is not "yesterday". The Sunday 21:00 UTC reopen
+# (US daylight-saving months) is 3-4 M15 bars and must not be Monday's prior day.
+PRIOR_DAY_MIN_BARS = 40
 
 # --- vague pattern thresholds ---
 HUG_PASS = 0.75           # top/bottom quarter of the prior-day + Asia box
-HUG_BIAS = 0.60           # weaker than a pass, still enough to pick a direction
+HUG_LEAN = 0.60           # outside the middle 20% (40-60). A lean, not a pass.
 SQUEEZE_LOOKBACK = 20
 SQUEEZE_MIN_SAMPLES = 8
 WEAK_SQUEEZE_MULT = 1.25
@@ -131,24 +147,20 @@ ATR_PERIOD = 14
 FRESH_SECONDS = 20 * 60   # still alertable for one scheduler cycle after the re-entry
 RECENT_SECONDS = 3 * 86400
 
-_LONDON = ZoneInfo("Europe/London")
 _SAST = timezone(timedelta(hours=2))
 
 
-def _london_ts(day_start: int, hour: int, minute: int) -> int:
-    """`hour:minute` London time on the SAST date of this trading day."""
-    day = datetime.fromtimestamp(day_start, tz=_SAST).date()
-    return int(datetime(day.year, day.month, day.day, hour, minute, tzinfo=_LONDON).timestamp())
+def _sast_ts(day_start: int, hour: int, minute: int) -> int:
+    """`hour:minute` SAST. `day_start` is already 00:00 SAST (22:00 UTC)."""
+    return day_start + hour * 3600 + minute * 60
 
 
 def _fmt_clock(ts: int) -> tuple[str, str]:
     utc = datetime.fromtimestamp(ts, tz=timezone.utc)
     sast = utc.astimezone(_SAST)
-    lon = utc.astimezone(_LONDON)
     return (
         utc.strftime("%Y-%m-%d %H:%M UTC"),
         sast.strftime("%Y-%m-%d %H:%M SAST"),
-        f"{lon.strftime('%H:%M')} London",
     )
 
 
@@ -239,11 +251,11 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
 
     for di, day in enumerate(order):
         idxs = groups[day]
-        asia_end = _london_ts(day, *ASIA_END_HM)
-        search_from = _london_ts(day, *SEARCH_START_HM)
-        search_to = _london_ts(day, *SEARCH_END_HM)
-        prefer_from = _london_ts(day, *PREFER_START_HM)
-        prefer_to = _london_ts(day, *PREFER_END_HM)
+        asia_end = _sast_ts(day, *ASIA_END_HM)
+        search_from = _sast_ts(day, *SEARCH_START_HM)
+        search_to = _sast_ts(day, *SEARCH_END_HM)
+        prefer_from = _sast_ts(day, *PREFER_START_HM)
+        prefer_to = _sast_ts(day, *PREFER_END_HM)
 
         asia = [i for i in idxs if int(bars[i]["ts_utc"]) < asia_end]
         if len(asia) >= ASIA_MIN_BARS:
@@ -254,8 +266,7 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
         else:
             a_high = a_low = a_close = a_range = None
 
-        prev = order[di - 1] if di else None
-        prev_idx = groups[prev] if prev is not None else []
+        prev_idx = _prior_day(order, groups, di)
 
         # Record the range even when this day has no setup, so later days
         # have a median to compare against. Today is not part of its own median.
@@ -273,33 +284,30 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
         top, bot = max(pd_high, a_high), min(pd_low, a_low)
         pos = (a_close - bot) / (top - bot) if top > bot else 0.5
 
-        if pos >= HUG_BIAS:
+        if pos > HUG_LEAN:
             direction = 1
-        elif pos <= 1.0 - HUG_BIAS:
+        elif pos < 1.0 - HUG_LEAN:
             direction = -1
         else:
-            direction = 0
+            # Middle 20% of the box. No hug and no lean, so this is not a B.
+            continue
 
         spike = _first_spike(bars, idxs, lower, upper, a_low, a_high,
                              search_from, search_to, direction)
         if spike is None:
             continue
         k, direction = spike
-        entry = _reentry(bars, lower, upper, k, direction)
+        bar_secs = _bar_secs(bars, k, timeframe)
+        entry = _reentry(bars, lower, upper, k, direction, search_to, bar_secs)
         if entry is None:
             continue
 
         long = direction > 0
         hug_ok = pos >= HUG_PASS if long else pos <= (1.0 - HUG_PASS)
-        if long and pos >= HUG_BIAS:
-            hug_detail = f"Asia close is {pos:.0%} up the prior-day + Asia box"
-        elif (not long) and pos <= 1.0 - HUG_BIAS:
-            hug_detail = f"Asia close is {pos:.0%} up the prior-day + Asia box"
-        else:
-            hug_detail = f"no price hug (Asia close is {pos:.0%} up the box)"
+        hug_detail = f"Asia close is {pos:.0%} up the prior-day + Asia box"
         if hug_ok:
             hug_detail += ", in the outer quarter"
-        elif (long and pos >= HUG_BIAS) or (not long and pos <= 1.0 - HUG_BIAS):
+        else:
             hug_detail += ", weak hug"
 
         squeeze_ok, squeeze_detail = _squeeze(a_range, samples)
@@ -317,8 +325,9 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
 
         spike_ts = int(bars[k]["ts_utc"])
         window_ok = prefer_from <= spike_ts <= prefer_to
-        _utc, _sast, lon = _fmt_clock(spike_ts)
-        window_detail = f"spike at {lon}" + ("" if window_ok else ", outside 07:00-09:45")
+        spike_clock = datetime.fromtimestamp(spike_ts, tz=_SAST).strftime("%H:%M")
+        window_detail = f"spike at {spike_clock} SAST" + (
+            "" if window_ok else ", outside 07:00-09:45")
 
         band = lower[k] if long else upper[k]
         outside_detail = (f"close {bars[k]['close']:.5f} "
@@ -337,7 +346,7 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
             _check("Asian range break", broke, break_detail),
             _check("TDI divergence", div_ok, div_detail),
             _check("Re-entry", True, re_detail),
-            _check("London window", window_ok, window_detail),
+            _check("SAST window", window_ok, window_detail),
         ]
         # Core is the spike, the range break and the re-entry. The spike and
         # the re-entry are true by the time we get here; a range break that
@@ -345,7 +354,7 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
         if not broke:
             continue
         soft_fails = [c["name"] for c in checks
-                      if c["name"] in ("Hug", "Squeeze", "TDI divergence", "London window")
+                      if c["name"] in ("Hug", "Squeeze", "TDI divergence", "SAST window")
                       and not c["pass"]]
         grade = _grade(soft_fails)
         if grade is None:
@@ -366,7 +375,8 @@ def find_setups(symbol: str, bars: list[dict], timeframe: str = "M15") -> list[d
             pattern, setup, label = "LOD/HOB", "SELL", "LOD/HOB short"
 
         entry_ts = int(bars[entry]["ts_utc"])
-        utc_s, sast_s, _lon = _fmt_clock(entry_ts)
+        # The setup completes when the re-entry candle closes, one bar later.
+        utc_s, sast_s = _fmt_clock(entry_ts + bar_secs)
         found.append({
             "symbol": symbol,
             "timeframe": timeframe,
@@ -400,7 +410,7 @@ def _first_spike(bars, idxs, lower, upper, a_low, a_high,
     """
     for i in idxs:
         ts = int(bars[i]["ts_utc"])
-        if ts < search_from or ts > search_to:
+        if ts < search_from or ts >= search_to:
             continue
         if lower[i] is None:
             continue
@@ -411,9 +421,40 @@ def _first_spike(bars, idxs, lower, upper, a_low, a_high,
     return None
 
 
-def _reentry(bars, lower, upper, spike: int, direction: int) -> Optional[int]:
+def _prior_day(order: list[int], groups: dict, di: int) -> list[int]:
+    """Bars of the last real session before this day.
+
+    A Sunday 21:00 UTC reopen is only a few bars. It is not Friday and it is
+    not Monday, so it is not yesterday. Monday uses Friday.
+    """
+    for j in range(di - 1, -1, -1):
+        idxs = groups[order[j]]
+        if len(idxs) >= PRIOR_DAY_MIN_BARS:
+            return idxs
+    return []
+
+
+def _bar_secs(bars: list[dict], i: int, timeframe: str) -> int:
+    for a, b in ((i, i + 1), (i - 1, i)):
+        if 0 <= a and b < len(bars):
+            d = int(bars[b]["ts_utc"]) - int(bars[a]["ts_utc"])
+            if 60 <= d <= 3600:
+                return d
+    return 300 if timeframe == "M5" else 900
+
+
+def _reentry(bars, lower, upper, spike: int, direction: int,
+             deadline: int, bar_secs: int) -> Optional[int]:
+    """First close back inside the band, within 8 bars and by `deadline`.
+
+    `deadline` is 11:00 SAST. The candle counts only if it has closed by then,
+    so a bar that opens at 10:45 (closes at 11:00) is in, and one that opens
+    at 11:00 is not. The 8-bar cap and the clock apply together.
+    """
     last = min(len(bars) - 1, spike + REENTRY_BARS)
     for j in range(spike + 1, last + 1):
+        if int(bars[j]["ts_utc"]) + bar_secs > deadline:
+            return None
         if direction > 0 and lower[j] is not None and bars[j]["close"] > lower[j]:
             return j
         if direction < 0 and upper[j] is not None and bars[j]["close"] < upper[j]:
@@ -440,7 +481,7 @@ def _buffer(symbol: str, bars, i: int, price: float) -> float:
 def _notes(label: str, grade: str, soft_fails: list[str]) -> str:
     if soft_fails:
         return f"{label} grade {grade}. Soft check missed: {soft_fails[0]}."
-    return f"{label} grade {grade}. Hug, squeeze, band spike, Asia break, TDI divergence, re-entry, London window."
+    return f"{label} grade {grade}. Hug, squeeze, band spike, Asia break, TDI divergence, re-entry, SAST window."
 
 
 def _quiet(symbol: str) -> dict:

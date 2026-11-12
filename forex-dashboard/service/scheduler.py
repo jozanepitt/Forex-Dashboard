@@ -499,6 +499,9 @@ def _run_hodlob_alerts():
     live_m5 = _live_symbols("HODLOB-M5", candles_by_pair, [("m5", "5min")])
     result = hodlob_strategy.analyze_universe(candles_by_pair)
     rows = result["setups"] if "setups" in result else result.get("pairs", [])
+    # M15 first when both are ready in the same pass. The alert key also
+    # includes the timeframe, so an M5 post from an earlier pass cannot
+    # block this M15 one.
     rows = sorted(rows, key=lambda r: (
         0 if (r.get("timeframe") or "M15") == "M15" else 1,
         -(r.get("entry_ts") or 0),

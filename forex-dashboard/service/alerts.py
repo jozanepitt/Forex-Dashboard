@@ -1558,8 +1558,8 @@ def alert_hodlob_setup(pair: str, row: dict):
     """Post one HOD/LOB or LOD/HOB setup. Setup alert only — not an order.
 
     A and B both go out unless HODLOB_GRADE_A_ONLY is set. The same spike
-    is not posted twice: the key is symbol + trading day + pattern, so an
-    M5 reading of a day that M15 already sent is dropped too.
+    is not posted twice on the same timeframe. The key includes the
+    timeframe, so an M5 B cannot block the M15 alert for that day.
     """
     if not _signal_allowed("HODLOB", row.get("timeframe") or "M15", row.get("grade")):
         return
@@ -1584,7 +1584,8 @@ def alert_hodlob_setup(pair: str, row: dict):
 
     import session_clock
     day = session_clock.vwap_day_start(int(row["spike_ts"]))
-    key = f"{pair}|{day}|{row.get('pattern')}"
+    tf = row.get("timeframe") or "M15"
+    key = f"{pair}|{day}|{row.get('pattern')}|{tf}"
     if key in _hodlob_seen():
         return
 

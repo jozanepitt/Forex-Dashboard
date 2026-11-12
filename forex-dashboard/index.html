@@ -826,14 +826,15 @@ td.mono{font-family:var(--font-mono)}
       <tbody id="hodlobTableBody"><tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
     </table>
     <div class="trend-footer">
-      <b>HOD/LOB</b> is a long: Asia hugs the high of day with a Bollinger squeeze, a London-morning
+      <b>HOD/LOB</b> is a long: Asia hugs the high of day with a Bollinger squeeze, a morning
       spike closes below the lower band and breaks the Asian low, TDI makes a lower low than price,
       and the entry is the close back inside the bands. <b>LOD/HOB</b> is the short mirror.
       The stop is beyond the spike. The target is the opposite band (the Asian far side is shown beside it).
-      <br><b>Grade A</b> = hug, squeeze, spike outside the band, Asian range break, TDI divergence, re-entry, and the 07:00–09:45 London window.
-      <b>Grade B</b> = the spike, the range break and the re-entry, with one soft check missing.
+      Times are SAST. Asia is 00:00–06:00. Spikes are scanned 06:00–11:00. The time on a row is when the re-entry candle closed.
+      <br><b>Grade A</b> = hug, squeeze, spike outside the band, Asian range break, TDI divergence, re-entry, and the 07:00–09:45 SAST window.
+      <b>Grade B</b> = the spike, the range break and the re-entry, with one soft check missing, and the Asia close still outside the middle 20% of the box.
       Anything weaker is not listed and not sent. Hover a condition for the detail.
-      Levels the videos never measured (hug 25%, squeeze vs the Asia-range median, the London clock) are written up in <b>service/hodlob_strategy.py</b>.
+      The hours and the other measured levels are in <b>service/hodlob_strategy.py</b>.
     </div>
   </div>
 

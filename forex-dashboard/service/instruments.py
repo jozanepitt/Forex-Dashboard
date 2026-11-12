@@ -59,6 +59,15 @@ SYMBOL_SPECS: dict[str, dict] = {
     "AUD/CHF": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
     "AUD/NZD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),  # tight range pair
     "EUR/CAD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=12),  # Sweep scanner only; not in PRIORITY_PAIRS
+    # G10 crosses the HOD/LOB scanner adds. Same pip as the other non-JPY FX.
+    "GBP/CAD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=12),
+    "EUR/NZD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=12),
+    "GBP/NZD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=15),
+    "NZD/CAD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=10),
+    "NZD/CHF": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=10),
+    "CAD/CHF": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=10),
+    "GBP/NOK": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "GBP/SEK": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
     # Exotics for the HOD/LOB scanner. Pip stays 0.0001 — the price-magnitude
     # fallback would treat USD/ZAR (~18) as a 0.01 instrument. Exness quotes
     # these as 5-digit symbols (USDZARm and the same pattern). A symbol the
@@ -84,6 +93,8 @@ SYMBOL_SPECS: dict[str, dict] = {
     "GBP/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=12),
     "AUD/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
     "CAD/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
+    "CHF/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=12),
+    "NZD/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
     # ── Metals ──
     "XAU/USD": dict(pip=0.10,   digits=2, cls="metal", min_sl_pips=60),   # 60 pips = $6.00
     "XAG/USD": dict(pip=0.01,   digits=3, cls="metal", min_sl_pips=40),   # 40 pips = $0.40
