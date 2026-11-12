@@ -19,10 +19,12 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 # many signals; only the starred TDI Cycle 123 M15 grade-A setups for now).
 # Comma-separated STRATEGY[:TIMEFRAME[:GRADE]] entries, '*' = any. Strategy
 # names: TDI123, TDI123_WATCH, BTMM, CRT5AM, ID50, ID50_WATCH, VWAP_MR,
-# VWAP_MR_WATCH, VWAP9EMA, EMA1350, VWAP_BOUNCE, ENGULF, SWEEP. Each
+# VWAP_MR_WATCH, HODLOB, EMA1350, VWAP_BOUNCE, ENGULF, SWEEP. Each
 # strategy's own *_ALERTS_ENABLED flag still applies on top. The service
 # STALLED health warning is not a trade signal and is always sent.
-DISCORD_SIGNALS = os.environ.get("DISCORD_SIGNALS", "TDI123:M15:A")
+# HODLOB is on the default list (A and B, any timeframe the scanner emits).
+# A local .env that still sets DISCORD_SIGNALS must add HODLOB itself.
+DISCORD_SIGNALS = os.environ.get("DISCORD_SIGNALS", "TDI123:M15:A,HODLOB")
 # Bot token for the on-demand /analyse slash command (discord_bot.py). Separate
 # credential from the webhook above -- a webhook URL can't authenticate a bot
 # gateway connection.
@@ -200,21 +202,16 @@ VWAP_MR_WATCH_ALERTS_ENABLED = os.environ.get("VWAP_MR_WATCH_ALERTS_ENABLED", "f
 # alerts._news_blocks_pair), applied at the alert layer (see spec deviation #11).
 VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
 
-# VWAP+9EMA (live, replaces 1AM CRT) — UNVALIDATED strategy, failed its own
-# honest backtest (0/48, see docs/superpowers/specs/2026-09-13-vwap9ema-mt5-
-# validation-design.md). Built anyway per explicit user decision for manual
-# trading with their own judgment (see docs/superpowers/specs/2026-09-14-
-# vwap9ema-live-replaces-1am-crt-design.md). No watch-alerts: deliberately not
-# adding "still forming" noise to a strategy with zero validated edge.
-VWAP9EMA_ALERTS_ENABLED = os.environ.get("VWAP9EMA_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
-# Grades added 2026-10-19 at the user's request after the feed flooded with
-# flip-flopping, post-news alerts: only grade A goes to Discord by default
-# (see vwap9ema_strategy.grade_signal). News is checked at the alert layer.
-VWAP9EMA_GRADE_A_ONLY = os.environ.get("VWAP9EMA_GRADE_A_ONLY", "true").lower() in ("1", "true", "yes")
-VWAP9EMA_NEWS_FILTER = os.environ.get("VWAP9EMA_NEWS_FILTER", "true").lower() in ("1", "true", "yes")
+# HOD/LOB + LOD/HOB (hodlob_strategy.py) — setup alerts only. The research
+# pass was negative after costs; these are posted so the setups can be
+# watched, and every embed says they are not a signal. A and B both go out.
+# No news filter: the pattern is a London stop-hunt, and a news spike is
+# often the spike the videos are describing.
+HODLOB_ALERTS_ENABLED = os.environ.get("HODLOB_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+HODLOB_GRADE_A_ONLY = os.environ.get("HODLOB_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 
-# BTMM 13/50 EMA cross (M15, ema1350_cross.py) — standalone check beside the
-# VWAP+9EMA scanner, UNVALIDATED. User decision 2026-10-20: A+ and A go to
+# BTMM 13/50 EMA cross (M15, ema1350_cross.py) — standalone check, UNVALIDATED.
+# User decision 2026-10-20: A+ and A go to
 # Discord, B stays on the dashboard. Comma-separated grades.
 EMA1350_ALERTS_ENABLED = os.environ.get("EMA1350_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 EMA1350_ALERT_GRADES = tuple(g.strip() for g in os.environ.get("EMA1350_ALERT_GRADES", "A+,A").split(",") if g.strip())

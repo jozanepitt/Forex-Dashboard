@@ -76,14 +76,19 @@ def _try_mt5(symbol: str, interval: str, limit: int,
 
 
 def get_candles(symbol: str, interval: str = "15min",
-                limit: int = DEFAULT_BACKFILL) -> tuple[list[dict], bool]:
-    """Return (candles, stale). stale=True when we couldn't refresh this call."""
+                limit: int = DEFAULT_BACKFILL, mt5_only: bool = False) -> tuple[list[dict], bool]:
+    """Return (candles, stale). stale=True when we couldn't refresh this call.
+
+    mt5_only skips the Twelve Data / Stooq fallback. Used for symbols that are
+    not in the main book (HOD/LOB exotics): a missing MT5 symbol must not
+    backfill thousands of paid candles.
+    """
     last_ts = cache.max_ts(symbol, interval)
     interval_secs = INTERVAL_SECS[interval]
     now_ts = _now()
 
     if last_ts is None:
-        stale = _backfill(symbol, interval, limit)
+        stale = _backfill(symbol, interval, limit, mt5_only=mt5_only)
         return cache.read_candles(symbol, interval, limit), stale
 
     # The cache holds CLOSED bars only (providers drop the forming one). The
@@ -96,14 +101,16 @@ def get_candles(symbol: str, interval: str = "15min",
         if not newest or (newest[-1].get("volume") or 0) > 0:
             return cache.read_candles(symbol, interval, limit), False
 
-    stale = _incremental(symbol, interval, last_ts)
+    stale = _incremental(symbol, interval, last_ts, mt5_only=mt5_only)
     return cache.read_candles(symbol, interval, limit), stale
 
 
-def _backfill(symbol: str, interval: str, limit: int) -> bool:
+def _backfill(symbol: str, interval: str, limit: int, mt5_only: bool = False) -> bool:
     mt5_result = _try_mt5(symbol, interval, limit, start_ts=None)
     if mt5_result is not None:
         return mt5_result
+    if mt5_only:
+        return True
 
     try:
         bars = _closed_only(client().fetch(symbol, interval, outputsize=limit), interval)
@@ -120,12 +127,14 @@ def _backfill(symbol: str, interval: str, limit: int) -> bool:
     return _stooq_fallback(symbol, interval, start_ts=None)
 
 
-def _incremental(symbol: str, interval: str, last_ts: int) -> bool:
+def _incremental(symbol: str, interval: str, last_ts: int, mt5_only: bool = False) -> bool:
     start_ts = last_ts + INTERVAL_SECS[interval]
 
     mt5_result = _try_mt5(symbol, interval, DEFAULT_BACKFILL, start_ts=start_ts)
     if mt5_result is not None:
         return mt5_result
+    if mt5_only:
+        return True
 
     try:
         bars = _closed_only(client().fetch(symbol, interval,

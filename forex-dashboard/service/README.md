@@ -50,6 +50,28 @@ candles.db        Created on first run; safe to delete to re-backfill
 .env              API keys (gitignored)
 ```
 
+## HOD/LOB and LOD/HOB
+
+Setup scanner only. It does not place trades. Grade A and B posts go to the
+existing Discord webhook (`HODLOB` on `DISCORD_SIGNALS`). Each post is also
+appended to `hodlob_alerts.jsonl` next to this service (gitignored, so it
+does not land in the OneDrive repo copy as a generated file). The same setup
+is sent once per symbol, direction and trading day (`hodlob_seen.json`).
+
+M15 is the main timeframe. M5 is scanned for the main book, where 5-minute
+bars are already fetched. Exotics (ZAR, TRY, MXN, SEK, NOK, PLN, HKD, SGD)
+are fetched on M15 and skipped when the broker has no symbol.
+
+The videos leave several levels unmeasured. The choices, and why, are the
+constants at the top of `hodlob_strategy.py`:
+
+- Price Bollinger 20 / 2.0 on the close. TDI is the chart's 13, 34, 2, 7. Divergence uses the green SMA(2) of RSI(13), compared with the previous trading day.
+- Hug: Asia close in the outer 25% of the prior-day + Asia box. 60% only picks the direction.
+- Squeeze: Asia range at or under the median of the previous Asia sessions (up to 20, at least 8). Up to 1.25× that median is a weak squeeze and fails the check.
+- Asia ends 06:00 London. Spikes are searched 06:00–12:00 London. The preferred window, which affects the grade and does not delete the setup, is 07:00–09:45 London.
+- Re-entry is the first close back inside the band within 8 bars. The stop is beyond the spike extreme. The target reference is the opposite band, with the far side of the Asia range beside it.
+- Grade A needs the hug, the squeeze, the band spike, the Asia break, the TDI divergence, the re-entry and the London window. Grade B is that core (spike, Asia break, re-entry) with exactly one of the soft checks missing. Anything weaker is not alerted.
+
 ## Stooq fallback
 
 Triggered automatically when all Twelve Data keys are over quota. Stooq's

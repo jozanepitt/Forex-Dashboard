@@ -43,8 +43,8 @@ import instruments
 from config import PRIORITY_PAIRS
 from tdi_cycle_123 import _atr
 
-# Full PRIORITY_PAIRS universe (2026-10-08, per explicit user request — same 27
-# pairs TDI123/BTMM123/ID50/VWAP9EMA scan, for dashboard parity). NOTE: the
+# Full PRIORITY_PAIRS universe (2026-10-08, per explicit user request — same
+# book the other dashboard scanners use). NOTE: the
 # VWAP mean-reversion spec was originally written for US equity index
 # futures/ETFs (ES/NQ/SPY/QQQ); USTEC is its native-style instrument. The added
 # pairs (JPY/AUD crosses, metals, crypto) are NOT backtested for this strategy —

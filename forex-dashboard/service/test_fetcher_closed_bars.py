@@ -14,6 +14,15 @@ def _bar(ts):
     return {"ts_utc": ts, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 0.0}
 
 
+def test_mt5_only_does_not_fall_through_to_a_paid_backfill(monkeypatch):
+    """HOD/LOB exotics: a symbol MT5 does not list must not buy Twelve Data candles."""
+    called = []
+    monkeypatch.setattr(fetcher, "_try_mt5", lambda *a, **k: None)
+    monkeypatch.setattr(fetcher, "client", lambda: called.append("td") or None)
+    assert fetcher._backfill("USD/ZAR", "15min", 100, mt5_only=True) is True
+    assert called == []
+
+
 def test_closed_only_drops_the_forming_bar():
     now = 1_000_000 * 900 + 120                    # 2 minutes into a bar
     open_bar = now - 120
@@ -33,7 +42,7 @@ def test_a_fallback_newest_bar_is_refetched_not_trusted(monkeypatch):
     monkeypatch.setattr(fetcher.cache, "max_ts", lambda s, i: newest)
     monkeypatch.setattr(fetcher.cache, "read_candles", lambda s, i, limit=800: [_bar(newest)])
     monkeypatch.setattr(fetcher, "_now", lambda: now)
-    monkeypatch.setattr(fetcher, "_incremental", lambda s, i, last: calls.append(last) or False)
+    monkeypatch.setattr(fetcher, "_incremental", lambda s, i, last, mt5_only=False: calls.append(last) or False)
     fetcher.get_candles("USD/JPY", "15min", limit=5)
     assert calls == [newest]                          # volume 0 -> refetch even inside the skip window
 

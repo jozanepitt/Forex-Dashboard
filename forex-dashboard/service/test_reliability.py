@@ -48,8 +48,8 @@ def fetch_harness(monkeypatch):
     # limit=1 is get_candles peeking at the newest bar: a normal MT5 bar (volume > 0)
     monkeypatch.setattr(cache, "read_candles",
                         lambda sym, iv, limit=800: [{"volume": 100.0}] if limit == 1 else ["cached"])
-    monkeypatch.setattr(fetcher, "_incremental", lambda sym, iv, last: (calls.append((sym, iv)), False)[1])
-    monkeypatch.setattr(fetcher, "_backfill", lambda sym, iv, limit: (calls.append(("backfill", sym)), False)[1])
+    monkeypatch.setattr(fetcher, "_incremental", lambda sym, iv, last, mt5_only=False: (calls.append((sym, iv)), False)[1])
+    monkeypatch.setattr(fetcher, "_backfill", lambda sym, iv, limit, mt5_only=False: (calls.append(("backfill", sym)), False)[1])
 
     def at(now, last_ts, interval="15min"):
         monkeypatch.setattr(cache, "max_ts", lambda sym, iv: last_ts)

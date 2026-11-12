@@ -59,6 +59,25 @@ SYMBOL_SPECS: dict[str, dict] = {
     "AUD/CHF": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),
     "AUD/NZD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=10),  # tight range pair
     "EUR/CAD": dict(pip=0.0001, digits=5, cls="fx",  min_sl_pips=12),  # Sweep scanner only; not in PRIORITY_PAIRS
+    # Exotics for the HOD/LOB scanner. Pip stays 0.0001 — the price-magnitude
+    # fallback would treat USD/ZAR (~18) as a 0.01 instrument. Exness quotes
+    # these as 5-digit symbols (USDZARm and the same pattern). A symbol the
+    # terminal does not offer simply fails its fetch and is skipped.
+    "USD/ZAR": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=40),
+    "EUR/ZAR": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=40),
+    "GBP/ZAR": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=50),
+    "USD/TRY": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=40),
+    "EUR/TRY": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=40),
+    "USD/MXN": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "USD/SEK": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "EUR/SEK": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "USD/NOK": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "EUR/NOK": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "USD/PLN": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "EUR/PLN": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=30),
+    "USD/HKD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=20),
+    "USD/SGD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=20),
+    "EUR/SGD": dict(pip=0.0001, digits=5, cls="fx", min_sl_pips=20),
     # ── JPY pairs (3-digit, pip = 0.01) ──
     "USD/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),
     "EUR/JPY": dict(pip=0.01,   digits=3, cls="jpy", min_sl_pips=10),

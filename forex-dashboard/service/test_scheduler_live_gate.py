@@ -1,10 +1,11 @@
 """Regression tests for the scheduler's live-alert gate.
 
-Incident (2026-10-11): `CAD/JPY:vwap9ema_sell` was sent on a Sunday. The MT5
-link had died on Thursday, CAD/JPY's newest cached M5 bar was frozen at
-Fri 09:20 UTC, and nothing between the cache and Discord checked that the data
-was live or the market open — so the same cross on the same two Friday bars
-was re-sent every time the hourly throttle expired.
+Incident (2026-10-11): a CAD/JPY VWAP+9EMA sell was sent on a Sunday. The MT5
+link had died on Thursday, the newest cached bar was frozen at Fri 09:20 UTC,
+and nothing between the cache and Discord checked that the data was live or
+the market open — so the same setup was re-sent every time the hourly
+throttle expired. The VWAP+9EMA scanner has since been removed; this gate
+still covers every alert runner.
 
 These tests drive every `_run_*alerts` runner with a strategy stub that always
 returns an alertable row, and assert the alert function is only reached when
@@ -36,7 +37,7 @@ SYM = "EUR/USD"
 
 # runner name, strategy module, analyze fn, alert fns it may call
 RUNNERS = [
-    ("_run_vwap9ema_alerts", "vwap9ema_strategy", "analyze_universe", ["alert_vwap9ema_setup"]),
+    ("_run_hodlob_alerts", "hodlob_strategy", "analyze_universe", ["alert_hodlob_setup"]),
     ("_run_vwap_mr_alerts", "vwap_mean_reversion_strategy", "analyze_universe",
      ["alert_vwap_mr_setup", "alert_vwap_mr_watch"]),
     ("_run_tdi123_alerts", "tdi_cycle_123", "analyze_universe",
@@ -168,7 +169,7 @@ def test_frozen_h1_blocks_even_when_m15_is_live(harness, runner, module, fn, ale
 
 
 @pytest.mark.parametrize("key,interval,runner", [
-    ("5min", "15min", "_run_vwap9ema_alerts"),      # M5 strategy: frozen M5, live M15
+    ("15min", "5min", "_run_hodlob_alerts"),        # M15 strategy: frozen M15, live M5
     ("15min", "5min", "_run_vwap_mr_alerts"),       # M15 strategy: frozen M15, live M5
 ])
 def test_each_runner_gates_on_its_own_timeframe(harness, key, interval, runner):
@@ -183,25 +184,25 @@ def test_each_runner_gates_on_its_own_timeframe(harness, key, interval, runner):
 
 
 def test_one_malformed_bundle_does_not_sink_the_runner(harness, monkeypatch):
-    import vwap9ema_strategy
+    import hodlob_strategy
     harness["now"] = WEEKDAY_NOW
     good = _bars(ts(2026, 10, 7, 10, 0))
     monkeypatch.setattr(cache, "read_candles", lambda sym, interval, limit=None:
                         [{"ts_utc": None}] if sym == "GBP/USD" else good)
-    monkeypatch.setattr(vwap9ema_strategy, "analyze_universe", lambda c: {
+    monkeypatch.setattr(hodlob_strategy, "analyze_universe", lambda c: {
         "pairs": [{"symbol": "GBP/USD", "setup": "BUY"}, {"symbol": SYM, "setup": "SELL"}]})
-    scheduler._run_vwap9ema_alerts()
-    assert harness["calls"] == [("alert_vwap9ema_setup", SYM)]
+    scheduler._run_hodlob_alerts()
+    assert harness["calls"] == [("alert_hodlob_setup", SYM)]
 
 
 def test_crypto_still_alerts_on_a_weekend_with_live_data(harness, monkeypatch):
     """Crypto trades 24/7 — the weekend rule must not silence it."""
-    import vwap9ema_strategy
+    import hodlob_strategy
     harness["last_bar"] = SUNDAY_NOW - 120
-    monkeypatch.setattr(vwap9ema_strategy, "analyze_universe", lambda c: {
+    monkeypatch.setattr(hodlob_strategy, "analyze_universe", lambda c: {
         "pairs": [{"symbol": "BTC/USD", "setup": "BUY"}, {"symbol": SYM, "setup": "SELL"}]})
-    scheduler._run_vwap9ema_alerts()
-    assert harness["calls"] == [("alert_vwap9ema_setup", "BTC/USD")]
+    scheduler._run_hodlob_alerts()
+    assert harness["calls"] == [("alert_hodlob_setup", "BTC/USD")]
 
 
 def test_every_alert_runner_is_covered_by_these_tests():

@@ -10,6 +10,8 @@ def _isolated_alert_state(tmp_path, monkeypatch):
     Point it at a temp file so a test run can never rewrite the live service's
     alerts_state.json (it did: test keys ended up throttling real alerts)."""
     monkeypatch.setattr(alerts, "_STATE_FILE", tmp_path / "alerts_state.json")
+    monkeypatch.setattr(alerts, "HODLOB_SEEN_FILE", tmp_path / "hodlob_seen.json")
+    monkeypatch.setattr(alerts, "HODLOB_LOG_FILE", tmp_path / "hodlob_alerts.jsonl")
     # Each strategy's own alert tests exercise its gates; the production
     # DISCORD_SIGNALS allowlist (TDI123:M15:A only) is tested on its own in
     # test_discord_allowlist.py.
