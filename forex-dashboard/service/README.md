@@ -55,22 +55,26 @@ candles.db        Created on first run; safe to delete to re-backfill
 Setup scanner only. It does not place trades. Grade A and B posts go to the
 existing Discord webhook (`HODLOB` on `DISCORD_SIGNALS`). Each post is also
 appended to `hodlob_alerts.jsonl` next to this service (gitignored, so it
-does not land in the OneDrive repo copy as a generated file). The same setup
-is sent once per symbol, direction and trading day (`hodlob_seen.json`).
+does not land in the OneDrive repo copy as a generated file). The same setup is sent once per symbol, direction, trading day and timeframe
+(`hodlob_seen.json`).
 
 M15 is the main timeframe. M5 is scanned for the main book, where 5-minute
-bars are already fetched. Exotics (ZAR, TRY, MXN, SEK, NOK, PLN, HKD, SGD)
-are fetched on M15 and skipped when the broker has no symbol.
+bars are already fetched. An M5 alert and an M15 alert for the same day are
+separate posts, so the M5 one cannot block the M15 one. Exotics (ZAR, TRY,
+MXN, SEK, NOK, PLN, HKD, SGD) and the added crosses (CHF/JPY, NZD/JPY,
+GBP/CAD, EUR/NZD, GBP/NZD, NZD/CAD, NZD/CHF, CAD/CHF, GBP/NOK, GBP/SEK) are
+fetched on M15 and skipped when the broker has no symbol.
 
 The videos leave several levels unmeasured. The choices, and why, are the
 constants at the top of `hodlob_strategy.py`:
 
 - Price Bollinger 20 / 2.0 on the close. TDI is the chart's 13, 34, 2, 7. Divergence uses the green SMA(2) of RSI(13), compared with the previous trading day.
-- Hug: Asia close in the outer 25% of the prior-day + Asia box. 60% only picks the direction.
+- Hug: Asia close in the outer 25% of the prior-day + Asia box. Above 60% or below 40% is a directional lean (a weak hug can be the one miss on a B). The middle 20%, from 40% to 60% including the ends, is not a setup.
 - Squeeze: Asia range at or under the median of the previous Asia sessions (up to 20, at least 8). Up to 1.25× that median is a weak squeeze and fails the check.
-- Asia ends 06:00 London. Spikes are searched 06:00–12:00 London. The preferred window, which affects the grade and does not delete the setup, is 07:00–09:45 London.
-- Re-entry is the first close back inside the band within 8 bars. The stop is beyond the spike extreme. The target reference is the opposite band, with the far side of the Asia range beside it.
-- Grade A needs the hug, the squeeze, the band spike, the Asia break, the TDI divergence, the re-entry and the London window. Grade B is that core (spike, Asia break, re-entry) with exactly one of the soft checks missing. Anything weaker is not alerted.
+- Clock, all SAST (UTC+2, no daylight saving). Jo-zane, 2026-11-12: 7-8-9 is his clock. Asia is 00:00–06:00. Spikes are searched 06:00–11:00 (he gives up at 11). The preferred window, which affects the grade and does not delete a setup inside that search, is 07:00–09:45. The hours live in one place: `ASIA_END_HM`, `SEARCH_START_HM`, `SEARCH_END_HM`, `PREFER_START_HM`, `PREFER_END_HM` in `hodlob_strategy.py`.
+- Re-entry is the first close back inside the band, within 8 bars and with that candle closed by 11:00 SAST, whichever is earlier. The alert time is the re-entry candle's close. The stop is beyond the spike extreme. The target reference is the opposite band, with the far side of the Asia range beside it.
+- Monday's prior day is the last session with at least 40 bars. The Sunday 21:00 UTC reopen is not yesterday.
+- Grade A needs the hug, the squeeze, the band spike, the Asia break, the TDI divergence, the re-entry and the 07:00–09:45 SAST window. Grade B is that core (spike, Asia break, re-entry) with exactly one of the soft checks missing, and it still needs a directional lean. Anything weaker is not alerted.
 
 ## Stooq fallback
 

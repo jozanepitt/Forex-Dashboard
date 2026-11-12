@@ -205,8 +205,8 @@ VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in (
 # HOD/LOB + LOD/HOB (hodlob_strategy.py) — setup alerts only. The research
 # pass was negative after costs; these are posted so the setups can be
 # watched, and every embed says they are not a signal. A and B both go out.
-# No news filter: the pattern is a London stop-hunt, and a news spike is
-# often the spike the videos are describing.
+# No news filter: the pattern is the 7-8-9 SAST stop-hunt, and a news spike
+# is often the spike the videos are describing.
 HODLOB_ALERTS_ENABLED = os.environ.get("HODLOB_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 HODLOB_GRADE_A_ONLY = os.environ.get("HODLOB_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
 
