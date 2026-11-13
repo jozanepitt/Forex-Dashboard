@@ -19,7 +19,7 @@ def production(monkeypatch):
 
 
 def test_default_is_tdi123_m15_grade_a_only():
-    assert 'DISCORD_SIGNALS", "TDI123:M15:A,HODLOB"' in inspect.getsource(config)
+    assert 'DISCORD_SIGNALS", "TDI123:M15:A,HODLOB,BTMM_ANCHOR"' in inspect.getsource(config)
 
 
 def test_allowlist_matching(production):
@@ -27,13 +27,14 @@ def test_allowlist_matching(production):
     assert not alerts._signal_allowed("TDI123", "M15", "B")
     assert not alerts._signal_allowed("TDI123", "H1", "A")
     assert not alerts._signal_allowed("TDI123_WATCH", "M15", "A")
-    for s in ("BTMM", "CRT5AM", "ID50", "VWAP_MR", "HODLOB", "EMA1350", "VWAP_BOUNCE", "ENGULF", "SWEEP"):
+    for s in ("BTMM", "CRT5AM", "ID50", "VWAP_MR", "HODLOB", "BTMM_ANCHOR", "EMA1350", "VWAP_BOUNCE", "ENGULF", "SWEEP"):
         assert not alerts._signal_allowed(s, "M15", "A"), s
 
 
 def test_hodlob_default_allowlist_accepts_a_and_b(monkeypatch):
-    monkeypatch.setattr(alerts, "DISCORD_SIGNALS", "TDI123:M15:A,HODLOB")
+    monkeypatch.setattr(alerts, "DISCORD_SIGNALS", "TDI123:M15:A,HODLOB,BTMM_ANCHOR")
     assert alerts._signal_allowed("HODLOB", "M15", "A")
+    assert alerts._signal_allowed("BTMM_ANCHOR", "M15", "FULL")
     assert alerts._signal_allowed("HODLOB", "M15", "B")
     assert alerts._signal_allowed("HODLOB", "M5", "A")
     assert not alerts._signal_allowed("SWEEP", "M15", "A")
@@ -58,6 +59,9 @@ def test_other_strategies_post_nothing(production, monkeypatch):
         monkeypatch.setattr(alerts, flag, True, raising=False)
     alerts.alert_hodlob_setup("EUR/USD", {**_a_row(), "fresh": True, "spike_ts": 1,
                                           "pattern": "LOD/HOB", "direction_label": "LOD/HOB short"})
+    alerts.alert_btmm_anchor_setup("EUR/USD", {**_a_row(), "grade": "FULL", "fresh": True,
+                                               "label": "22", "trigger_ts": 1, "extreme": 1.12,
+                                               "invalidation": 1.12})
     alerts.alert_ema1350_setup("EUR/USD", _a_row())
     alerts.alert_sweep_setup("EUR/USD", _a_row())
     alerts.alert_engulfing_setup("EUR/USD", _a_row(timeframe="H1"))

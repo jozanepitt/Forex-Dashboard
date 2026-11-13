@@ -356,6 +356,12 @@ def _refresh_all_inner():
     except Exception as e:
         log.warning("HODLOB alerts failed: %s", e)
 
+    # BTMM 12/21/22 anchor setups. Reads the same M15 cache. Not orders.
+    try:
+        _run_btmm_anchor_alerts()
+    except Exception as e:
+        log.warning("BTMM anchor alerts failed: %s", e)
+
     # Standalone M15 13/50 EMA cross check (its own alert path and grades).
     try:
         _run_ema1350_alerts()
@@ -515,6 +521,28 @@ def _run_hodlob_alerts():
             alerts.alert_hodlob_setup(sym, row)
         except Exception as e:
             log.debug("HODLOB alert eval failed for %s: %s", sym, e)
+
+
+def _run_btmm_anchor_alerts():
+    """Scan 12/21/22 anchors on the HOD/LOB book and post fresh FULL setups."""
+    import cache
+    import btmm_anchor_strategy
+
+    candles_by_pair = {
+        sym: {"m15": cache.read_candles(sym, "15min", limit=btmm_anchor_strategy.M15_LIMIT)}
+        for sym in btmm_anchor_strategy.ANCHOR_UNIVERSE
+    }
+    live = _live_symbols("BTMM_ANCHOR", candles_by_pair, [("m15", "15min")])
+    result = btmm_anchor_strategy.analyze_universe(candles_by_pair)
+    rows = result["setups"] if "setups" in result else result.get("pairs", [])
+    for row in rows:
+        sym = row.get("symbol")
+        if sym not in live:
+            continue
+        try:
+            alerts.alert_btmm_anchor_setup(sym, row)
+        except Exception as e:
+            log.debug("BTMM anchor alert failed for %s: %s", sym, e)
 
 
 def _mt5_ready() -> bool:

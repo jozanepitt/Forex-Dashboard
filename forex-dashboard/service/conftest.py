@@ -12,6 +12,8 @@ def _isolated_alert_state(tmp_path, monkeypatch):
     monkeypatch.setattr(alerts, "_STATE_FILE", tmp_path / "alerts_state.json")
     monkeypatch.setattr(alerts, "HODLOB_SEEN_FILE", tmp_path / "hodlob_seen.json")
     monkeypatch.setattr(alerts, "HODLOB_LOG_FILE", tmp_path / "hodlob_alerts.jsonl")
+    monkeypatch.setattr(alerts, "BTMM_ANCHOR_SEEN_FILE", tmp_path / "btmm_anchor_seen.json")
+    monkeypatch.setattr(alerts, "BTMM_ANCHOR_LOG_FILE", tmp_path / "btmm_anchor_alerts.jsonl")
     # Each strategy's own alert tests exercise its gates; the production
     # DISCORD_SIGNALS allowlist (TDI123:M15:A only) is tested on its own in
     # test_discord_allowlist.py.

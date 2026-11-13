@@ -19,12 +19,12 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 # many signals; only the starred TDI Cycle 123 M15 grade-A setups for now).
 # Comma-separated STRATEGY[:TIMEFRAME[:GRADE]] entries, '*' = any. Strategy
 # names: TDI123, TDI123_WATCH, BTMM, CRT5AM, ID50, ID50_WATCH, VWAP_MR,
-# VWAP_MR_WATCH, HODLOB, EMA1350, VWAP_BOUNCE, ENGULF, SWEEP. Each
-# strategy's own *_ALERTS_ENABLED flag still applies on top. The service
+# VWAP_MR_WATCH, HODLOB, BTMM_ANCHOR, EMA1350, VWAP_BOUNCE, ENGULF, SWEEP.
+# Each strategy's own *_ALERTS_ENABLED flag still applies on top. The service
 # STALLED health warning is not a trade signal and is always sent.
-# HODLOB is on the default list (A and B, any timeframe the scanner emits).
-# A local .env that still sets DISCORD_SIGNALS must add HODLOB itself.
-DISCORD_SIGNALS = os.environ.get("DISCORD_SIGNALS", "TDI123:M15:A,HODLOB")
+# HODLOB and BTMM_ANCHOR are on the default list. A local .env that sets
+# DISCORD_SIGNALS must add them itself or those alerts stay on the dashboard.
+DISCORD_SIGNALS = os.environ.get("DISCORD_SIGNALS", "TDI123:M15:A,HODLOB,BTMM_ANCHOR")
 # Bot token for the on-demand /analyse slash command (discord_bot.py). Separate
 # credential from the webhook above -- a webhook URL can't authenticate a bot
 # gateway connection.
@@ -209,6 +209,11 @@ VWAP_MR_NEWS_FILTER = os.environ.get("VWAP_MR_NEWS_FILTER", "true").lower() in (
 # is often the spike the videos are describing.
 HODLOB_ALERTS_ENABLED = os.environ.get("HODLOB_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
 HODLOB_GRADE_A_ONLY = os.environ.get("HODLOB_GRADE_A_ONLY", "false").lower() in ("1", "true", "yes")
+
+# BTMM 12/21/22 anchor (btmm_anchor_strategy.py). Setup alerts only.
+# FULL posts by default. FORMING stays on the dashboard unless this is false.
+BTMM_ANCHOR_ALERTS_ENABLED = os.environ.get("BTMM_ANCHOR_ALERTS_ENABLED", "true").lower() in ("1", "true", "yes")
+BTMM_ANCHOR_FULL_ONLY = os.environ.get("BTMM_ANCHOR_FULL_ONLY", "true").lower() in ("1", "true", "yes")
 
 # BTMM 13/50 EMA cross (M15, ema1350_cross.py) — standalone check, UNVALIDATED.
 # User decision 2026-10-20: A+ and A go to

@@ -463,6 +463,7 @@ td.mono{font-family:var(--font-mono)}
 <div class="mode-tabs">
   <button class="mode-tab active" data-mode="indicator">📊 BTMM</button>
   <button class="mode-tab" data-mode="hodlob">🎯 HOD/LOB</button>
+  <button class="mode-tab" data-mode="btmm_anchor">⚓ 12/21/22</button>
   <button class="mode-tab" data-mode="vwap_mr">📐 VWAP Mean Reversion</button>
   <button class="mode-tab" data-mode="vwap_bounce">🪃 VWAP Bounce</button>
   <button class="mode-tab" data-mode="engulfing">🕯 Engulfing</button>
@@ -795,6 +796,40 @@ td.mono{font-family:var(--font-mono)}
       <span style="margin-left:auto;font-size:.65rem;color:var(--text-muted)">Click any row for detailed chart & analysis</span>
     </div>
     <div class="last-updated" id="lastUpdated">Last updated: --</div>
+  </div>
+
+  <!-- ── BTMM 12/21/22 anchors (watchlist, not a signal) ──────────────────── -->
+  <div class="table-container" id="btmmAnchorContainer" style="display:none">
+    <div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.45);color:var(--yellow);padding:10px 14px;border-radius:6px;margin-bottom:12px;font-weight:600">
+      Untested watchlist setup, not a validated signal. This tab does not place a trade.
+    </div>
+    <div class="trend-controls">
+      <button class="trend-refresh-btn" id="btmmAnchorRefreshBtn">Refresh Scanner</button>
+      <div class="trend-meta">M15 · 12 / 21 / 22 · sell at highs, buy at lows · day starts 00:00 SAST · FULL posts to Discord</div>
+    </div>
+    <div class="trend-summary" id="btmmAnchorSummary">Click <b>Refresh Scanner</b> to compute.</div>
+    <table class="trend-table">
+      <thead>
+        <tr>
+          <th>Trigger close (SAST)</th>
+          <th>Pair</th>
+          <th>Label</th>
+          <th>Direction</th>
+          <th>Grade</th>
+          <th>Extreme</th>
+          <th>Stop idea</th>
+          <th>Target idea</th>
+          <th>Invalidation</th>
+        </tr>
+      </thead>
+      <tbody id="btmmAnchorTableBody"><tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Click <b>Refresh Scanner</b> to compute.</td></tr></tbody>
+    </table>
+    <div class="trend-footer">
+      <b>12</b> is one leg yesterday and an M or W today. <b>21</b> is an M/W yesterday and a half-bat today.
+      <b>22</b> is an M or W on both days. The second leg tests yesterday's high (sell) or low (buy).
+      FULL means the peak test passed and price closed back through the 13 EMA with TDI.
+      FORMING is the shape without that trigger, or too close to the 50 EMA. Defaults for the distances Kar left open are in <b>service/btmm_anchor_strategy.py</b>.
+    </div>
   </div>
 
   <!-- ── HOD/LOB + LOD/HOB (setup alerts, untested, not signals) ──────────── -->
@@ -5502,7 +5537,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     const mode = btn.dataset.mode;
     const isOverlay = mode === 'journal' || mode === 'backtest';
-    const isScanner = mode === 'vwap_mr' || mode === 'engulfing' || mode === 'tdi123' || mode === 'hodlob' || mode === 'id50' || mode === 'vwap_bounce' || mode === 'sweep';
+    const isScanner = mode === 'vwap_mr' || mode === 'engulfing' || mode === 'tdi123' || mode === 'hodlob' || mode === 'btmm_anchor' || mode === 'id50' || mode === 'vwap_bounce' || mode === 'sweep';
 
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -5536,6 +5571,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     const tdi123Container  = document.getElementById('tdi123Container');
     const id50Container    = document.getElementById('id50Container');
     const hodlobContainer = document.getElementById('hodlobContainer');
+    const btmmAnchorContainer = document.getElementById('btmmAnchorContainer');
     const vwapBounceContainer = document.getElementById('vwapBounceContainer');
     if (vwapBounceContainer) vwapBounceContainer.style.display = (mode === 'vwap_bounce') ? 'block' : 'none';
     if (btmmContainer)    btmmContainer.style.display    = (mode === 'indicator') ? '' : 'none';
@@ -5544,6 +5580,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (tdi123Container)  tdi123Container.style.display  = (mode === 'tdi123')    ? 'block' : 'none';
     if (id50Container)    id50Container.style.display    = (mode === 'id50')      ? 'block' : 'none';
     if (hodlobContainer) hodlobContainer.style.display = (mode === 'hodlob') ? 'block' : 'none';
+    if (btmmAnchorContainer) btmmAnchorContainer.style.display = (mode === 'btmm_anchor') ? 'block' : 'none';
     const sweepContainer = document.getElementById('sweepContainer');
     if (sweepContainer) sweepContainer.style.display = (mode === 'sweep') ? 'block' : 'none';
 
@@ -5555,6 +5592,7 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     if (mode === 'tdi123')    loadTdi123();
     if (mode === 'id50')      loadId50();
     if (mode === 'hodlob')    loadHodlob();
+    if (mode === 'btmm_anchor') loadBtmmAnchor();
     if (mode === 'vwap_bounce') loadVwapBounce();
     if (mode === 'sweep')     loadSweep();
   });
@@ -6267,6 +6305,40 @@ function renderHodlobTable(data) {
 
 document.getElementById('hodlobRefreshBtn')?.addEventListener('click', loadHodlob);
 
+async function loadBtmmAnchor() {
+  const tbody = document.getElementById('btmmAnchorTableBody');
+  const summary = document.getElementById('btmmAnchorSummary');
+  const btn = document.getElementById('btmmAnchorRefreshBtn');
+  if (btn) btn.disabled = true;
+  summary.textContent = 'Reading cached M15 candles…';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
+  const baseUrl = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) ? API_CONFIG.baseUrl : 'http://127.0.0.1:3002';
+  try {
+    const resp = await fetch(`${baseUrl}/btmm-anchor`);
+    if (!resp.ok) throw new Error(`Service returned ${resp.status}`);
+    const data = await resp.json();
+    const rows = (data.setups || []).map(p => `<tr title="${String(p.notes || '').replace(/"/g, '&quot;')}">
+      <td style="color:var(--text-muted)">${p.time_sast || '—'}</td>
+      <td><b>${p.symbol}</b></td>
+      <td><b>${p.label || '—'}</b></td>
+      <td>${p.setup === 'BUY' ? '<span style="color:var(--green);font-weight:700">BUY</span>' : '<span style="color:var(--red);font-weight:700">SELL</span>'}</td>
+      <td>${p.grade === 'FULL' ? '<b style="color:var(--green)">FULL</b>' : '<span style="color:var(--yellow)">FORMING</span>'}</td>
+      <td>${p.extreme != null ? _crtFmtPrice(p.extreme, p.symbol) : '—'}</td>
+      <td>${p.sl != null ? _crtFmtPrice(p.sl, p.symbol) : '—'}</td>
+      <td>${p.tp1 != null ? _crtFmtPrice(p.tp1, p.symbol) : '—'}</td>
+      <td>${p.invalidation != null ? _crtFmtPrice(p.invalidation, p.symbol) : '—'}</td>
+    </tr>`).join('');
+    tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">No 12/21/22 anchor in the last 3 days.</td></tr>';
+    summary.innerHTML = `Scanned <b>${data.scanned || 0}</b> · <span style="color:var(--green);font-weight:600">${data.full || 0} FULL</span> · <span style="color:var(--yellow)">${data.forming || 0} FORMING</span>`;
+  } catch (err) {
+    summary.innerHTML = `<span style="color:var(--red)">Failed to load 12/21/22 scanner: ${err.message}</span>`;
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:24px">Service unreachable. Is the Flask service running on port 3002?</td></tr>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+document.getElementById('btmmAnchorRefreshBtn')?.addEventListener('click', loadBtmmAnchor);
+
 // ═════════════════════════════════════════════════════════════════════════════
 // VWAP Bounce (M15, UNVALIDATED) — loader + renderer
 // ═════════════════════════════════════════════════════════════════════════════
@@ -6892,6 +6964,7 @@ if (id50Btn) id50Btn.addEventListener('click', loadId50);
       vwap_mr: typeof loadVwapMr === 'function' ? loadVwapMr : null,
       vwap_bounce: typeof loadVwapBounce === 'function' ? loadVwapBounce : null,
       hodlob: typeof loadHodlob === 'function' ? loadHodlob : null,
+      btmm_anchor: typeof loadBtmmAnchor === 'function' ? loadBtmmAnchor : null,
       sweep: typeof loadSweep === 'function' ? loadSweep : null,
     };
     const loader = (typeof currentMode !== 'undefined') ? scannerLoaders[currentMode] : null;

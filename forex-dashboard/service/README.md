@@ -76,6 +76,30 @@ constants at the top of `hodlob_strategy.py`:
 - Monday's prior day is the last session with at least 40 bars. The Sunday 21:00 UTC reopen is not yesterday.
 - Grade A needs the hug, the squeeze, the band spike, the Asia break, the TDI divergence, the re-entry and the 07:00–09:45 SAST window. Grade B is that core (spike, Asia break, re-entry) with exactly one of the soft checks missing, and it still needs a directional lean. Anything weaker is not alerted.
 
+## BTMM 12 / 21 / 22 anchors
+
+Setup alerts only, on the same M15 book as HOD/LOB. Discord key `BTMM_ANCHOR`
+(on the default `DISCORD_SIGNALS` list). FULL posts. FORMING stays on the
+dashboard unless `BTMM_ANCHOR_FULL_ONLY=false`. Each post is also appended to
+`btmm_anchor_alerts.jsonl` (gitignored). One post per symbol, label and day.
+
+The digits are Kar's: 2 is an M, W or head and shoulders, 1 is a one-leg
+half-bat. The first digit is yesterday, the second is today's test of
+yesterday's high (sell) or low (buy). A peak needs 3 to 5 days, at least
+3× ADR, fanned EMAs and TDI overbought or oversold. The trigger is a close
+back through the 13 EMA with the TDI cross or a shark fin. Closer than 10
+pips to the 50 EMA waits. A later close back through the 13, 50 or 200, or
+beyond the extreme, kills it.
+
+Unknowns, and the defaults (`btmm_anchor_strategy.py`):
+
+- No time-of-day filter. Kar never gave one. The day starts at 00:00 SAST.
+- A test of the tracer can stop 8 pips short or run through it (`NEAR_PIPS`).
+- "Too close to the water" is 10 pips (`WATER_PIPS`).
+- The stop idea is 5 pips beyond the extreme, in that symbol's pip (`STOP_PIPS`).
+- The target idea is the 200 EMA when it is on the trade side, otherwise the far side of yesterday.
+- H1 is not scanned.
+
 ## Stooq fallback
 
 Triggered automatically when all Twelve Data keys are over quota. Stooq's
