@@ -22,6 +22,7 @@ from config import (
     VWAP_MR_ALERTS_ENABLED, VWAP_MR_GRADE_A_ONLY, VWAP_MR_MIN_SCORE,
     VWAP_MR_WATCH_ALERTS_ENABLED, VWAP_MR_NEWS_FILTER,
     HODLOB_ALERTS_ENABLED, HODLOB_GRADE_A_ONLY,
+    BTMM_ANCHOR_ALERTS_ENABLED, BTMM_ANCHOR_FULL_ONLY,
     EMA1350_ALERTS_ENABLED, EMA1350_ALERT_GRADES, EMA1350_NEWS_FILTER,
     SWEEP_ALERTS_ENABLED, SWEEP_GRADE_A_ONLY, SWEEP_NEWS_FILTER,
     VWAP_BOUNCE_ALERTS_ENABLED, VWAP_BOUNCE_GRADE_A_ONLY, VWAP_BOUNCE_NEWS_FILTER,
@@ -1650,6 +1651,119 @@ def alert_hodlob_setup(pair: str, row: dict):
         _hodlob_mark(key)
         _mark_sent(pair, f"hodlob_{setup.lower()}")
         log.info("HODLOB setup alert sent: %s %s grade %s (untested, not a signal)", pair, label, grade)
+
+
+# One post per symbol + day + 12/21/22 label + direction.
+BTMM_ANCHOR_SEEN_FILE = Path(__file__).parent / "btmm_anchor_seen.json"
+BTMM_ANCHOR_LOG_FILE = Path(__file__).parent / "btmm_anchor_alerts.jsonl"
+
+
+def _anchor_seen() -> set:
+    try:
+        return set(json.loads(BTMM_ANCHOR_SEEN_FILE.read_text()))
+    except Exception:
+        return set()
+
+
+def _anchor_mark(key: str) -> None:
+    seen = list(_anchor_seen())
+    if key not in seen:
+        seen.append(key)
+    try:
+        BTMM_ANCHOR_SEEN_FILE.write_text(json.dumps(seen[-4000:]))
+    except Exception:
+        log.debug("anchor seen file not written", exc_info=True)
+
+
+def _anchor_log(record: dict) -> None:
+    try:
+        with BTMM_ANCHOR_LOG_FILE.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except Exception:
+        log.warning("anchor alert log failed", exc_info=True)
+
+
+def alert_btmm_anchor_setup(pair: str, row: dict):
+    """Post one 12/21/22 anchor. Watchlist only, not an order.
+
+    FULL goes out. FORMING stays off Discord unless BTMM_ANCHOR_FULL_ONLY
+    is turned off. The same label on the same day is not posted twice.
+    """
+    grade = row.get("grade")
+    if not _signal_allowed("BTMM_ANCHOR", row.get("timeframe") or "M15", grade):
+        return
+    if not BTMM_ANCHOR_ALERTS_ENABLED:
+        return
+    if grade not in ("FULL", "FORMING"):
+        return
+    if BTMM_ANCHOR_FULL_ONLY and grade != "FULL":
+        return
+    setup = row.get("setup")
+    if setup not in ("BUY", "SELL") or not row.get("fresh"):
+        return
+    if row.get("label") not in ("12", "21", "22"):
+        return
+    entry, sl = row.get("entry"), row.get("sl")
+    if entry is None or sl is None or row.get("trigger_ts") is None:
+        return
+    if setup == "SELL" and not sl > entry:
+        return
+    if setup == "BUY" and not sl < entry:
+        return
+
+    import session_clock
+    day = session_clock.vwap_day_start(int(row["trigger_ts"]))
+    key = f"{pair}|{day}|{row.get('label')}|{setup}"
+    if key in _anchor_seen():
+        return
+
+    way = "sell" if setup == "SELL" else "buy"
+    arrow = "📉" if setup == "SELL" else "📈"
+    colour = _COLOURS["strong_sell"] if setup == "SELL" else _COLOURS["strong_buy"]
+    target = row.get("tp1")
+    extreme = row.get("extreme")
+    embed = {
+        "title": f"{arrow} {pair} — {row.get('label')} {way} · {grade}",
+        "description": (
+            "**Untested watchlist setup, not a validated signal.**\n"
+            "12/21/22 anchor. Nothing here places a trade.\n"
+            + (row.get("notes") or "")
+        ),
+        "color": colour,
+        "fields": [
+            {"name": "Symbol", "value": f"**{pair}**", "inline": True},
+            {"name": "Label", "value": f"**{row.get('label')}**", "inline": True},
+            {"name": "Direction", "value": f"**{setup}**", "inline": True},
+            {"name": "Grade", "value": f"**{grade}**", "inline": True},
+            {"name": "Trigger close", "value": f"{row.get('time_utc') or '—'}\n{row.get('time_sast') or '—'}", "inline": True},
+            {"name": "Extreme", "value": f"`{_fmt_price(extreme, pair)}`" if extreme is not None else "—", "inline": True},
+            {"name": "Stop idea", "value": f"`{_fmt_price(sl, pair)}` (beyond the extreme)", "inline": True},
+            {"name": "Target idea", "value": f"`{_fmt_price(target, pair)}`" if target is not None else "—", "inline": True},
+            {"name": "Invalidation", "value": f"close beyond `{_fmt_price(row.get('invalidation'), pair)}`", "inline": True},
+        ],
+        "footer": {"text": f"BTMM anchor watchlist, untested · {_now_utc_str()} ({_now_sast_str()} SAST)"},
+    }
+    ok = _post_discord(embed)
+    _anchor_log({
+        "logged_at": _now_utc_str(),
+        "symbol": pair,
+        "label": row.get("label"),
+        "direction": setup,
+        "grade": grade,
+        "extreme": extreme,
+        "entry": entry,
+        "stop": sl,
+        "target": target,
+        "invalidation": row.get("invalidation"),
+        "time_utc": row.get("time_utc"),
+        "time_sast": row.get("time_sast"),
+        "discord_ok": bool(ok),
+        "label_text": "untested watchlist setup, not a validated signal",
+    })
+    if ok:
+        _anchor_mark(key)
+        _mark_sent(pair, f"btmm_anchor_{row.get('label')}_{setup.lower()}")
+        log.info("BTMM anchor alert sent: %s %s %s (untested watchlist)", pair, row.get("label"), setup)
 
 
 # (pair, setup, pattern extreme_ts) -> time sent. One alert per W/M anchor.

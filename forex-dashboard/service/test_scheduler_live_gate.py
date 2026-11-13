@@ -38,6 +38,7 @@ SYM = "EUR/USD"
 # runner name, strategy module, analyze fn, alert fns it may call
 RUNNERS = [
     ("_run_hodlob_alerts", "hodlob_strategy", "analyze_universe", ["alert_hodlob_setup"]),
+    ("_run_btmm_anchor_alerts", "btmm_anchor_strategy", "analyze_universe", ["alert_btmm_anchor_setup"]),
     ("_run_vwap_mr_alerts", "vwap_mean_reversion_strategy", "analyze_universe",
      ["alert_vwap_mr_setup", "alert_vwap_mr_watch"]),
     ("_run_tdi123_alerts", "tdi_cycle_123", "analyze_universe",

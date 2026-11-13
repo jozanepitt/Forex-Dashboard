@@ -24,6 +24,7 @@ import cache
 import tdi_cycle_123
 import vwap_mean_reversion_strategy
 import hodlob_strategy
+import btmm_anchor_strategy
 import vwap_bounce_strategy
 import sweep_strategy
 import fetcher
@@ -179,6 +180,29 @@ def hodlob():
     result["cached_at"] = int(now)
     _HODLOB_CACHE["payload"] = result
     _HODLOB_CACHE["ts"] = now
+    return jsonify(result)
+
+
+_ANCHOR_CACHE: dict[str, object] = {"ts": 0.0, "payload": None}
+_ANCHOR_TTL_SECS = 60
+
+
+@app.get("/btmm-anchor")
+def btmm_anchor():
+    """12/21/22 Level 3 anchors from cached M15. Watchlist only."""
+    import time as _t
+
+    now = _t.time()
+    if _ANCHOR_CACHE["payload"] is not None and (now - _ANCHOR_CACHE["ts"]) < _ANCHOR_TTL_SECS:
+        return jsonify(_ANCHOR_CACHE["payload"])
+    candles = {
+        sym: {"m15": cache.read_candles(sym, "15min", limit=btmm_anchor_strategy.M15_LIMIT)}
+        for sym in btmm_anchor_strategy.ANCHOR_UNIVERSE
+    }
+    result = btmm_anchor_strategy.analyze_universe(candles)
+    result["cached_at"] = int(now)
+    _ANCHOR_CACHE["payload"] = result
+    _ANCHOR_CACHE["ts"] = now
     return jsonify(result)
 
 
